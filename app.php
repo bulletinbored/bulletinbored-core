@@ -5,7 +5,8 @@
 class ForumApp {
     private $config;
     private $router;
-    private $container;\n    private $db;
+    private $container;
+    private $db;
     private $logger;
 
     public function __construct() {
