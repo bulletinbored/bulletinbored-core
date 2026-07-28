@@ -1,0 +1,199 @@
+/* ========================================
+   Forum Nuovo - Default Theme
+   Clean Bootstrap 5 Dark Navbar Theme
+   ======================================== */
+
+/* Base */
+body {
+    background-color: #f5f5f5;
+    padding-top: 70px;
+}
+
+/* Navbar */
+.navbar-forum {
+    background-color: #343a40;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.navbar-forum .navbar-brand {
+    color: #fff;
+    font-weight: 600;
+}
+.navbar-forum .nav-link {
+    color: rgba(255,255,255,0.8);
+}
+.navbar-forum .nav-link:hover {
+    color: #fff;
+}
+
+/* Cards */
+.card {
+    border: none;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    margin-bottom: 1rem;
+}
+.card-header {
+    background-color: #fff;
+    border-bottom: 2px solid #f0f0f0;
+    font-weight: 600;
+}
+
+/* Threads */
+.thread-title {
+    color: #212529;
+    text-decoration: none;
+}
+.thread-title:hover {
+    color: #0d6efd;
+}
+.badge-cat {
+    background-color: #e9ecef;
+    color: #495057;
+    font-weight: 500;
+}
+
+/* Pagination */
+.pagination .page-link {
+    color: #343a40;
+}
+.pagination .page-item.active .page-link {
+    background-color: #343a40;
+    border-color: #343a40;
+}
+
+/* Auth forms */
+.auth-form {
+    max-width: 420px;
+    margin: 2rem auto;
+}
+.auth-form .card {
+    border-radius: 0.5rem;
+}
+
+/* Footer */
+.footer {
+    background-color: #343a40;
+    color: rgba(255,255,255,0.7);
+    padding: 1.5rem 0;
+    margin-top: 2rem;
+}
+.footer a {
+    color: rgba(255,255,255,0.7);
+    text-decoration: none;
+}
+.footer a:hover {
+    color: #fff;
+}
+
+/* Buttons */
+.btn-forum {
+    background-color: #343a40;
+    border-color: #343a40;
+    color: #fff;
+}
+.btn-forum:hover {
+    background-color: #23272b;
+    border-color: #1d2124;
+    color: #fff;
+}
+.btn-forum-outline {
+    color: #343a40;
+    border-color: #343a40;
+}
+.btn-forum-outline:hover {
+    background-color: #343a40;
+    color: #fff;
+}
+
+/* Admin Dashboard Layout */
+.admin-layout {
+    padding-top: 56px;
+    background-color: #f8f9fc;
+}
+
+.admin-layout .navbar-top {
+    box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15);
+}
+
+.admin-layout .sidebar {
+    position: fixed;
+    top: 56px;
+    left: 0;
+    height: calc(100vh - 56px);
+    width: 225px;
+    background-color: #222;
+    padding-top: 20px;
+    z-index: 999;
+    overflow-y: auto;
+    transition: all 0.3s;
+}
+
+.admin-layout .sidebar-nav {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.admin-layout .sidebar-nav li a {
+    display: block;
+    padding: 12px 20px;
+    color: #c2c7d0;
+    text-decoration: none;
+    border-left: 3px solid transparent;
+    font-size: 0.9rem;
+}
+
+.admin-layout .sidebar-nav li a:hover,
+.admin-layout .sidebar-nav li a.active {
+    color: #fff;
+    background-color: #1a1a1a;
+    border-left-color: #3b7ddd;
+    text-decoration: none;
+}
+
+.admin-layout .sidebar-nav li a i {
+    width: 20px;
+    margin-right: 10px;
+    text-align: center;
+}
+
+.admin-layout .sidebar-divider {
+    margin: 1rem 0;
+    border-top: 1px solid #4a4a4a;
+}
+
+.admin-layout .content-wrapper {
+    margin-left: 225px;
+    min-height: calc(100vh - 56px);
+    padding: 20px;
+}
+
+.admin-layout .content-wrapper .container {
+    width: 100%;
+    max-width: none;
+    padding-left: 0;
+    padding-right: 0;
+}
+
+.admin-layout #sidebarToggle {
+    text-decoration: none;
+}
+
+.admin-layout .toggled .sidebar {
+    margin-left: -225px;
+}
+
+.admin-layout .toggled .content-wrapper {
+    margin-left: 0;
+}
+
+@media (max-width: 767.98px) {
+    .admin-layout .sidebar {
+        margin-left: -225px;
+    }
+    .admin-layout .sidebar.show {
+        margin-left: 0;
+    }
+    .admin-layout .content-wrapper {
+        margin-left: 0;
+    }
+}

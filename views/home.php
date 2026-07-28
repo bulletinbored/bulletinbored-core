@@ -1,73 +1,72 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title><?= $config['site_name'] ?? 'Forum' ?></title>
-    <style>
-        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
-        .header { background: #333; color: white; padding: 10px 20px; margin: -20px -20px 20px; }
-        .thread { background: #f9f9f9; padding: 15px; margin: 10px 0; border-radius: 5px; }
-        .thread h3 { margin: 0 0 10px 0; }
-        .btn { background: #007bff; color: white; padding: 5px 10px; text-decoration: none; border-radius: 3px; }
-        .auth { float: right; }
-    </style>
-</head>
-<body>
-    <div class="header">
-        <h1><?= $config['site_name'] ?? 'Forum' ?></h1>
-        <div class="auth">
-            <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
-                Logged in: <?= escape($_SESSION['username'] ?? '') ?>
-                <?php if (function_exists('is_admin') && is_admin()): ?>
-                    | <a href="<?= base_url() ?>/?action=admin">Admin</a>
+<?php include __DIR__.'/header.php'; render_header('Home'); ?>
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h4 class="mb-0"><i class="fas fa-list me-2"></i>Recent Threads</h4>
+                <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
+                    <a href="<?= base_url() ?>/?action=new_thread" class="btn btn-forum btn-sm">
+                        <i class="fas fa-plus me-1"></i>New Thread
+                    </a>
                 <?php endif; ?>
-                | <a href="<?= base_url() ?>/?action=profile&user=<?= escape($_SESSION['username'] ?? '') ?>">Profile</a>
-                | <a href="<?= base_url() ?>/?action=logout">Logout</a>
+            </div>
+
+            <?php if (empty($threads ?? [])): ?>
+                <div class="card">
+                    <div class="card-body text-center py-5">
+                        <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                        <p class="text-muted mb-0">No threads yet. Be the first to start a discussion!</p>
+                    </div>
+                </div>
             <?php else: ?>
-                <a href="<?= base_url() ?>/?action=login">Login</a> | <a href="<?= base_url() ?>/?action=register">Register</a>
+                <?php foreach ($threads as $thread): ?>
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title mb-1">
+                                <a href="<?= base_url() ?>/?action=thread&id=<?= $thread['id'] ?>" class="thread-title">
+                                    <?= escape($thread['title']) ?>
+                                </a>
+                            </h5>
+                            <p class="card-text text-muted small mb-2">
+                                <?= nl2br(escape(substr($thread['content'] ?? '', 0, 200))) ?>
+                                <?php if (strlen($thread['content'] ?? '') > 200): ?>...<?php endif; ?>
+                            </p>
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="badge badge-cat"><i class="fas fa-folder me-1"></i><?= escape($thread['category_name'] ?? 'General') ?></span>
+                                <small class="text-muted"><i class="fas fa-user me-1"></i><?= escape($thread['author']) ?></small>
+                                <small class="text-muted"><i class="fas fa-clock me-1"></i><?= escape($thread['created_at'] ?? '') ?></small>
+                            </div>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            <?php endif; ?>
+
+            <?php if (($totalPages ?? 1) > 1): ?>
+                <nav><ul class="pagination justify-content-center">
+                    <?php for ($i = 1; $i <= $totalPages; $i++): ?>
+                        <li class="page-item <?= ($i === ($page ?? 1)) ? 'active' : '' ?>">
+                            <a class="page-link" href="<?= base_url() ?>/?action=home&page=<?= $i ?>"><?= $i ?></a>
+                        </li>
+                    <?php endfor; ?>
+                </ul></nav>
             <?php endif; ?>
         </div>
-    </div>
 
-    <div style="margin-bottom: 20px;">
-        <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
-            <a href="<?= base_url() ?>/?action=new_thread" class="btn">New Thread</a>
-        <?php endif; ?>
-    </div>
-
-    <form method="GET" action="<?= base_url() ?>/?action=search" style="margin-bottom: 20px;">
-        <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
-        <input type="text" name="q" placeholder="Search threads..." required>
-        <button type="submit" class="btn">Search</button>
-    </form>
-
-    <h2>Categories</h2>
-    <ul style="list-style: none; padding: 0;">
-        <?php
-        $categories = $pdo->query("SELECT * FROM categories ORDER BY position")->fetchAll();
-        foreach ($categories as $cat): ?>
-            <li style="margin-bottom: 5px;">
-                <a href="<?= base_url() ?>/?action=category&id=<?= $cat['id'] ?>"><strong><?= escape($cat['name']) ?></strong></a>
-                <span style="color: #666; font-size: 0.9em;"> — <?= escape($cat['description'] ?? '') ?></span>
-            </li>
-        <?php endforeach; ?>
-    </ul>
-
-    <h2>Threads</h2>
-    <?php foreach ($threads ?? [] as $thread): ?>
-        <div class="thread">
-            <h3><a href="<?= base_url() ?>/?action=thread&id=<?= $thread['id'] ?>"><?= escape($thread['title']) ?></a></h3>
-            <p><?= nl2br(escape($thread['content'])) ?></p>
-            <small>in <?= escape($thread['category_name'] ?? 'General') ?> — by <?= escape($thread['author']) ?></small>
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header"><i class="fas fa-th-large me-2"></i>Categories</div>
+                <div class="card-body p-0">
+                    <ul class="list-group list-group-flush">
+                        <?php foreach ($categories ?? [] as $cat): ?>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <a href="<?= base_url() ?>/?action=category&id=<?= $cat['id'] ?>" class="text-decoration-none">
+                                    <i class="fas fa-folder me-2 text-muted"></i><?= escape($cat['name']) ?>
+                                </a>
+                                <small class="text-muted"><?= escape($cat['description'] ?? '') ?></small>
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                </div>
+            </div>
         </div>
-    <?php endforeach; ?>
-
-    <?php if (($totalPages ?? 1) > 1): ?>
-        <div class="pagination">
-            <?php for ($i = 1; $i <= $totalPages; $i++): ?>
-                <a href="<?= base_url() ?>/?action=home&page=<?= $i ?>" class="<?= $i === $page ? 'active' : '' ?>"><?= $i ?></a>
-            <?php endfor; ?>
-        </div>
-    <?php endif; ?>
-</body>
-</html>
+    </div>
+<?php render_footer(); ?>

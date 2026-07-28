@@ -1,51 +1,46 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>New Thread - <?= $config['site_name'] ?? 'Forum' ?></title>
-    <style>
-        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
-        .header { background: #333; color: white; padding: 10px 20px; margin: -20px -20px 20px; }
-        .form-container { background: white; padding: 20px; border-radius: 5px; }
-        input, textarea { width: 100%; padding: 10px; margin: 8px 0; box-sizing: border-box; border: 1px solid #ddd; border-radius: 3px; }
-        textarea { height: 200px; resize: vertical; }
-        .btn { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 3px; cursor: pointer; }
-        .btn-secondary { background: #6c757d; }
-        .error { color: red; margin-bottom: 15px; }
-    </style>
-</head>
-<body>
-    <div class="header">
-        <a href="<?= base_url() ?>/?action=home" style="color: white;">← Back to Forum</a>
-        <?php if (function_exists('is_admin') && is_admin()): ?>
-            | <a href="<?= base_url() ?>/?action=admin" style="color: white;">Admin</a>
-        <?php endif; ?>
-    </div>
+<?php include __DIR__.'/header.php'; render_header('New Thread'); ?>
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="<?= base_url() ?>/?action=home">Home</a></li>
+            <li class="breadcrumb-item active">New Thread</li>
+        </ol>
+    </nav>
 
-    <div class="form-container">
-        <h2>New Thread</h2>
-        <?php if (isset($error)): ?>
-            <p class="error"><?= escape($error) ?></p>
-        <?php endif; ?>
-        <form method="POST" action="<?= base_url() ?>/?action=create_thread" enctype="multipart/form-data">
-            <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
-            <label>Category:</label>
-            <select name="category_id" required>
-                <?php
-                $cats = $pdo->query("SELECT * FROM categories ORDER BY position")->fetchAll();
-                foreach ($cats as $cat): ?>
-                    <option value="<?= $cat['id'] ?>"><?= escape($cat['name']) ?></option>
-                <?php endforeach; ?>
-            </select>
-            <label>Title:</label>
-            <input type="text" name="title" required>
-            <label>Content:</label>
-            <textarea name="content" required></textarea>
-            <label>Attachments:</label>
-            <input type="file" name="attachments[]" multiple>
-            <button type="submit" class="btn">Create Thread</button>
-            <a href="<?= base_url() ?>/?action=home" class="btn btn-secondary">Cancel</a>
-        </form>
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header"><i class="fas fa-plus-circle me-2"></i>Create a New Thread</div>
+                <div class="card-body">
+                    <form method="POST" action="<?= base_url() ?>/?action=create_thread" enctype="multipart/form-data">
+                        <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                        <div class="mb-3">
+                            <label class="form-label">Category</label>
+                            <select name="category_id" class="form-select" required>
+                                <?php
+                                $cats = $pdo->query("SELECT * FROM categories ORDER BY position")->fetchAll();
+                                foreach ($cats as $cat): ?>
+                                    <option value="<?= $cat['id'] ?>"><?= escape($cat['name']) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Title</label>
+                            <input type="text" name="title" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Content</label>
+                            <textarea name="content" class="form-control" rows="8" required></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Attachments</label>
+                            <input type="file" name="attachments[]" class="form-control" multiple>
+                            <div class="form-text">Optional.</div>
+                        </div>
+                        <button type="submit" class="btn btn-forum"><i class="fas fa-paper-plane me-1"></i>Create Thread</button>
+                        <a href="<?= base_url() ?>/?action=home" class="btn btn-secondary">Cancel</a>
+                    </form>
+                </div>
+            </div>
+        </div>
     </div>
-</body>
-</html>
+<?php render_footer(); ?>

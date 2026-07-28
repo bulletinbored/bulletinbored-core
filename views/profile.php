@@ -1,36 +1,43 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title><?= escape($profileUser['username'] ?? 'Profile') ?> - <?= $config['site_name'] ?? 'Forum' ?></title>
-    <style>
-        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
-        .header { background: #333; color: white; padding: 10px 20px; margin: -20px -20px 20px; }
-        .profile { background: white; padding: 20px; border-radius: 5px; margin-bottom: 20px; }
-        .thread { background: #f9f9f9; padding: 15px; margin: 10px 0; border-radius: 5px; }
-        .btn { background: #007bff; color: white; padding: 5px 10px; text-decoration: none; border-radius: 3px; }
-    </style>
-</head>
-<body>
-    <div class="header">
-        <a href="<?= base_url() ?>/?action=home" style="color: white;">← Back to Forum</a>
-    </div>
+<?php include __DIR__.'/header.php'; render_header(escape($profileUser['username'] ?? 'Profile')); ?>
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="<?= base_url() ?>/?action=home">Home</a></li>
+            <li class="breadcrumb-item active"><?= escape($profileUser['username'] ?? '') ?></li>
+        </ol>
+    </nav>
 
-    <div class="profile">
-        <h2>Profile: <?= escape($profileUser['username'] ?? '') ?></h2>
-        <p>Role: <?= escape($profileUser['role'] ?? 'user') ?></p>
-        <p>Member since: <?= escape($profileUser['created_at'] ?? 'N/A') ?></p>
-        <?php if (function_exists('is_logged_in') && is_logged_in() && $_SESSION['user_id'] == $profileUser['id']): ?>
-            <a href="<?= base_url() ?>/?action=edit_profile" class="btn">Edit Profile</a>
-        <?php endif; ?>
-    </div>
-
-    <h3>Threads by <?= escape($profileUser['username']) ?></h3>
-    <?php foreach ($userThreads ?? [] as $thread): ?>
-        <div class="thread">
-            <h3><a href="<?= base_url() ?>/?action=thread&id=<?= $thread['id'] ?>"><?= escape($thread['title']) ?></a></h3>
-            <small><?= escape($thread['created_at'] ?? '') ?></small>
+    <div class="row">
+        <div class="col-md-4 mb-4">
+            <div class="card text-center">
+                <div class="card-body py-4">
+                    <i class="fas fa-user-circle fa-5x text-muted mb-3"></i>
+                    <h4><?= escape($profileUser['username'] ?? '') ?></h4>
+                    <span class="badge <?= ($profileUser['role'] ?? 'user') === 'admin' ? 'bg-warning' : 'bg-secondary' ?> mb-2">
+                        <?= escape(ucfirst($profileUser['role'] ?? 'user')) ?>
+                    </span>
+                    <p class="text-muted small mb-0"><i class="fas fa-calendar me-1"></i>Joined: <?= escape($profileUser['created_at'] ?? 'N/A') ?></p>
+                    <?php if (function_exists('is_logged_in') && is_logged_in() && $_SESSION['user_id'] == $profileUser['id']): ?>
+                        <hr><a href="<?= base_url() ?>/?action=edit_profile" class="btn btn-forum btn-sm w-100"><i class="fas fa-edit me-1"></i>Edit Profile</a>
+                    <?php endif; ?>
+                </div>
+            </div>
         </div>
-    <?php endforeach; ?>
-</body>
-</html>
+        <div class="col-md-8">
+            <h5 class="mb-3"><i class="fas fa-comments me-2"></i>Threads by <?= escape($profileUser['username']) ?></h5>
+            <?php if (empty($userThreads ?? [])): ?>
+                <div class="card"><div class="card-body text-center py-4 text-muted">No threads yet.</div></div>
+            <?php else: ?>
+                <?php foreach ($userThreads as $thread): ?>
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title mb-1">
+                                <a href="<?= base_url() ?>/?action=thread&id=<?= $thread['id'] ?>" class="thread-title"><?= escape($thread['title']) ?></a>
+                            </h5>
+                            <small class="text-muted"><i class="fas fa-clock me-1"></i><?= escape($thread['created_at'] ?? '') ?></small>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            <?php endif; ?>
+        </div>
+    </div>
+<?php render_footer(); ?>

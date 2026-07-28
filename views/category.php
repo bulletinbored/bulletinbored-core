@@ -1,47 +1,44 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title><?= escape($category['name'] ?? 'Category') ?> - <?= $config['site_name'] ?? 'Forum' ?></title>
-    <style>
-        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
-        .header { background: #333; color: white; padding: 10px 20px; margin: -20px -20px 20px; }
-        .thread { background: #f9f9f9; padding: 15px; margin: 10px 0; border-radius: 5px; }
-        .thread h3 { margin: 0 0 10px 0; }
-        .btn { background: #007bff; color: white; padding: 5px 10px; text-decoration: none; border-radius: 3px; }
-        .pagination { margin-top: 20px; text-align: center; }
-        .pagination a { padding: 5px 10px; margin: 0 2px; background: #f0f0f0; text-decoration: none; border-radius: 3px; }
-        .pagination a.active { background: #007bff; color: white; }
-    </style>
-</head>
-<body>
-    <div class="header">
-        <a href="<?= base_url() ?>/?action=home" style="color: white;">← Back to Forum</a>
+<?php include __DIR__.'/header.php'; render_header(escape($category['name'] ?? 'Category')); ?>
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="<?= base_url() ?>/?action=home">Home</a></li>
+            <li class="breadcrumb-item active"><?= escape($category['name'] ?? '') ?></li>
+        </ol>
+    </nav>
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h4 class="mb-0"><i class="fas fa-folder me-2"></i><?= escape($category['name'] ?? '') ?></h4>
+            <small class="text-muted"><?= escape($category['description'] ?? '') ?></small>
+        </div>
+        <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
+            <a href="<?= base_url() ?>/?action=new_thread" class="btn btn-forum btn-sm"><i class="fas fa-plus me-1"></i>New Thread</a>
+        <?php endif; ?>
     </div>
 
-    <h2><?= escape($category['name'] ?? '') ?></h2>
-    <p><?= escape($category['description'] ?? '') ?></p>
-
-    <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
-        <div style="margin-bottom: 20px;">
-            <a href="<?= base_url() ?>/?action=new_thread" class="btn">New Thread</a>
-        </div>
+    <?php if (empty($threads ?? [])): ?>
+        <div class="card"><div class="card-body text-center py-5 text-muted">No threads in this category yet.</div></div>
+    <?php else: ?>
+        <?php foreach ($threads as $thread): ?>
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title mb-1">
+                        <a href="<?= base_url() ?>/?action=thread&id=<?= $thread['id'] ?>" class="thread-title"><?= escape($thread['title']) ?></a>
+                    </h5>
+                    <p class="card-text text-muted small mb-2"><?= nl2br(escape(substr($thread['content'] ?? '', 0, 200))) ?><?php if (strlen($thread['content'] ?? '') > 200): ?>...<?php endif; ?></p>
+                    <small class="text-muted"><i class="fas fa-user me-1"></i><?= escape($thread['author']) ?> &middot; <i class="fas fa-clock me-1"></i><?= escape($thread['created_at'] ?? '') ?></small>
+                </div>
+            </div>
+        <?php endforeach; ?>
     <?php endif; ?>
-
-    <?php foreach ($threads ?? [] as $thread): ?>
-        <div class="thread">
-            <h3><a href="<?= base_url() ?>/?action=thread&id=<?= $thread['id'] ?>"><?= escape($thread['title']) ?></a></h3>
-            <p><?= nl2br(escape($thread['content'])) ?></p>
-            <small>by <?= escape($thread['author']) ?></small>
-        </div>
-    <?php endforeach; ?>
 
     <?php if (($totalPages ?? 1) > 1): ?>
-        <div class="pagination">
+        <nav><ul class="pagination justify-content-center">
             <?php for ($i = 1; $i <= $totalPages; $i++): ?>
-                <a href="<?= base_url() ?>/?action=category&id=<?= $category['id'] ?>&page=<?= $i ?>" class="<?= $i === $page ? 'active' : '' ?>"><?= $i ?></a>
+                <li class="page-item <?= ($i === ($page ?? 1)) ? 'active' : '' ?>">
+                    <a class="page-link" href="<?= base_url() ?>/?action=category&id=<?= $category['id'] ?>&page=<?= $i ?>"><?= $i ?></a>
+                </li>
             <?php endfor; ?>
-        </div>
+        </ul></nav>
     <?php endif; ?>
-</body>
-</html>
+<?php render_footer(); ?>

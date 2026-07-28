@@ -1,14 +1,8 @@
 <?php
 session_start();
 
-// Configuration
-$config = [
-    'db_driver' => 'sqlite',
-    'db_path' => __DIR__.'/data/database.sqlite',
-    'site_name' => 'Forum Nuovo',
-    'admin_user' => 'admin',
-    'admin_pass' => 'changeme123'
-];
+// Load configuration
+require __DIR__.'/config.php';
 
 // Ensure directories exist
 foreach (['data','plugins','uploads'] as $d) {
@@ -60,7 +54,9 @@ if ($dbDriver === 'mysql') {
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT UNIQUE NOT NULL,
                 password TEXT NOT NULL,
-                role TEXT DEFAULT 'user'
+                email TEXT,
+                role TEXT DEFAULT 'user',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
             CREATE TABLE categories (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -119,13 +115,49 @@ if ($dbDriver === 'mysql') {
             // Ignore errors if columns already exist
         }
         
+        // Safe column addition for users table (email, created_at)
+        try {
+            $cols = $pdo->query("PRAGMA table_info(users)")->fetchAll(PDO::FETCH_COLUMN);
+            if (!in_array('email', $cols)) {
+                $pdo->exec("ALTER TABLE users ADD COLUMN email TEXT");
+            }
+            if (!in_array('created_at', $cols)) {
+                $pdo->exec("ALTER TABLE users ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP");
+            }
+        } catch (PDOException $e) {}
+        
         // Safe column addition for posts table
         try {
             $cols = $pdo->query("PRAGMA table_info(posts)")->fetchAll(PDO::FETCH_COLUMN);
             // Add any missing columns for posts if needed
         } catch (PDOException $e) {}
+        
+        // Create password_resets table if not exists
+        try {
+            $pdo->exec("
+                CREATE TABLE IF NOT EXISTS password_resets (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    token TEXT NOT NULL,
+                    expires_at DATETIME NOT NULL,
+                    used INTEGER DEFAULT 0,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            ");
+        } catch (PDOException $e) {}
     }
 }
+
+// Handle legacy database - add email + created_at if missing (SQLite migration for existing DB)
+try {
+    $cols = $pdo->query("PRAGMA table_info(users)")->fetchAll(PDO::FETCH_COLUMN);
+    if (!in_array('email', $cols)) {
+        $pdo->exec("ALTER TABLE users ADD COLUMN email TEXT");
+    }
+    if (!in_array('created_at', $cols)) {
+        $pdo->exec("ALTER TABLE users ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP");
+    }
+} catch (PDOException $e) {}
 
 // Helper functions
 function escape($s) { return htmlspecialchars($s, ENT_QUOTES, 'UTF-8'); }
@@ -135,7 +167,7 @@ function redirect($url) { header("Location: $url"); exit; }
 function base_url() {
     static $baseUrl = null;
     if ($baseUrl === null) {
-        $baseUrl = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/');
+        $baseUrl = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\');
         if ($baseUrl === '' || $baseUrl === '\\') {
             $baseUrl = '';
         }
@@ -158,6 +190,35 @@ function validate_input($data) {
     return $data;
 }
 
+// Email notification helper
+function send_email($to, $subject, $body) {
+    global $config;
+    $headers = "MIME-Version: 1.0\r\n";
+    $headers .= "Content-Type: text/html; charset=UTF-8\r\n";
+    $headers .= "From: {$config['mail_from_name']} <{$config['mail_from']}>\r\n";
+    $headers .= "X-Mailer: Forum-Nuovo/1.0\r\n";
+    
+    $htmlBody = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+        body { font-family: Arial, sans-serif; background: #f8f9fc; padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .header { background: linear-gradient(135deg, #4e73df, #224abe); color: white; padding: 20px; text-align: center; }
+        .content { padding: 30px; }
+        .footer { background: #f8f9fc; padding: 15px; text-align: center; font-size: 12px; color: #666; }
+        .btn { display: inline-block; padding: 10px 20px; background: #4e73df; color: white; text-decoration: none; border-radius: 5px; }
+    </style></head><body>
+    <div class="container">
+        <div class="header"><h2>'.escape($config['site_name'] ?? 'Forum Nuovo').'</h2></div>
+        <div class="content">'.$body.'</div>
+        <div class="footer">&copy; '.date('Y').' '.escape($config['site_name'] ?? 'Forum Nuovo').'</div>
+    </div></body></html>';
+    
+    if ($config['mail_method'] === 'smtp') {
+        // SMTP support placeholder - extend as needed
+        return mail($to, '=?UTF-8?B?'.base64_encode($subject).'?=', $htmlBody, $headers);
+    }
+    return mail($to, '=?UTF-8?B?'.base64_encode($subject).'?=', $htmlBody, $headers);
+}
+
 // Load plugins
 foreach (glob(__DIR__.'/plugins/*.php') as $file) {
     include $file;
@@ -166,6 +227,14 @@ foreach (glob(__DIR__.'/plugins/*.php') as $file) {
     if (function_exists($initFunction)) {
         $initFunction(); // Call init function
     }
+}
+
+// Load theme CSS
+$themeName = $config['theme'] ?? 'default';
+$themeCssPath = __DIR__."/themes/{$themeName}/style.css";
+$themeCssUrl = base_url()."/themes/{$themeName}/style.css";
+if (!file_exists($themeCssPath)) {
+    $themeCssUrl = base_url().'/themes/default/style.css';
 }
 
 // Routing
@@ -421,6 +490,7 @@ try {
             $_SESSION['user_id'] = $user['id'];
             $_SESSION['user_role'] = $user['role'];
             $_SESSION['username'] = $user['username'];
+            $_SESSION['email'] = $user['email'] ?? '';
             redirect(base_url().'/?action=home');
         } else {
             $error = 'Invalid credentials';
@@ -452,8 +522,19 @@ try {
             die('Username already taken');
         }
         
-        $pdo->prepare("INSERT INTO users (username, password, role) VALUES (?, ?, 'user')")
-            ->execute([$username, password_hash($password, PASSWORD_DEFAULT)]);
+        $email = validate_input($_POST['email'] ?? '');
+        
+        $pdo->prepare("INSERT INTO users (username, password, email, role) VALUES (?, ?, ?, 'user')")
+            ->execute([$username, password_hash($password, PASSWORD_DEFAULT), $email]);
+        
+        // Send welcome email
+        if (!empty($email)) {
+            $subject = 'Welcome to '.($config['site_name'] ?? 'Forum Nuovo');
+            $body = '<p>Hello '.escape($username).',</p>
+                    <p>Welcome to '.escape($config['site_name'] ?? 'Forum Nuovo').'!</p>
+                    <p>Your account has been successfully created. You can now login and start participating in discussions.</p>';
+            send_email($email, $subject, $body);
+        }
         
         redirect(base_url().'/?action=login');
     }
@@ -516,6 +597,12 @@ try {
             }
             $updates[] = "username = ?";
             $params[] = $newUsername;
+        }
+        
+        if (isset($_POST['email'])) {
+            $newEmail = validate_input($_POST['email']);
+            $updates[] = "email = ?";
+            $params[] = $newEmail;
         }
         
         if (!empty($_POST['password'])) {
@@ -639,6 +726,39 @@ try {
         $pendingThreads = $pendingStmt->fetchAll();
         
         $categories = $pdo->query("SELECT * FROM categories ORDER BY position")->fetchAll();
+        
+        // Admin settings
+        $adminError = '';
+        $adminSuccess = '';
+        if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
+            if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+                $adminError = 'Invalid CSRF token';
+            } else {
+                $siteName = trim($_POST['site_name'] ?? $config['site_name']);
+                $allowRegistration = isset($_POST['allow_registration']) ? 1 : 0;
+                $maintenanceMode = isset($_POST['maintenance_mode']) ? 1 : 0;
+                
+                $config['site_name'] = $siteName;
+                $config['allow_registration'] = $allowRegistration;
+                $config['maintenance_mode'] = $maintenanceMode;
+                
+                $configContent = "<?php\n";
+                foreach ($config as $key => $value) {
+                    if (is_string($value)) {
+                        $configContent .= "\$config['$key'] = '" . addslashes($value) . "';\n";
+                    } else {
+                        $configContent .= "\$config['$key'] = " . var_export($value, true) . ";\n";
+                    }
+                }
+                
+                if (file_put_contents(__DIR__.'/config.php', $configContent) !== false) {
+                    $adminSuccess = 'Settings saved successfully';
+                } else {
+                    $adminError = 'Failed to save settings';
+                }
+            }
+        }
+        
         include __DIR__.'/views/admin.php';
     }
     elseif ($action === 'moderate' && $method === 'POST' && is_admin()) {
@@ -661,6 +781,139 @@ try {
         }
         
         redirect(base_url().'/?action=admin');
+    }
+    elseif ($action === 'create_category' && $method === 'POST' && is_admin()) {
+        // Create new category
+        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+            die('CSRF token invalid');
+        }
+        $name = validate_input($_POST['name'] ?? '');
+        $description = validate_input($_POST['description'] ?? '');
+        if ($name !== '') {
+            $pdo->prepare("INSERT INTO categories (name, description) VALUES (?, ?)")->execute([$name, $description]);
+        }
+        redirect(base_url().'/?action=admin');
+    }
+    elseif ($action === 'edit_category' && $method === 'POST' && is_admin()) {
+        // Edit category
+        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+            die('CSRF token invalid');
+        }
+        $catId = (int)($_GET['id'] ?? 0);
+        $name = validate_input($_POST['name'] ?? '');
+        $description = validate_input($_POST['description'] ?? '');
+        if ($catId > 0 && $name !== '') {
+            $pdo->prepare("UPDATE categories SET name = ?, description = ? WHERE id = ?")->execute([$name, $description, $catId]);
+        }
+        redirect(base_url().'/?action=admin');
+    }
+    elseif ($action === 'delete_category' && $method === 'POST' && is_admin()) {
+        // Delete category
+        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+            die('CSRF token invalid');
+        }
+        $catId = (int)($_GET['id'] ?? 0);
+        if ($catId > 0) {
+            $pdo->prepare("DELETE FROM categories WHERE id = ?")->execute([$catId]);
+        }
+        redirect(base_url().'/?action=admin');
+    }
+    elseif ($action === 'forgot_password') {
+        // Show forgot password form
+        include __DIR__.'/views/forgot_password.php';
+    }
+    elseif ($action === 'do_forgot_password' && $method === 'POST') {
+        // Handle forgot password request
+        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+            die('CSRF token invalid');
+        }
+        $email = validate_input($_POST['email'] ?? '');
+        $userStmt = $pdo->prepare("SELECT * FROM users WHERE email = ?");
+        $userStmt->execute([$email]);
+        $user = $userStmt->fetch();
+        
+        if ($user) {
+            // Generate reset token
+            $token = bin2hex(random_bytes(32));
+            $expires = date('Y-m-d H:i:s', strtotime('+1 hour'));
+            $pdo->prepare("INSERT INTO password_resets (user_id, token, expires_at) VALUES (?, ?, ?)")
+                ->execute([$user['id'], password_hash($token, PASSWORD_DEFAULT), $expires]);
+            
+            // Send email
+            $resetLink = base_url().'/?action=reset_password&token='.$token;
+            $subject = 'Password Reset Request';
+            $body = '<p>Hello '.escape($user['username']).',</p>
+                    <p>You requested a password reset. Click the button below to reset your password:</p>
+                    <p style="text-align:center;"><a class="btn" href="'.$resetLink.'">Reset Password</a></p>
+                    <p>Or copy this link: <br><code>'.$resetLink.'</code></p>
+                    <p>This link expires in 1 hour.</p>
+                    <p>If you did not request this, please ignore this email.</p>';
+            send_email($email, $subject, $body);
+        }
+        
+        // Always show success (don't reveal if email exists)
+        $success = 'If an account with that email exists, a password reset link has been sent.';
+        include __DIR__.'/views/forgot_password.php';
+    }
+    elseif ($action === 'reset_password' && isset($_GET['token'])) {
+        // Show reset password form
+        include __DIR__.'/views/reset_password.php';
+    }
+    elseif ($action === 'do_reset_password' && $method === 'POST') {
+        // Handle password reset
+        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+            die('CSRF token invalid');
+        }
+        $token = $_POST['token'] ?? '';
+        $password = $_POST['password'] ?? '';
+        $confirm = $_POST['confirm_password'] ?? '';
+        
+        if ($password !== $confirm) {
+            $error = 'Passwords do not match.';
+            include __DIR__.'/views/reset_password.php';
+            exit;
+        }
+        if (strlen($password) < 6) {
+            $error = 'Password must be at least 6 characters.';
+            include __DIR__.'/views/reset_password.php';
+            exit;
+        }
+        
+        // Find valid token
+        $tokensStmt = $pdo->prepare("SELECT * FROM password_resets WHERE used = 0 AND expires_at > datetime('now') ORDER BY created_at DESC");
+        $tokensStmt->execute();
+        $validToken = null;
+        foreach ($tokensStmt->fetchAll() as $row) {
+            if (password_verify($token, $row['token'])) {
+                $validToken = $row;
+                break;
+            }
+        }
+        
+        if (!$validToken) {
+            $error = 'Invalid or expired reset token.';
+            include __DIR__.'/views/reset_password.php';
+            exit;
+        }
+        
+        // Update password
+        $pdo->prepare("UPDATE users SET password = ? WHERE id = ?")
+            ->execute([password_hash($password, PASSWORD_DEFAULT), $validToken['user_id']]);
+        $pdo->prepare("UPDATE password_resets SET used = 1 WHERE id = ?")->execute([$validToken['id']]);
+        
+        // Send confirmation email
+        $userStmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
+        $userStmt->execute([$validToken['user_id']]);
+        $user = $userStmt->fetch();
+        if ($user && !empty($user['email'])) {
+            $subject = 'Password Reset Successful';
+            $body = '<p>Hello '.escape($user['username']).',</p>
+                    <p>Your password has been successfully reset.</p>
+                    <p>If you did not make this change, please contact an administrator immediately.</p>';
+            send_email($user['email'], $subject, $body);
+        }
+        
+        redirect(base_url().'/?action=login');
     }
     else {
         // Not found
