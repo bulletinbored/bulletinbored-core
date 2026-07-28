@@ -4,8 +4,61 @@ session_start();
 // Load configuration
 require __DIR__.'/config.php';
 
+// Localization
+$lang = $_GET['lang'] ?? ($_COOKIE['lang'] ?? ($config['default_lang'] ?? 'en'));
+if (!in_array($lang, $config['available_langs'] ?? ['en'])) {
+    $lang = $config['default_lang'] ?? 'en';
+}
+setcookie('lang', $lang, time() + 365*24*60*60, '/');
+$translations = [];
+$langFile = __DIR__.'/lang/'.$lang.'.php';
+if (file_exists($langFile)) {
+    $translations = include $langFile;
+}
+
+function t($key, $params = []) {
+    global $translations;
+    $text = $translations[$key] ?? $key;
+    foreach ($params as $k => $v) {
+        $text = str_replace('{'.$k.'}', $v, $text);
+    }
+    return $text;
+}
+
+function slugify($text) {
+    $text = preg_replace('~[^\pL\d]+~u', '-', $text);
+    $text = iconv('utf-8', 'us-ascii//TRANSLIT', $text);
+    $text = preg_replace('~[^-\w]+~', '', $text);
+    $text = trim($text, '-');
+    $text = strtolower($text);
+    return empty($text) ? 'n-a' : $text;
+}
+
+function url($action, $params = []) {
+    $base = base_url();
+    $query = $params;
+    switch ($action) {
+        case 'thread':
+            $id = $params['id'] ?? 0;
+            $slug = $params['slug'] ?? '';
+            unset($query['id'], $query['slug']);
+            return $base . '/thread/' . $id . ($slug ? '-' . $slug : '') . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'category':
+            $id = $params['id'] ?? 0;
+            $slug = $params['slug'] ?? '';
+            unset($query['id'], $query['slug']);
+            return $base . '/category/' . $id . ($slug ? '-' . $slug : '') . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'profile':
+            $user = $params['user'] ?? '';
+            unset($query['user']);
+            return $base . '/u/' . urlencode($user) . (!empty($query) ? '?' . http_build_query($query) : '');
+        default:
+            return $base . '/?' . http_build_query(array_merge(['action' => $action], $params));
+    }
+}
+
 // Ensure directories exist
-foreach (['data','plugins','uploads'] as $d) {
+foreach (['data','plugins','uploads','uploads/avatars'] as $d) {
     $dir = __DIR__.'/'.$d;
     if (!is_dir($dir)) mkdir($dir, 0755, true);
 }
@@ -22,11 +75,12 @@ if ($dbDriver === 'mysql') {
     
     // MySQL tables
     $tables = [
-        "users" => "id INT AUTO_INCREMENT PRIMARY KEY, username VARCHAR(255) UNIQUE NOT NULL, password VARCHAR(255) NOT NULL, role VARCHAR(50) DEFAULT 'user'",
+        "users" => "id INT AUTO_INCREMENT PRIMARY KEY, username VARCHAR(255) UNIQUE NOT NULL, password VARCHAR(255) NOT NULL, email VARCHAR(255), role VARCHAR(50) DEFAULT 'user', avatar VARCHAR(255), created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
         "categories" => "id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255) NOT NULL, description TEXT, position INT DEFAULT 0",
         "threads" => "id INT AUTO_INCREMENT PRIMARY KEY, category_id INT, user_id INT, title TEXT, content TEXT, status VARCHAR(50) DEFAULT 'visible', created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP",
         "posts" => "id INT AUTO_INCREMENT PRIMARY KEY, thread_id INT, user_id INT, content TEXT, status VARCHAR(50) DEFAULT 'visible', created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
-        "uploads" => "id INT AUTO_INCREMENT PRIMARY KEY, thread_id INT, post_id INT, user_id INT, filename VARCHAR(255), original_name VARCHAR(255), size INT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+        "uploads" => "id INT AUTO_INCREMENT PRIMARY KEY, thread_id INT, post_id INT, user_id INT, filename VARCHAR(255), original_name VARCHAR(255), size INT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
+        "thread_watchers" => "id INT AUTO_INCREMENT PRIMARY KEY, thread_id INT NOT NULL, user_id INT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE KEY unique_watch (thread_id, user_id)"
     ];
     
     foreach ($tables as $name => $schema) {
@@ -56,6 +110,7 @@ if ($dbDriver === 'mysql') {
                 password TEXT NOT NULL,
                 email TEXT,
                 role TEXT DEFAULT 'user',
+                avatar TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
             CREATE TABLE categories (
@@ -92,6 +147,13 @@ if ($dbDriver === 'mysql') {
                 size INTEGER,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
+            CREATE TABLE thread_watchers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                thread_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(thread_id, user_id)
+            );
         ");
         
         // Insert default data
@@ -115,7 +177,7 @@ if ($dbDriver === 'mysql') {
             // Ignore errors if columns already exist
         }
         
-        // Safe column addition for users table (email, created_at)
+        // Safe column addition for users table (email, created_at, avatar)
         try {
             $cols = $pdo->query("PRAGMA table_info(users)")->fetchAll(PDO::FETCH_COLUMN);
             if (!in_array('email', $cols)) {
@@ -123,6 +185,9 @@ if ($dbDriver === 'mysql') {
             }
             if (!in_array('created_at', $cols)) {
                 $pdo->exec("ALTER TABLE users ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP");
+            }
+            if (!in_array('avatar', $cols)) {
+                $pdo->exec("ALTER TABLE users ADD COLUMN avatar TEXT");
             }
         } catch (PDOException $e) {}
         
@@ -145,6 +210,19 @@ if ($dbDriver === 'mysql') {
                 )
             ");
         } catch (PDOException $e) {}
+        
+        // Create thread_watchers table if not exists
+        try {
+            $pdo->exec("
+                CREATE TABLE IF NOT EXISTS thread_watchers (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    thread_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(thread_id, user_id)
+                )
+            ");
+        } catch (PDOException $e) {}
     }
 }
 
@@ -157,6 +235,9 @@ try {
     if (!in_array('created_at', $cols)) {
         $pdo->exec("ALTER TABLE users ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP");
     }
+    if (!in_array('avatar', $cols)) {
+        $pdo->exec("ALTER TABLE users ADD COLUMN avatar TEXT");
+    }
 } catch (PDOException $e) {}
 
 // Helper functions
@@ -167,9 +248,14 @@ function redirect($url) { header("Location: $url"); exit; }
 function base_url() {
     static $baseUrl = null;
     if ($baseUrl === null) {
-        $baseUrl = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\');
-        if ($baseUrl === '' || $baseUrl === '\\') {
-            $baseUrl = '';
+        if (!empty($config['base_url'])) {
+            $baseUrl = rtrim($config['base_url'], '/');
+        } else {
+            $scriptName = $_SERVER['SCRIPT_NAME'] ?? '';
+            $baseUrl = rtrim(str_replace('\\', '/', dirname($scriptName)), '/');
+            if ($baseUrl === '' || $baseUrl === '\\') {
+                $baseUrl = '';
+            }
         }
     }
     return $baseUrl;
@@ -359,7 +445,7 @@ try {
             }
         }
         
-        redirect(base_url().'/?action=thread&id='.$threadId);
+        redirect(url('thread', ['id' => $threadId, 'slug' => slugify($_POST['title'] ?? '')]));
     }
     elseif ($action === 'reply' && $method === 'POST') {
         // Handle reply submission
@@ -383,7 +469,35 @@ try {
         ");
         $stmt->execute([$threadId, $_SESSION['user_id'], $content]);
         
-        redirect(base_url().'/?action=thread&id='.$threadId);
+        // Notify watchers
+        $watchersStmt = $pdo->prepare("
+            SELECT u.email, u.username 
+            FROM thread_watchers w 
+            JOIN users u ON w.user_id = u.id 
+            WHERE w.thread_id = ? AND w.user_id <> ?
+        ");
+        $watchersStmt->execute([$threadId, $_SESSION['user_id']]);
+        $watchers = $watchersStmt->fetchAll();
+        
+        $threadTitleStmt = $pdo->prepare("SELECT title FROM threads WHERE id = ?");
+        $threadTitleStmt->execute([$threadId]);
+        $threadTitle = $threadTitleStmt->fetchColumn();
+        
+        foreach ($watchers as $watcher) {
+            if (!empty($watcher['email'])) {
+                $subject = t('reply_notification_subject', ['title' => $threadTitle]);
+                $replyLink = url('thread', ['id' => $threadId, 'slug' => slugify($threadTitle)]);
+                $body = t('reply_notification_body', [
+                    'username' => escape($watcher['username']),
+                    'title' => escape($threadTitle),
+                    'author' => escape($_SESSION['username'] ?? 'Someone'),
+                    'link' => $replyLink
+                ]);
+                send_email($watcher['email'], $subject, $body);
+            }
+        }
+        
+        redirect(url('thread', ['id' => $threadId, 'slug' => slugify($threadTitle)]));
     }
     elseif ($action === 'edit_post' && isset($_GET['id'])) {
         // Show edit post form
@@ -443,7 +557,10 @@ try {
         $tidStmt = $pdo->prepare("SELECT thread_id FROM posts WHERE id = ?");
         $tidStmt->execute([$postId]);
         $threadId = $tidStmt->fetchColumn();
-        redirect(base_url().'/?action=thread&id='.$threadId);
+        $titleStmt = $pdo->prepare("SELECT title FROM threads WHERE id = ?");
+        $titleStmt->execute([$threadId]);
+        $threadTitle = $titleStmt->fetchColumn();
+        redirect(url('thread', ['id' => $threadId, 'slug' => slugify($threadTitle)]));
     }
     elseif ($action === 'delete_post' && isset($_GET['id']) && $method === 'POST') {
         // Handle post deletion
@@ -464,12 +581,94 @@ try {
         }
         
         $pdo->prepare("DELETE FROM posts WHERE id = ?")->execute([$postId]);
-        redirect(base_url().'/?action=thread&id='.$post['thread_id']);
+        redirect(url('thread', ['id' => $post['thread_id']]));
+    }
+    elseif ($action === 'watch' && is_logged_in()) {
+        $threadId = (int)($_GET['thread_id'] ?? 0);
+        if ($threadId > 0) {
+            $checkStmt = $pdo->prepare("SELECT COUNT(*) FROM thread_watchers WHERE thread_id = ? AND user_id = ?");
+            $checkStmt->execute([$threadId, $_SESSION['user_id']]);
+            if ($checkStmt->fetchColumn() == 0) {
+                $pdo->prepare("INSERT INTO thread_watchers (thread_id, user_id) VALUES (?, ?)")
+                    ->execute([$threadId, $_SESSION['user_id']]);
+            }
+        }
+        redirect($_SERVER['HTTP_REFERER'] ?? url('home'));
+    }
+    elseif ($action === 'unwatch' && is_logged_in()) {
+        $threadId = (int)($_GET['thread_id'] ?? 0);
+        if ($threadId > 0) {
+            $pdo->prepare("DELETE FROM thread_watchers WHERE thread_id = ? AND user_id = ?")
+                ->execute([$threadId, $_SESSION['user_id']]);
+        }
+        redirect($_SERVER['HTTP_REFERER'] ?? url('home'));
+    }
+    elseif ($action === 'upload_avatar' && $method === 'POST' && is_logged_in()) {
+        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+            die('CSRF token invalid');
+        }
+
+        $avatarDir = __DIR__.'/uploads/avatars/';
+        if (!is_dir($avatarDir)) {
+            @mkdir($avatarDir, 0777, true);
+        }
+
+        if (empty($_FILES['avatar']['name']) || $_FILES['avatar']['error'] !== UPLOAD_ERR_OK) {
+            $_SESSION['avatar_upload_error'] = 'No file uploaded or upload error occurred.';
+            redirect(url('edit_profile'));
+        }
+
+        $allowed = $config['avatar_allowed_types'] ?? ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+        $maxSize = $config['avatar_max_size'] ?? 2*1024*1024;
+
+        $finfo = new finfo(FILEINFO_MIME_TYPE);
+        $mime = $finfo->file($_FILES['avatar']['tmp_name']);
+
+        if (!in_array($mime, $allowed)) {
+            $_SESSION['avatar_upload_error'] = 'Invalid file type. Allowed: JPG, PNG, GIF, WebP.';
+            redirect(url('edit_profile'));
+        }
+
+        if ($_FILES['avatar']['size'] > $maxSize) {
+            $_SESSION['avatar_upload_error'] = 'File is too large. Max 2MB.';
+            redirect(url('edit_profile'));
+        }
+
+        $ext = match($mime) {
+            'image/jpeg' => 'jpg',
+            'image/png' => 'png',
+            'image/gif' => 'gif',
+            'image/webp' => 'webp',
+            default => 'bin',
+        };
+
+        $safeName = 'avatar_'.$_SESSION['user_id'].'.'.$ext;
+        $uploadPath = $avatarDir . $safeName;
+
+        foreach (glob($avatarDir . 'avatar_'.$_SESSION['user_id'].'.*') as $oldAvatar) {
+            @unlink($oldAvatar);
+        }
+
+        if (move_uploaded_file($_FILES['avatar']['tmp_name'], $uploadPath)) {
+            try {
+                $pdo->prepare("UPDATE users SET avatar = ? WHERE id = ?")
+                    ->execute([$safeName, $_SESSION['user_id']]);
+                $_SESSION['avatar'] = $safeName;
+                $_SESSION['avatar_upload_success'] = 'Avatar uploaded successfully.';
+            } catch (Exception $e) {
+                $_SESSION['avatar_upload_error'] = 'Database error: ' . $e->getMessage();
+                @unlink($uploadPath);
+            }
+        } else {
+            $_SESSION['avatar_upload_error'] = 'Failed to move uploaded file. Check directory permissions.';
+        }
+
+        redirect(url('edit_profile'));
     }
     elseif ($action === 'login') {
         // Show login form
         if (is_logged_in()) {
-            redirect(base_url().'/?action=home');
+            redirect(url('home'));
         }
         include __DIR__.'/views/login.php';
     }
@@ -491,7 +690,8 @@ try {
             $_SESSION['user_role'] = $user['role'];
             $_SESSION['username'] = $user['username'];
             $_SESSION['email'] = $user['email'] ?? '';
-            redirect(base_url().'/?action=home');
+            $_SESSION['avatar'] = $user['avatar'] ?? '';
+            redirect(url('home'));
         } else {
             $error = 'Invalid credentials';
             include __DIR__.'/views/login.php';
@@ -536,12 +736,12 @@ try {
             send_email($email, $subject, $body);
         }
         
-        redirect(base_url().'/?action=login');
+        redirect(url('login'));
     }
     elseif ($action === 'logout') {
         // Handle logout
         session_destroy();
-        redirect(base_url().'/?action=home');
+        redirect(url('home'));
     }
     elseif ($action === 'profile' && isset($_GET['user'])) {
         // View user profile
@@ -620,7 +820,7 @@ try {
             }
         }
         
-        redirect(base_url().'/?action=profile&user='.$_SESSION['username']);
+        redirect(url('profile', ['user' => $_SESSION['username']]));
     }
     elseif ($action === 'search') {
         // Search functionality
@@ -737,30 +937,38 @@ try {
                 $siteName = trim($_POST['site_name'] ?? $config['site_name']);
                 $allowRegistration = isset($_POST['allow_registration']) ? 1 : 0;
                 $maintenanceMode = isset($_POST['maintenance_mode']) ? 1 : 0;
+                $defaultLang = trim($_POST['default_lang'] ?? $config['default_lang'] ?? 'en');
+                $availableLangs = array_filter(array_map('trim', explode(',', $_POST['available_langs'] ?? implode(',', $config['available_langs'] ?? ['en']))));
                 
                 $config['site_name'] = $siteName;
                 $config['allow_registration'] = $allowRegistration;
                 $config['maintenance_mode'] = $maintenanceMode;
+                $config['default_lang'] = $defaultLang;
+                $config['available_langs'] = array_values($availableLangs);
                 
                 $configContent = "<?php\n";
                 foreach ($config as $key => $value) {
                     if (is_string($value)) {
                         $configContent .= "\$config['$key'] = '" . addslashes($value) . "';\n";
+                    } elseif (is_array($value)) {
+                        $configContent .= "\$config['$key'] = " . var_export($value, true) . ";\n";
                     } else {
                         $configContent .= "\$config['$key'] = " . var_export($value, true) . ";\n";
                     }
                 }
                 
-                if (file_put_contents(__DIR__.'/config.php', $configContent) !== false) {
-                    $adminSuccess = 'Settings saved successfully';
-                } else {
-                    $adminError = 'Failed to save settings';
-                }
+            if (file_put_contents(__DIR__.'/config.php', $configContent) !== false) {
+                $adminSuccess = 'Settings saved successfully';
+            } else {
+                $adminError = 'Failed to save settings';
             }
         }
         
-        include __DIR__.'/views/admin.php';
+        redirect(url('admin_settings'));
     }
+    
+    include __DIR__.'/views/admin.php';
+}
     elseif ($action === 'moderate' && $method === 'POST' && is_admin()) {
         // Handle moderation actions
         if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
@@ -780,7 +988,7 @@ try {
             $pdo->prepare("DELETE FROM threads WHERE id = ?")->execute([$threadId]);
         }
         
-        redirect(base_url().'/?action=admin');
+        redirect(url('admin'));
     }
     elseif ($action === 'create_category' && $method === 'POST' && is_admin()) {
         // Create new category
@@ -792,7 +1000,7 @@ try {
         if ($name !== '') {
             $pdo->prepare("INSERT INTO categories (name, description) VALUES (?, ?)")->execute([$name, $description]);
         }
-        redirect(base_url().'/?action=admin');
+        redirect(url('admin'));
     }
     elseif ($action === 'edit_category' && $method === 'POST' && is_admin()) {
         // Edit category
@@ -805,7 +1013,7 @@ try {
         if ($catId > 0 && $name !== '') {
             $pdo->prepare("UPDATE categories SET name = ?, description = ? WHERE id = ?")->execute([$name, $description, $catId]);
         }
-        redirect(base_url().'/?action=admin');
+        redirect(url('admin'));
     }
     elseif ($action === 'delete_category' && $method === 'POST' && is_admin()) {
         // Delete category
@@ -816,7 +1024,18 @@ try {
         if ($catId > 0) {
             $pdo->prepare("DELETE FROM categories WHERE id = ?")->execute([$catId]);
         }
-        redirect(base_url().'/?action=admin');
+        redirect(url('admin'));
+    }
+    elseif ($action === 'delete_user' && $method === 'POST' && is_admin()) {
+        // Delete user
+        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+            die('CSRF token invalid');
+        }
+        $userId = (int)($_GET['id'] ?? 0);
+        if ($userId > 0) {
+            $pdo->prepare("DELETE FROM users WHERE id = ? AND role <> 'admin'")->execute([$userId]);
+        }
+        redirect(url('admin_users'));
     }
     elseif ($action === 'admin_settings' && $method === 'POST' && is_admin()) {
         // Save admin settings
@@ -841,7 +1060,7 @@ try {
         }
         
         file_put_contents(__DIR__.'/config.php', $configContent);
-        redirect(base_url().'/?action=admin_settings');
+        redirect(url('admin_settings'));
     }
     elseif ($action === 'admin_moderation') {
         // Show moderation page
@@ -893,7 +1112,7 @@ try {
                 ->execute([$user['id'], password_hash($token, PASSWORD_DEFAULT), $expires]);
             
             // Send email
-            $resetLink = base_url().'/?action=reset_password&token='.$token;
+            $resetLink = url('reset_password', ['token' => $token]);
             $subject = 'Password Reset Request';
             $body = '<p>Hello '.escape($user['username']).',</p>
                     <p>You requested a password reset. Click the button below to reset your password:</p>
@@ -966,7 +1185,7 @@ try {
             send_email($user['email'], $subject, $body);
         }
         
-        redirect(base_url().'/?action=login');
+        redirect(url('login'));
     }
     else {
         // Not found

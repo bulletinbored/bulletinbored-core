@@ -9,7 +9,7 @@ $pendingCount = $pdo->query("SELECT COUNT(*) FROM threads WHERE status = 'pendin
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>Admin Dashboard</h2>
-        <a href="<?= base_url() ?>/?action=home" class="btn btn-secondary"><i class="fas fa-arrow-left me-1"></i>Back to Forum</a>
+        <a href="<?= url('home') ?>" class="btn btn-secondary"><i class="fas fa-arrow-left me-1"></i>Back to Forum</a>
     </div>
 
     <div class="row g-4">

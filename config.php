@@ -20,5 +20,16 @@ $config = [
     'mail_method' => 'mail',          // 'mail' for PHP mail(), 'smtp' for SMTP
     
     // Theme
-    'theme' => 'default'              // Theme name (folder in themes/)
+    'theme' => 'default',              // Theme name (folder in themes/)
+    
+    // Localization
+    'default_lang' => 'en',            // Default language (folder in lang/)
+    'available_langs' => ['en', 'it'], // Available languages
+    
+    // Uploads
+    'avatar_max_size' => 2 * 1024 * 1024, // 2MB
+    'avatar_allowed_types' => ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+    
+    // URL
+    'base_url' => '/forum-nuovo',
 ];

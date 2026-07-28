@@ -2,10 +2,10 @@
     <div class="row">
         <div class="col-lg-8">
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <h4 class="mb-0"><i class="fas fa-list me-2"></i>Recent Threads</h4>
+                <h4 class="mb-0"><i class="fas fa-list me-2"></i><?= t('recent_threads') ?></h4>
                 <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
-                    <a href="<?= base_url() ?>/?action=new_thread" class="btn btn-forum btn-sm">
-                        <i class="fas fa-plus me-1"></i>New Thread
+                    <a href="<?= url('new_thread') ?>" class="btn btn-forum btn-sm">
+                        <i class="fas fa-plus me-1"></i><?= t('new_thread') ?>
                     </a>
                 <?php endif; ?>
             </div>
@@ -14,7 +14,7 @@
                 <div class="card">
                     <div class="card-body text-center py-5">
                         <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
-                        <p class="text-muted mb-0">No threads yet. Be the first to start a discussion!</p>
+                        <p class="text-muted mb-0"><?= t('no_threads') ?></p>
                     </div>
                 </div>
             <?php else: ?>
@@ -22,7 +22,7 @@
                     <div class="card">
                         <div class="card-body">
                             <h5 class="card-title mb-1">
-                                <a href="<?= base_url() ?>/?action=thread&id=<?= $thread['id'] ?>" class="thread-title">
+                                <a href="<?= url('thread', ['id' => $thread['id'], 'slug' => slugify($thread['title'] ?? '')]) ?>" class="thread-title">
                                     <?= escape($thread['title']) ?>
                                 </a>
                             </h5>
@@ -44,7 +44,7 @@
                 <nav><ul class="pagination justify-content-center">
                     <?php for ($i = 1; $i <= $totalPages; $i++): ?>
                         <li class="page-item <?= ($i === ($page ?? 1)) ? 'active' : '' ?>">
-                            <a class="page-link" href="<?= base_url() ?>/?action=home&page=<?= $i ?>"><?= $i ?></a>
+                            <a class="page-link" href="<?= url('home', ['page' => $i]) ?>"><?= $i ?></a>
                         </li>
                     <?php endfor; ?>
                 </ul></nav>
@@ -53,12 +53,12 @@
 
         <div class="col-lg-4">
             <div class="card">
-                <div class="card-header"><i class="fas fa-th-large me-2"></i>Categories</div>
+                <div class="card-header"><i class="fas fa-th-large me-2"></i><?= t('categories') ?></div>
                 <div class="card-body p-0">
                     <ul class="list-group list-group-flush">
                         <?php foreach ($categories ?? [] as $cat): ?>
                             <li class="list-group-item d-flex justify-content-between align-items-center">
-                                <a href="<?= base_url() ?>/?action=category&id=<?= $cat['id'] ?>" class="text-decoration-none">
+                                <a href="<?= url('category', ['id' => $cat['id'], 'slug' => slugify($cat['name'] ?? '')]) ?>" class="text-decoration-none">
                                     <i class="fas fa-folder me-2 text-muted"></i><?= escape($cat['name']) ?>
                                 </a>
                                 <small class="text-muted"><?= escape($cat['description'] ?? '') ?></small>

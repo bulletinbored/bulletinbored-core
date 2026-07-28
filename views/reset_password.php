@@ -1,16 +1,16 @@
-<?php include __DIR__.'/header.php'; render_header('Reset Password'); ?>
+<?php include __DIR__.'/header.php'; render_header(t('password_reset_success')); ?>
     <div class="row justify-content-center">
         <div class="col-md-6">
             <div class="auth-form">
                 <div class="card">
                     <div class="card-header text-center py-3 bg-dark text-white">
-                        <h5 class="mb-0"><i class="fas fa-key me-2"></i>Reset Password</h5>
+                        <h5 class="mb-0"><i class="fas fa-key me-2"></i><?= t('password_reset_success') ?></h5>
                     </div>
                     <div class="card-body p-4">
                         <?php if (isset($error)): ?>
                             <div class="alert alert-danger"><i class="fas fa-exclamation-circle me-2"></i><?= escape($error) ?></div>
                         <?php endif; ?>
-                        <form method="POST" action="<?= base_url() ?>/?action=do_reset_password">
+                        <form method="POST" action="<?= url('do_reset_password') ?>">
                             <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                             <input type="hidden" name="token" value="<?= escape($_GET['token'] ?? '') ?>">
                             <div class="mb-3">

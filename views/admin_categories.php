@@ -32,11 +32,11 @@ $categories = $pdo->query("SELECT * FROM categories ORDER BY position")->fetchAl
                                     <td><?= escape($cat['description'] ?? '') ?></td>
                                     <td><?= escape($cat['position']) ?></td>
                                     <td class="text-end">
-                                        <form method="POST" action="<?= base_url() ?>/?action=edit_category&id=<?= $cat['id'] ?>" class="d-inline">
+                                        <form method="POST" action="<?= url('edit_category', ['id' => $cat['id']]) ?>" class="d-inline">
                                             <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                                             <button class="btn btn-sm btn-warning"><i class="fas fa-pen"></i></button>
                                         </form>
-                                        <form method="POST" action="<?= base_url() ?>/?action=delete_category&id=<?= $cat['id'] ?>" class="d-inline" onsubmit="return confirm('Delete this category?')">
+                                        <form method="POST" action="<?= url('delete_category', ['id' => $cat['id']]) ?>" class="d-inline" onsubmit="return confirm('Delete this category?')">
                                             <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                                             <button class="btn btn-danger btn-sm"><i class="fas fa-trash"></i></button>
                                         </form>
@@ -58,7 +58,7 @@ $categories = $pdo->query("SELECT * FROM categories ORDER BY position")->fetchAl
                     <h5 class="card-title mb-0"><i class="fas fa-plus me-2"></i>Add New Category</h5>
                 </div>
                 <div class="card-body">
-                    <form method="POST" action="<?= base_url() ?>/?action=create_category" class="row g-3">
+                    <form method="POST" action="<?= url('create_category') ?>" class="row g-3">
                         <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                         <div class="col-md-6">
                             <label class="form-label">Name</label>

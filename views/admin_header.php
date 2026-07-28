@@ -1,7 +1,7 @@
 <?php
 // Admin header - completely separate from frontend theme
 function render_admin_header($title = 'Admin Panel') {
-    global $config;
+    global $config, $lang;
     $siteName = $config['site_name'] ?? 'bulletinbored';
 ?>
 <!DOCTYPE html>
@@ -21,7 +21,7 @@ function render_admin_header($title = 'Admin Panel') {
         <!-- Sidebar -->
         <nav class="sidebar">
             <!-- Sidebar Brand -->
-            <a class="sidebar-brand" href="<?= base_url() ?>/?action=admin">
+            <a class="sidebar-brand" href="<?= url('admin') ?>">
                 <i class="fas fa-cog me-2"></i>
                 <span>Admin Panel</span>
             </a>
@@ -30,7 +30,7 @@ function render_admin_header($title = 'Admin Panel') {
             <!-- Dashboard -->
             <ul class="sidebar-nav">
                 <li>
-                    <a href="<?= base_url() ?>/?action=admin">
+                    <a href="<?= url('admin') ?>">
                         <i class="fas fa-tachometer-alt"></i>
                         <span>Dashboard</span>
                     </a>
@@ -41,23 +41,23 @@ function render_admin_header($title = 'Admin Panel') {
             <!-- Moderation -->
             <div class="sidebar-heading">Moderation</div>
             <ul class="sidebar-nav">
-                <li><a href="<?= base_url() ?>/?action=admin_moderation"><i class="fas fa-clock"></i> <span>Pending Threads</span></a></li>
+                <li><a href="<?= url('admin_moderation') ?>"><i class="fas fa-clock"></i> <span>Pending Threads</span></a></li>
             </ul>
             <hr class="sidebar-divider">
 
             <!-- Management -->
             <div class="sidebar-heading">Management</div>
             <ul class="sidebar-nav">
-                <li><a href="<?= base_url() ?>/?action=admin_categories"><i class="fas fa-folder"></i> <span>Categories</span></a></li>
-                <li><a href="<?= base_url() ?>/?action=admin_users"><i class="fas fa-users"></i> <span>Users</span></a></li>
+                <li><a href="<?= url('admin_categories') ?>"><i class="fas fa-folder"></i> <span>Categories</span></a></li>
+                <li><a href="<?= url('admin_users') ?>"><i class="fas fa-users"></i> <span>Users</span></a></li>
             </ul>
             <hr class="sidebar-divider">
 
             <!-- System -->
             <div class="sidebar-heading">System</div>
             <ul class="sidebar-nav">
-                <li><a href="<?= base_url() ?>/?action=admin_settings"><i class="fas fa-cogs"></i> <span>Settings</span></a></li>
-                <li><a href="<?= base_url() ?>/?action=home"><i class="fas fa-arrow-left"></i> <span>Back to Forum</span></a></li>
+                <li><a href="<?= url('admin_settings') ?>"><i class="fas fa-cogs"></i> <span>Settings</span></a></li>
+                <li><a href="<?= url('home') ?>"><i class="fas fa-arrow-left"></i> <span>Back to Forum</span></a></li>
             </ul>
         </nav>
         <!-- End of Sidebar -->
@@ -86,9 +86,9 @@ function render_admin_header($title = 'Admin Panel') {
                                 <i class="fas fa-user-circle fa-fw"></i>
                             </a>
                             <div class="dropdown-menu dropdown-menu-end shadow animated--fade-in" aria-labelledby="userDropdown">
-                                <a class="dropdown-item" href="<?= base_url() ?>/?action=profile&user=<?= escape($_SESSION['username'] ?? '') ?>"><i class="fas fa-user fa-sm fa-fw me-2 text-gray-400"></i>Profile</a>
+                                <a class="dropdown-item" href="<?= url('profile', ['user' => $_SESSION['username'] ?? '']) ?>"><i class="fas fa-user fa-sm fa-fw me-2 text-gray-400"></i>Profile</a>
                                 <div class="dropdown-divider"></div>
-                                <a class="dropdown-item" href="<?= base_url() ?>/?action=logout"><i class="fas fa-sign-out-alt fa-sm fa-fw me-2 text-gray-400"></i>Logout</a>
+                                <a class="dropdown-item" href="<?= url('logout') ?>"><i class="fas fa-sign-out-alt fa-sm fa-fw me-2 text-gray-400"></i>Logout</a>
                             </div>
                         </li>
                     </ul>

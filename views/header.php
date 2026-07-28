@@ -1,7 +1,7 @@
 <?php
 // Shared frontend header - clean Bootstrap 5 theme
 function render_header($title = 'bulletinbored') {
-    global $config;
+    global $config, $lang;
     $siteName = $config['site_name'] ?? 'bulletinbored';
     $themeName = $config['theme'] ?? 'default';
 ?>
@@ -23,9 +23,9 @@ function render_header($title = 'bulletinbored') {
 </head>
 <body>
     <!-- Navbar -->
-    <nav class="navbar navbar-expand-lg navbar-dark navbar-forum fixed-top">
+<nav class="navbar navbar-expand-lg navbar-dark navbar-forum fixed-top">
         <div class="container">
-            <a class="navbar-brand" href="<?= base_url() ?>/?action=home">
+            <a class="navbar-brand" href="<?= url('home') ?>">
                 <i class="fas fa-comments me-2"></i><?= escape($siteName) ?>
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
@@ -34,17 +34,17 @@ function render_header($title = 'bulletinbored') {
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto">
                     <li class="nav-item">
-                        <a class="nav-link" href="<?= base_url() ?>/?action=home"><i class="fas fa-home me-1"></i>Home</a>
+                        <a class="nav-link" href="<?= url('home') ?>"><i class="fas fa-home me-1"></i><?= t('home') ?></a>
                     </li>
                     <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
                         <li class="nav-item">
-                            <a class="nav-link" href="<?= base_url() ?>/?action=new_thread"><i class="fas fa-plus me-1"></i>New Thread</a>
+                            <a class="nav-link" href="<?= url('new_thread') ?>"><i class="fas fa-plus me-1"></i><?= t('new_thread') ?></a>
                         </li>
                     <?php endif; ?>
                 </ul>
-                <form class="d-flex me-2" method="GET" action="<?= base_url() ?>/?action=search">
+                <form class="d-flex me-2" method="GET" action="<?= url('search') ?>">
                     <div class="input-group input-group-sm">
-                        <input type="text" name="q" class="form-control" placeholder="Search..." required>
+                        <input type="text" name="q" class="form-control" placeholder="<?= t('search') ?>..." required>
                         <button class="btn btn-outline-light" type="submit"><i class="fas fa-search"></i></button>
                     </div>
                 </form>
@@ -55,17 +55,17 @@ function render_header($title = 'bulletinbored') {
                                 <i class="fas fa-user me-1"></i><?= escape($_SESSION['username'] ?? '') ?>
                             </a>
                             <ul class="dropdown-menu dropdown-menu-end">
-                                <li><a class="dropdown-item" href="<?= base_url() ?>/?action=profile&user=<?= escape($_SESSION['username'] ?? '') ?>"><i class="fas fa-id-card me-2"></i>Profile</a></li>
+                                <li><a class="dropdown-item" href="<?= url('profile', ['user' => $_SESSION['username'] ?? '']) ?>"><i class="fas fa-id-card me-2"></i><?= t('profile') ?></a></li>
                                 <?php if (function_exists('is_admin') && is_admin()): ?>
-                                    <li><a class="dropdown-item" href="<?= base_url() ?>/?action=admin"><i class="fas fa-cog me-2"></i>Admin Panel</a></li>
+                                    <li><a class="dropdown-item" href="<?= url('admin') ?>"><i class="fas fa-cog me-2"></i><?= t('admin_panel') ?></a></li>
                                 <?php endif; ?>
                                 <li><hr class="dropdown-divider"></li>
-                                <li><a class="dropdown-item" href="<?= base_url() ?>/?action=logout"><i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
+                                <li><a class="dropdown-item" href="<?= url('logout') ?>"><i class="fas fa-sign-out-alt me-2"></i><?= t('logout') ?></a></li>
                             </ul>
                         </li>
                     <?php else: ?>
-                        <li class="nav-item"><a class="nav-link" href="<?= base_url() ?>/?action=login"><i class="fas fa-sign-in-alt me-1"></i>Login</a></li>
-                        <li class="nav-item"><a class="nav-link" href="<?= base_url() ?>/?action=register"><i class="fas fa-user-plus me-1"></i>Register</a></li>
+                        <li class="nav-item"><a class="nav-link" href="<?= url('login') ?>"><i class="fas fa-sign-in-alt me-1"></i><?= t('login') ?></a></li>
+                        <li class="nav-item"><a class="nav-link" href="<?= url('register') ?>"><i class="fas fa-user-plus me-1"></i><?= t('register') ?></a></li>
                     <?php endif; ?>
                 </ul>
             </div>

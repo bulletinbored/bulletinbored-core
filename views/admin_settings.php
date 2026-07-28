@@ -1,11 +1,17 @@
 <?php
 global $config;
+$langFiles = glob(__DIR__ . '/../lang/*.php');
+$availableLangs = [];
+foreach ($langFiles as $file) {
+    $code = basename($file, '.php');
+    $availableLangs[] = $code;
+}
 ?>
 <?php include __DIR__.'/admin_header.php'; render_admin_header('Settings'); ?>
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>Site Settings</h2>
-        <a href="<?= base_url() ?>/?action=admin" class="btn btn-secondary"><i class="fas fa-arrow-left me-1"></i>Back to Dashboard</a>
+        <a href="<?= url('admin') ?>" class="btn btn-secondary"><i class="fas fa-arrow-left me-1"></i>Back to Dashboard</a>
     </div>
 
     <form method="POST">
@@ -28,6 +34,27 @@ global $config;
                     <select name="theme" class="form-select">
                         <option value="default" <?= ($config['theme'] ?? 'default') === 'default' ? 'selected' : '' ?>>Default</option>
                     </select>
+                </div>
+            </div>
+            
+            <!-- Default Language -->
+            <div class="col-md-6">
+                <div class="mb-3">
+                    <label class="form-label">Default Language</label>
+                    <select name="default_lang" class="form-select">
+                        <?php foreach ($availableLangs as $l): ?>
+                            <option value="<?= $l ?>" <?= ($config['default_lang'] ?? 'en') === $l ? 'selected' : '' ?>><?= strtoupper($l) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+            </div>
+            
+            <!-- Available Languages -->
+            <div class="col-md-6">
+                <div class="mb-3">
+                    <label class="form-label">Available Languages (comma-separated codes)</label>
+                    <input type="text" name="available_langs" class="form-control" value="<?= escape(implode(',', $config['available_langs'] ?? ['en'])) ?>">
+                    <div class="form-text">Example: en,it,fr</div>
                 </div>
             </div>
             

@@ -6,7 +6,7 @@ $users = $pdo->query("SELECT * FROM users ORDER BY id ASC")->fetchAll();
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>Users Management</h2>
-        <a href="<?= base_url() ?>/?action=admin" class="btn btn-secondary"><i class="fas fa-arrow-left me-1"></i>Back to Dashboard</a>
+        <a href="<?= url('admin') ?>" class="btn btn-secondary"><i class="fas fa-arrow-left me-1"></i>Back to Dashboard</a>
     </div>
 
     <div class="card shadow mb-4">
@@ -37,7 +37,7 @@ $users = $pdo->query("SELECT * FROM users ORDER BY id ASC")->fetchAll();
                             <td><?= escape($u['created_at'] ?? 'N/A') ?></td>
                             <td class="text-end">
                                 <?php if ($u['role'] !== 'admin'): ?>
-                                <form method="POST" action="<?= base_url() ?>/?action=delete_user&id=<?= $u['id'] ?>" class="d-inline" onsubmit="return confirm('Delete this user?')">
+                                <form method="POST" action="<?= url('delete_user', ['id' => $u['id']]) ?>" class="d-inline" onsubmit="return confirm('Delete this user?')">
                                     <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                                     <button class="btn btn-danger btn-sm"><i class="fas fa-trash"></i></button>
                                 </form>

@@ -36,13 +36,13 @@ $pendingThreads = $pdo->query("
                         <td><?= escape($thread['author'] ?? 'Unknown') ?></td>
                         <td><?= escape($thread['created_at']) ?></td>
                         <td class="text-end">
-                            <form method="POST" action="<?= base_url() ?>/?action=moderate" class="d-inline">
+                            <form method="POST" action="<?= url('moderate') ?>" class="d-inline">
                                 <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                                 <input type="hidden" name="do" value="approve">
                                 <input type="hidden" name="id" value="<?= $thread['id'] ?>">
                                 <button class="btn btn-success btn-sm"><i class="fas fa-check me-1"></i>Approve</button>
                             </form>
-                            <form method="POST" action="<?= base_url() ?>/?action=moderate" class="d-inline ms-1" onsubmit="return confirm('Delete this thread?')">
+                            <form method="POST" action="<?= url('moderate') ?>" class="d-inline ms-1" onsubmit="return confirm('Delete this thread?')">
                                 <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                                 <input type="hidden" name="do" value="delete">
                                 <input type="hidden" name="id" value="<?= $thread['id'] ?>">
@@ -55,6 +55,6 @@ $pendingThreads = $pdo->query("
             </table>
         </div>
     <?php endif; ?>
-    <a href="<?= base_url() ?>/?action=admin" class="btn btn-secondary mb-3">Back to Dashboard</a>
+    <a href="<?= url('admin') ?>" class="btn btn-secondary mb-3">Back to Dashboard</a>
 </div>
 <?php include __DIR__.'/admin_footer.php'; ?>

@@ -1,7 +1,7 @@
 <?php include __DIR__.'/header.php'; render_header(escape($category['name'] ?? 'Category')); ?>
     <nav aria-label="breadcrumb">
         <ol class="breadcrumb">
-            <li class="breadcrumb-item"><a href="<?= base_url() ?>/?action=home">Home</a></li>
+            <li class="breadcrumb-item"><a href="<?= url('home') ?>"><?= t('home') ?></a></li>
             <li class="breadcrumb-item active"><?= escape($category['name'] ?? '') ?></li>
         </ol>
     </nav>
@@ -12,18 +12,18 @@
             <small class="text-muted"><?= escape($category['description'] ?? '') ?></small>
         </div>
         <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
-            <a href="<?= base_url() ?>/?action=new_thread" class="btn btn-forum btn-sm"><i class="fas fa-plus me-1"></i>New Thread</a>
+            <a href="<?= url('new_thread') ?>" class="btn btn-forum btn-sm"><i class="fas fa-plus me-1"></i><?= t('new_thread') ?></a>
         <?php endif; ?>
     </div>
 
     <?php if (empty($threads ?? [])): ?>
-        <div class="card"><div class="card-body text-center py-5 text-muted">No threads in this category yet.</div></div>
+        <div class="card"><div class="card-body text-center py-5 text-muted"><?= t('no_threads') ?></div></div>
     <?php else: ?>
         <?php foreach ($threads as $thread): ?>
             <div class="card">
                 <div class="card-body">
                     <h5 class="card-title mb-1">
-                        <a href="<?= base_url() ?>/?action=thread&id=<?= $thread['id'] ?>" class="thread-title"><?= escape($thread['title']) ?></a>
+                        <a href="<?= url('thread', ['id' => $thread['id'], 'slug' => slugify($thread['title'] ?? '')]) ?>" class="thread-title"><?= escape($thread['title']) ?></a>
                     </h5>
                     <p class="card-text text-muted small mb-2"><?= nl2br(escape(substr($thread['content'] ?? '', 0, 200))) ?><?php if (strlen($thread['content'] ?? '') > 200): ?>...<?php endif; ?></p>
                     <small class="text-muted"><i class="fas fa-user me-1"></i><?= escape($thread['author']) ?> &middot; <i class="fas fa-clock me-1"></i><?= escape($thread['created_at'] ?? '') ?></small>
@@ -36,7 +36,7 @@
         <nav><ul class="pagination justify-content-center">
             <?php for ($i = 1; $i <= $totalPages; $i++): ?>
                 <li class="page-item <?= ($i === ($page ?? 1)) ? 'active' : '' ?>">
-                    <a class="page-link" href="<?= base_url() ?>/?action=category&id=<?= $category['id'] ?>&page=<?= $i ?>"><?= $i ?></a>
+                    <a class="page-link" href="<?= url('category', ['id' => $category['id'], 'slug' => slugify($category['name'] ?? ''), 'page' => $i]) ?>"><?= $i ?></a>
                 </li>
             <?php endfor; ?>
         </ul></nav>

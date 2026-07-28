@@ -1,4 +1,12 @@
-RewriteEngine On
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule ^(.*)$ index.php?%{QUERY_STRING} [L,QSA]
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /forum-nuovo/
+
+    RewriteRule ^thread/([0-9]+)(?:-([^/]+))?$ index.php?action=thread&id=$1 [L,QSA]
+    RewriteRule ^category/([0-9]+)(?:-([^/]+))?$ index.php?action=category&id=$1 [L,QSA]
+    RewriteRule ^u/([^/]+)$ index.php?action=profile&user=$1 [L,QSA]
+
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^ index.php [L]
+</IfModule>
