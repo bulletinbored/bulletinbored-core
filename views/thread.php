@@ -7,43 +7,54 @@
         </ol>
     </nav>
 
-    <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <span><i class="fas fa-comment me-2"></i><?= escape($thread['title'] ?? '') ?></span>
-            <small class="text-muted">
-                <?php
-                $isWatching = false;
-                if (function_exists('is_logged_in') && is_logged_in()) {
-                    $watchStmt = $pdo->prepare("SELECT COUNT(*) FROM thread_watchers WHERE thread_id = ? AND user_id = ?");
-                    $watchStmt->execute([$thread['id'] ?? 0, $_SESSION['user_id']]);
-                    $isWatching = $watchStmt->fetchColumn() > 0;
-                }
-                ?>
-                <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
-                    <a href="<?= $isWatching ? url('unwatch', ['thread_id' => $thread['id']]) : url('watch', ['thread_id' => $thread['id']]) ?>" class="text-decoration-none me-2">
-                        <i class="fas fa-bell me-1"></i><?= $isWatching ? t('unwatch') : t('watch') ?>
-                    </a>
+    <?php
+    $isWatching = false;
+    if (function_exists('is_logged_in') && is_logged_in()) {
+        $watchStmt = $pdo->prepare("SELECT COUNT(*) FROM thread_watchers WHERE thread_id = ? AND user_id = ?");
+        $watchStmt->execute([$thread['id'] ?? 0, $_SESSION['user_id']]);
+        $isWatching = $watchStmt->fetchColumn() > 0;
+    }
+    $threadDate = $thread['created_at'] ?? '';
+    $threadFormattedDate = $threadDate ? date('M j, Y', strtotime($threadDate)) : '';
+    ?>
+    <div class="card thread-opening">
+        <div class="d-flex p-3 align-items-start">
+            <div class="thread-avatar me-3 flex-shrink-0">
+                <?php if (!empty($thread['author_avatar'] ?? '')): ?>
+                    <img src="<?= base_url() ?>/uploads/avatars/<?= escape($thread['author_avatar']) ?>" alt="Avatar" class="avatar-img">
+                <?php else: ?>
+                    <div class="avatar-circle"><?= strtoupper(escape($thread['author'][0] ?? 'U')) ?></div>
                 <?php endif; ?>
-                <i class="fas fa-user me-1"></i><?= escape($thread['author']) ?> &middot;
-                <i class="fas fa-clock me-1"></i><?= escape($thread['created_at'] ?? '') ?>
-            </small>
-        </div>
-        <div class="card-body">
-            <p><?= nl2br(escape($thread['content'] ?? '')) ?></p>
-            <?php
-            $uploadsStmt = $pdo->prepare("SELECT * FROM uploads WHERE thread_id = ? AND post_id IS NULL ORDER BY created_at ASC");
-            $uploadsStmt->execute([$_GET['id'] ?? 0]);
-            $uploads = $uploadsStmt->fetchAll();
-            if (!empty($uploads)): ?>
-                <hr>
-                <h6><i class="fas fa-paperclip me-1"></i><?= t('attachments') ?></h6>
-                <?php foreach ($uploads as $upload): ?>
-                    <a href="<?= base_url() ?>/uploads/<?= $upload['filename'] ?>" class="btn btn-outline-secondary btn-sm me-1 mb-1" download>
-                        <i class="fas fa-file me-1"></i><?= escape($upload['original_name']) ?>
-                        <span class="badge bg-secondary ms-1"><?= round($upload['size'] / 1024, 1) ?> KB</span>
-                    </a>
-                <?php endforeach; ?>
-            <?php endif; ?>
+            </div>
+            <div class="flex-grow-1 min-w-0">
+                <div class="d-flex justify-content-start mb-2">
+                    <small class="text-muted thread-meta">
+                        <i class="fas fa-user me-1"></i><strong><?= escape($thread['author']) ?></strong> &middot;
+                        <i class="fas fa-clock me-1"></i><?= $threadFormattedDate ?> &middot;
+                        <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
+                            <a href="<?= $isWatching ? url('unwatch', ['thread_id' => $thread['id']]) : url('watch', ['thread_id' => $thread['id']]) ?>" class="text-decoration-none"><i class="fas fa-bell"></i></a>
+                        <?php endif; ?>
+                    </small>
+                </div>
+                <h1 class="h4 thread-title mb-3"><?= escape($thread['title'] ?? '') ?></h1>
+                <div class="thread-content">
+                    <p><?= nl2br(escape($thread['content'] ?? '')) ?></p>
+                    <?php
+                    $uploadsStmt = $pdo->prepare("SELECT * FROM uploads WHERE thread_id = ? AND post_id IS NULL ORDER BY created_at ASC");
+                    $uploadsStmt->execute([$_GET['id'] ?? 0]);
+                    $uploads = $uploadsStmt->fetchAll();
+                    if (!empty($uploads)): ?>
+                        <hr>
+                        <h6><i class="fas fa-paperclip me-1"></i><?= t('attachments') ?></h6>
+                        <?php foreach ($uploads as $upload): ?>
+                            <a href="<?= base_url() ?>/uploads/<?= $upload['filename'] ?>" class="btn btn-outline-secondary btn-sm me-1 mb-1" download>
+                                <i class="fas fa-file me-1"></i><?= escape($upload['original_name']) ?>
+                                <span class="badge bg-secondary ms-1"><?= round($upload['size'] / 1024, 1) ?> KB</span>
+                            </a>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </div>
+            </div>
         </div>
         <div class="card-footer text-muted small">
             <i class="fas fa-folder me-1"></i>Category: <?= escape($thread['category_name'] ?? 'General') ?>
@@ -55,21 +66,35 @@
     <?php if (empty($posts ?? [])): ?>
         <div class="card"><div class="card-body text-center py-4 text-muted"><?= t('no_replies') ?></div></div>
     <?php else: ?>
-        <?php foreach ($posts as $post): ?>
-            <div class="card">
-                <div class="card-header py-2 d-flex justify-content-between align-items-center">
-                    <strong><i class="fas fa-user-circle me-1"></i><?= escape($post['author']) ?></strong>
-                    <small class="text-muted">
-                        <i class="fas fa-clock me-1"></i><?= escape($post['created_at'] ?? '') ?>
-                        <?php if (function_exists('is_logged_in') && is_logged_in() && ($_SESSION['user_id'] == $post['user_id'] || is_admin())): ?>
-                            &middot; <a href="<?= url('edit_post', ['id' => $post['id']]) ?>" class="text-decoration-none"><i class="fas fa-edit"></i></a>
-                            <form method="POST" action="<?= url('delete_post', ['id' => $post['id']]) ?>" style="display:inline" onsubmit="return confirm('<?= t('delete_confirm') ?>')">
-                                <button type="submit" class="btn btn-link text-danger p-0 ms-1" style="font-size:inherit"><i class="fas fa-trash"></i></button>
-                            </form>
+        <?php foreach ($posts as $post): 
+            $postDate = $post['created_at'] ?? '';
+            $postFormattedDate = $postDate ? date('M j, Y', strtotime($postDate)) : '';
+        ?>
+            <div class="card post-reply">
+                <div class="d-flex p-3 align-items-start">
+                    <div class="thread-avatar me-3 flex-shrink-0">
+                        <?php if (!empty($post['author_avatar'] ?? '')): ?>
+                            <img src="<?= base_url() ?>/uploads/avatars/<?= escape($post['author_avatar']) ?>" alt="Avatar" class="avatar-img small">
+                        <?php else: ?>
+                            <div class="avatar-circle small"><?= strtoupper(escape($post['author'][0] ?? 'U')) ?></div>
                         <?php endif; ?>
-                    </small>
+                    </div>
+                    <div class="flex-grow-1 min-w-0">
+                        <div class="d-flex justify-content-start mb-1">
+                            <small class="text-muted thread-meta">
+                                <i class="fas fa-user me-1"></i><strong><?= escape($post['author']) ?></strong> &middot;
+                                <i class="fas fa-clock me-1"></i><?= $postFormattedDate ?>
+                                <?php if (function_exists('is_logged_in') && is_logged_in() && ($_SESSION['user_id'] == $post['user_id'] || is_admin())): ?>
+                                    &middot; <a href="<?= url('edit_post', ['id' => $post['id']]) ?>" class="text-decoration-none"><i class="fas fa-edit"></i></a>
+                                    <form method="POST" action="<?= url('delete_post', ['id' => $post['id']]) ?>" style="display:inline" onsubmit="return confirm('<?= t('delete_confirm') ?>')">
+                                        <button type="submit" class="btn btn-link text-danger p-0 ms-1" style="font-size:inherit"><i class="fas fa-trash"></i></button>
+                                    </form>
+                                <?php endif; ?>
+                            </small>
+                        </div>
+                        <div class="post-content"><p class="mb-0"><?= nl2br(escape($post['content'])) ?></p></div>
+                    </div>
                 </div>
-                <div class="card-body"><p class="mb-0"><?= nl2br(escape($post['content'])) ?></p></div>
             </div>
         <?php endforeach; ?>
     <?php endif; ?>

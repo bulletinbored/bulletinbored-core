@@ -1,35 +1,29 @@
 <?php
-// Configuration file - edit these values for your installation
-$config = [
-    // Database
-    'db_driver' => 'sqlite',          // 'sqlite' or 'mysql'
-    'db_path' => __DIR__.'/data/database.sqlite',
-    'db_host' => 'localhost',
-    'db_name' => 'forum',
-    'db_user' => 'root',
-    'db_pass' => '',
-    
-    // Site
-    'site_name' => 'bulletinbored',
-    'admin_user' => 'admin',
-    'admin_pass' => 'changeme123',
-    
-    // Email (for password reset, notifications)
-    'mail_from' => 'noreply@bulletinbored.local',
-    'mail_from_name' => 'bulletinbored',
-    'mail_method' => 'mail',          // 'mail' for PHP mail(), 'smtp' for SMTP
-    
-    // Theme
-    'theme' => 'default',              // Theme name (folder in themes/)
-    
-    // Localization
-    'default_lang' => 'en',            // Default language (folder in lang/)
-    'available_langs' => ['en', 'it'], // Available languages
-    
-    // Uploads
-    'avatar_max_size' => 2 * 1024 * 1024, // 2MB
-    'avatar_allowed_types' => ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
-    
-    // URL
-    'base_url' => '/forum-nuovo',
-];
+$config['db_driver'] = 'sqlite';
+$config['db_path'] = 'C:\\xampp\\htdocs\\forum-nuovo/data/database.sqlite';
+$config['db_host'] = 'localhost';
+$config['db_name'] = 'forum';
+$config['db_user'] = 'root';
+$config['db_pass'] = '';
+$config['site_name'] = 'bulletinbored';
+$config['admin_user'] = 'admin';
+$config['admin_pass'] = 'changeme123';
+$config['mail_from'] = 'noreply@bulletinbored.local';
+$config['mail_from_name'] = 'bulletinbored';
+$config['mail_method'] = 'mail';
+$config['theme'] = 'default';
+$config['default_lang'] = 'en';
+$config['available_langs'] = array (
+  0 => 'en',
+  1 => 'it',
+);
+$config['avatar_max_size'] = 2097152;
+$config['avatar_allowed_types'] = array (
+  0 => 'image/jpeg',
+  1 => 'image/png',
+  2 => 'image/gif',
+  3 => 'image/webp',
+);
+$config['base_url'] = '/forum-nuovo';
+$config['allow_registration'] = 0;
+$config['maintenance_mode'] = 0;

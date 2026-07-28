@@ -347,7 +347,7 @@ try {
         // View single thread
         $threadId = (int)$_GET['id'];
         $stmt = $pdo->prepare("
-            SELECT t.*, u.username as author, c.name as category_name 
+            SELECT t.*, u.username as author, u.avatar as author_avatar, c.name as category_name 
             FROM threads t 
             LEFT JOIN users u ON t.user_id = u.id 
             LEFT JOIN categories c ON t.category_id = c.id 
@@ -375,7 +375,7 @@ try {
         $totalPages = max(1, (int)ceil($totalPosts / $perPage));
         
         $postsStmt = $pdo->prepare("
-            SELECT p.*, u.username as author 
+            SELECT p.*, u.username as author, u.avatar as author_avatar 
             FROM posts p 
             LEFT JOIN users u ON p.user_id = u.id 
             WHERE p.thread_id = ? AND p.status = 'visible' 
