@@ -1,4 +1,4 @@
-# Forum Nuovo
+# bulletinbored
 
 Minimal, extensible forum software with zero dependencies. Upload files and run — no Composer, no Docker, no deployment needed.
 
@@ -18,7 +18,7 @@ Minimal, extensible forum software with zero dependencies. Upload files and run 
 
 ### Directory Structure
 ```
-/forum-nuovo/
+/bulletinbored/
 ├── config.php             # Configuration (database, email, site, theme)
 ├── index.php              # Main application (all-in-one)
 ├── views/                 # Template files
@@ -98,13 +98,13 @@ $config = [
     'db_pass' => '',
     
     // Site
-    'site_name' => 'Forum Nuovo',
+    'site_name' => 'bulletinbored',
     'admin_user' => 'admin',
     'admin_pass' => 'changeme123',
     
     // Email (for password reset, notifications)
     'mail_from' => 'noreply@yourdomain.com',
-    'mail_from_name' => 'Forum Nuovo',
+    'mail_from_name' => 'bulletinbored',
     'mail_method' => 'mail',          // 'mail' for PHP mail(), 'smtp' for SMTP
     
     // Theme
@@ -126,12 +126,17 @@ body { background-color: #fff; }
 ```
 
 ## Missing Features (TODO)
-- Rich text editor (WYSIWYG) — deferred per user request
+NB In admin.css ci sono delle duplicazioni (ad es. .sidebar). Eliminare le voci duplicate.
+- Rich text editor (WYSIWYG) — through plugin. Which one should I choose?
 - Full plugin hook integration (all events not yet wired)
 - SMTP email support (currently uses PHP `mail()` function)
 - Email notification on new reply to watched threads
 - User avatar upload
-- Private messaging system
+- Private messaging system (through plugin?)
+- Create a simple and modern installer
+- rewrite url for SEO optimized URLs
+- localizzazione
+- Update manager (core and plugin/themes)
 
 ## Design Goals
 - Zero external dependencies (pure PHP 8.x)

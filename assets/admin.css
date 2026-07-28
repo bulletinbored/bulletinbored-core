@@ -1,5 +1,5 @@
 /* ========================================
-   Forum Nuovo - Admin Dashboard
+   bulletinbored - Admin Dashboard
    ======================================== */
 
 /* Admin Base */
@@ -571,9 +571,7 @@ body.sidebar-toggled #content-wrapper {
 /* Sidebar */
 .sidebar {
     position: fixed;
-    top: 56px;
     left: 0;
-    height: calc(100vh - 56px);
     width: 225px;
     background: linear-gradient(180deg, #4e73df 10%, #224abe 100%);
     padding-top: 1rem;

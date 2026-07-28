@@ -10,13 +10,13 @@ $config = [
     'db_pass' => '',
     
     // Site
-    'site_name' => 'Forum Nuovo',
+    'site_name' => 'bulletinbored',
     'admin_user' => 'admin',
     'admin_pass' => 'changeme123',
     
     // Email (for password reset, notifications)
-    'mail_from' => 'noreply@forum-nuovo.local',
-    'mail_from_name' => 'Forum Nuovo',
+    'mail_from' => 'noreply@bulletinbored.local',
+    'mail_from_name' => 'bulletinbored',
     'mail_method' => 'mail',          // 'mail' for PHP mail(), 'smtp' for SMTP
     
     // Theme

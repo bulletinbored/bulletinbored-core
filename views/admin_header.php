@@ -2,7 +2,7 @@
 // Admin header - completely separate from frontend theme
 function render_admin_header($title = 'Admin Panel') {
     global $config;
-    $siteName = $config['site_name'] ?? 'Forum Nuovo';
+    $siteName = $config['site_name'] ?? 'bulletinbored';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -30,7 +30,7 @@ function render_admin_header($title = 'Admin Panel') {
             <!-- Dashboard -->
             <ul class="sidebar-nav">
                 <li>
-                    <a href="<?= base_url() ?>/?action=admin" class="active">
+                    <a href="<?= base_url() ?>/?action=admin">
                         <i class="fas fa-tachometer-alt"></i>
                         <span>Dashboard</span>
                     </a>
@@ -41,27 +41,22 @@ function render_admin_header($title = 'Admin Panel') {
             <!-- Moderation -->
             <div class="sidebar-heading">Moderation</div>
             <ul class="sidebar-nav">
-                <li><a href="#"><i class="fas fa-clock"></i> <span>Pending Threads</span></a></li>
-                <li><a href="#"><i class="fas fa-exclamation-triangle"></i> <span>Reports</span></a></li>
-                <li><a href="#"><i class="fas fa-trash-alt"></i> <span>Deleted Content</span></a></li>
+                <li><a href="<?= base_url() ?>/?action=admin_moderation"><i class="fas fa-clock"></i> <span>Pending Threads</span></a></li>
             </ul>
             <hr class="sidebar-divider">
 
             <!-- Management -->
             <div class="sidebar-heading">Management</div>
             <ul class="sidebar-nav">
-                <li><a href="#"><i class="fas fa-users"></i> <span>Users</span></a></li>
-                <li><a href="#"><i class="fas fa-folder"></i> <span>Categories</span></a></li>
-                <li><a href="#"><i class="fas fa-comments"></i> <span>Threads</span></a></li>
-                <li><a href="#"><i class="fas fa-reply"></i> <span>Posts</span></a></li>
+                <li><a href="<?= base_url() ?>/?action=admin_categories"><i class="fas fa-folder"></i> <span>Categories</span></a></li>
+                <li><a href="<?= base_url() ?>/?action=admin_users"><i class="fas fa-users"></i> <span>Users</span></a></li>
             </ul>
             <hr class="sidebar-divider">
 
             <!-- System -->
             <div class="sidebar-heading">System</div>
             <ul class="sidebar-nav">
-                <li><a href="#"><i class="fas fa-cogs"></i> <span>Settings</span></a></li>
-                <li><a href="#"><i class="fas fa-file-alt"></i> <span>Logs</span></a></li>
+                <li><a href="<?= base_url() ?>/?action=admin_settings"><i class="fas fa-cogs"></i> <span>Settings</span></a></li>
                 <li><a href="<?= base_url() ?>/?action=home"><i class="fas fa-arrow-left"></i> <span>Back to Forum</span></a></li>
             </ul>
         </nav>
@@ -91,13 +86,9 @@ function render_admin_header($title = 'Admin Panel') {
                                 <i class="fas fa-user-circle fa-fw"></i>
                             </a>
                             <div class="dropdown-menu dropdown-menu-end shadow animated--fade-in" aria-labelledby="userDropdown">
-                                <a class="dropdown-item" href="<?= base_url() ?>/?action=profile&user=<?= escape($_SESSION['username'] ?? '') ?>">
-                                    <i class="fas fa-user fa-sm fa-fw me-2 text-gray-400"></i>Profile
-                                </a>
+                                <a class="dropdown-item" href="<?= base_url() ?>/?action=profile&user=<?= escape($_SESSION['username'] ?? '') ?>"><i class="fas fa-user fa-sm fa-fw me-2 text-gray-400"></i>Profile</a>
                                 <div class="dropdown-divider"></div>
-                                <a class="dropdown-item" href="<?= base_url() ?>/?action=logout">
-                                    <i class="fas fa-sign-out-alt fa-sm fa-fw me-2 text-gray-400"></i>Logout
-                                </a>
+                                <a class="dropdown-item" href="<?= base_url() ?>/?action=logout"><i class="fas fa-sign-out-alt fa-sm fa-fw me-2 text-gray-400"></i>Logout</a>
                             </div>
                         </li>
                     </ul>
@@ -106,6 +97,7 @@ function render_admin_header($title = 'Admin Panel') {
 
                 <!-- Begin Page Content -->
                 <div class="container-fluid">
-<?php
-}
-?>
+
+                    <?php
+                    }
+                    ?>

@@ -11,7 +11,7 @@ function render_admin_footer() {
             <!-- Footer -->
             <footer class="sticky-footer bg-white">
                 <div class="copyright text-center my-auto">
-                    <span>Copyright &copy; Forum Nuovo <?= date('Y') ?></span>
+                    <span>Copyright &copy; bulletinbored <?= date('Y') ?></span>
                 </div>
             </footer>
             <!-- End of Footer -->

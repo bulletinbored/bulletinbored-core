@@ -196,7 +196,7 @@ function send_email($to, $subject, $body) {
     $headers = "MIME-Version: 1.0\r\n";
     $headers .= "Content-Type: text/html; charset=UTF-8\r\n";
     $headers .= "From: {$config['mail_from_name']} <{$config['mail_from']}>\r\n";
-    $headers .= "X-Mailer: Forum-Nuovo/1.0\r\n";
+    $headers .= "X-Mailer: bulletinbored/1.0\r\n";
     
     $htmlBody = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
         body { font-family: Arial, sans-serif; background: #f8f9fc; padding: 20px; }
@@ -207,9 +207,9 @@ function send_email($to, $subject, $body) {
         .btn { display: inline-block; padding: 10px 20px; background: #4e73df; color: white; text-decoration: none; border-radius: 5px; }
     </style></head><body>
     <div class="container">
-        <div class="header"><h2>'.escape($config['site_name'] ?? 'Forum Nuovo').'</h2></div>
+        <div class="header"><h2>'.escape($config['site_name'] ?? 'bulletinbored').'</h2></div>
         <div class="content">'.$body.'</div>
-        <div class="footer">&copy; '.date('Y').' '.escape($config['site_name'] ?? 'Forum Nuovo').'</div>
+        <div class="footer">&copy; '.date('Y').' '.escape($config['site_name'] ?? 'bulletinbored').'</div>
     </div></body></html>';
     
     if ($config['mail_method'] === 'smtp') {
@@ -529,9 +529,9 @@ try {
         
         // Send welcome email
         if (!empty($email)) {
-            $subject = 'Welcome to '.($config['site_name'] ?? 'Forum Nuovo');
+            $subject = 'Welcome to '.($config['site_name'] ?? 'bulletinbored');
             $body = '<p>Hello '.escape($username).',</p>
-                    <p>Welcome to '.escape($config['site_name'] ?? 'Forum Nuovo').'!</p>
+                    <p>Welcome to '.escape($config['site_name'] ?? 'bulletinbored').'!</p>
                     <p>Your account has been successfully created. You can now login and start participating in discussions.</p>';
             send_email($email, $subject, $body);
         }
@@ -817,6 +817,59 @@ try {
             $pdo->prepare("DELETE FROM categories WHERE id = ?")->execute([$catId]);
         }
         redirect(base_url().'/?action=admin');
+    }
+    elseif ($action === 'admin_settings' && $method === 'POST' && is_admin()) {
+        // Save admin settings
+        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+            die('CSRF token invalid');
+        }
+        $siteName = trim($_POST['site_name'] ?? $config['site_name']);
+        $allowRegistration = isset($_POST['allow_registration']) ? 1 : 0;
+        $maintenanceMode = isset($_POST['maintenance_mode']) ? 1 : 0;
+        
+        $config['site_name'] = $siteName;
+        $config['allow_registration'] = $allowRegistration;
+        $config['maintenance_mode'] = $maintenanceMode;
+        
+        $configContent = "<?php\n";
+        foreach ($config as $key => $value) {
+            if (is_string($value)) {
+                $configContent .= "\$config['$key'] = '" . addslashes($value) . "';\n";
+            } else {
+                $configContent .= "\$config['$key'] = " . var_export($value, true) . ";\n";
+            }
+        }
+        
+        file_put_contents(__DIR__.'/config.php', $configContent);
+        redirect(base_url().'/?action=admin_settings');
+    }
+    elseif ($action === 'admin_moderation') {
+        // Show moderation page
+        if (!is_admin()) {
+            die('Admin required');
+        }
+        include __DIR__.'/views/admin_moderation.php';
+    }
+    elseif ($action === 'admin_categories') {
+        // Show categories management page
+        if (!is_admin()) {
+            die('Admin required');
+        }
+        include __DIR__.'/views/admin_categories.php';
+    }
+    elseif ($action === 'admin_users') {
+        // Show users management page
+        if (!is_admin()) {
+            die('Admin required');
+        }
+        include __DIR__.'/views/admin_users.php';
+    }
+    elseif ($action === 'admin_settings') {
+        // Show settings page
+        if (!is_admin()) {
+            die('Admin required');
+        }
+        include __DIR__.'/views/admin_settings.php';
     }
     elseif ($action === 'forgot_password') {
         // Show forgot password form
