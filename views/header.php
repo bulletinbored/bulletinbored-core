@@ -3,7 +3,7 @@
 function render_header($title = 'bulletinbored') {
     global $config, $lang;
     $siteName = $config['site_name'] ?? 'bulletinbored';
-    $themeName = $config['theme'] ?? 'default';
+    $themeName = $config['theme'] ?? 'freshbored';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -13,13 +13,12 @@ function render_header($title = 'bulletinbored') {
     <title><?= escape($title) ?> - <?= escape($siteName) ?></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
-    <?php
-    $themeCssUrl = base_url() . '/themes/' . $themeName . '/style.css';
-    if (!file_exists(__DIR__ . '/../themes/' . $themeName . '/style.css')) {
-        $themeCssUrl = base_url() . '/themes/default/style.css';
+    <?php global $themeCssUrl, $themeManager;
+    if (empty($themeCssUrl) && isset($themeManager) && method_exists($themeManager, 'getCssUrl')) {
+        $themeCssUrl = $themeManager->getCssUrl();
     }
     ?>
-    <link href="<?= htmlspecialchars($themeCssUrl, ENT_QUOTES, 'UTF-8') ?>" rel="stylesheet">
+    <link href="<?= htmlspecialchars($themeCssUrl ?? base_url().'/themes/freshbored/style.css', ENT_QUOTES, 'UTF-8') ?>" rel="stylesheet">
 </head>
 <body>
     <!-- Navbar -->

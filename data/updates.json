@@ -1,0 +1,23 @@
+{
+    "core": {
+        "core": {
+            "remote_version": null,
+            "last_check": "2026-07-29T17:24:57+02:00",
+            "available_update": null
+        }
+    },
+    "plugins": {
+        "analytics": {
+            "remote_version": null,
+            "last_check": "2026-07-29T17:24:57+02:00",
+            "available_update": null
+        }
+    },
+    "themes": {
+        "default": {
+            "remote_version": null,
+            "last_check": "2026-07-29T17:24:57+02:00",
+            "available_update": null
+        }
+    }
+}

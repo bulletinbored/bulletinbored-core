@@ -371,3 +371,11 @@
 {"time":"2026-07-29T17:07:42+02:00","url":"\/?action=admin_settings","user":"admin","ip":"::1"}
 {"time":"2026-07-29T17:07:47+02:00","url":"\/?action=admin_settings","user":"admin","ip":"::1"}
 {"time":"2026-07-29T17:09:51+02:00","url":"\/?action=admin_settings","user":"admin","ip":"::1"}
+{"time":"2026-07-29T17:23:44+02:00","url":"\/?action=admin_settings","user":"admin","ip":"::1"}
+{"time":"2026-07-29T17:23:46+02:00","url":"\/?action=admin_plugins","user":"admin","ip":"::1"}
+{"time":"2026-07-29T17:23:55+02:00","url":"\/?action=admin_themes","user":"admin","ip":"::1"}
+{"time":"2026-07-29T17:24:53+02:00","url":"\/?action=admin_updates","user":"admin","ip":"::1"}
+{"time":"2026-07-29T17:24:57+02:00","url":"\/?action=admin_updates","user":"admin","ip":"::1"}
+{"time":"2026-07-29T17:25:02+02:00","url":"\/?action=admin_plugins","user":"admin","ip":"::1"}
+{"time":"2026-07-29T17:35:49+02:00","url":"\/?action=admin_plugins","user":"admin","ip":"::1"}
+{"time":"2026-07-29T17:35:54+02:00","url":"\/?action=admin_themes","user":"admin","ip":"::1"}

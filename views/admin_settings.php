@@ -32,7 +32,7 @@ foreach ($langFiles as $file) {
                 <div class="mb-3">
                     <label class="form-label">Theme</label>
                     <select name="theme" class="form-select">
-                        <option value="default" <?= ($config['theme'] ?? 'default') === 'default' ? 'selected' : '' ?>>Default</option>
+                        <option value="freshbored" <?= ($config['theme'] ?? 'freshbored') === 'freshbored' ? 'selected' : '' ?>>Freshbored</option>
                     </select>
                 </div>
             </div>

@@ -305,23 +305,30 @@ function send_email($to, $subject, $body) {
     return mail($to, '=?UTF-8?B?'.base64_encode($subject).'?=', $htmlBody, $headers);
 }
 
-// Load plugins
-foreach (glob(__DIR__.'/plugins/*.php') as $file) {
-    include $file;
-    $pluginName = basename($file, '.php');
-    $initFunction = $pluginName.'_init';
-    if (function_exists($initFunction)) {
-        $initFunction(); // Call init function
-    }
-}
+// Load managers
+require __DIR__.'/lib/PluginManager.php';
+require __DIR__.'/lib/ThemeManager.php';
+require __DIR__.'/lib/UpdateManager.php';
 
-// Load theme CSS
-$themeName = $config['theme'] ?? 'default';
-$themeCssPath = __DIR__."/themes/{$themeName}/style.css";
-$themeCssUrl = base_url()."/themes/{$themeName}/style.css";
-if (!file_exists($themeCssPath)) {
-    $themeCssUrl = base_url().'/themes/default/style.css';
-}
+$pluginManager = new PluginManager(__DIR__.'/plugins', $config['plugin_manifest'] ?? __DIR__.'/data/plugins.json');
+$pluginManager->loadEnabled();
+
+$themeManager = new ThemeManager(
+    __DIR__.'/themes',
+    $config['theme_manifest'] ?? __DIR__.'/data/themes.json',
+    $config['theme'] ?? 'default'
+);
+
+$updateManager = new UpdateManager(
+    $config['update_manifest'] ?? __DIR__.'/data/updates.json',
+    !empty($config['update_server']) ? $config['update_server'] : null
+);
+
+$activeTheme = $themeManager->getActive();
+$themeApiVersion = $activeTheme ? $themeManager->getVersion($activeTheme) : '1.0.0';
+$themeCssUrl = $themeManager->getCssUrl();
+$themeCssPath = $themeManager->getCssPath();
+$themeName = $activeTheme;
 
 // Routing
 $action = $_GET['action'] ?? 'home';
@@ -445,6 +452,8 @@ try {
             }
         }
         
+        $pluginManager->runHook('after_thread', $threadId);
+        
         redirect(url('thread', ['id' => $threadId, 'slug' => slugify($_POST['title'] ?? '')]));
     }
     elseif ($action === 'reply' && $method === 'POST') {
@@ -468,6 +477,8 @@ try {
             VALUES (?, ?, ?)
         ");
         $stmt->execute([$threadId, $_SESSION['user_id'], $content]);
+        
+        $pluginManager->runHook('after_post', $threadId, $pdo->lastInsertId());
         
         // Notify watchers
         $watchersStmt = $pdo->prepare("
@@ -726,6 +737,8 @@ try {
         
         $pdo->prepare("INSERT INTO users (username, password, email, role) VALUES (?, ?, ?, 'user')")
             ->execute([$username, password_hash($password, PASSWORD_DEFAULT), $email]);
+        
+        $pluginManager->runHook('user_registered', $pdo->lastInsertId(), $username);
         
         // Send welcome email
         if (!empty($email)) {
@@ -1093,6 +1106,190 @@ try {
             die('Admin required');
         }
         include __DIR__.'/views/admin_settings.php';
+    }
+    elseif ($action === 'admin_langs') {
+        // Language file management
+        if (!is_admin()) {
+            die('Admin required');
+        }
+
+        $langError = '';
+        $langSuccess = '';
+        if ($method === 'POST' && isset($_POST['csrf_token'])) {
+            if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+                $langError = 'Invalid CSRF token';
+            } else {
+                if (isset($_POST['upload_lang']) && !empty($_FILES['lang_file']['tmp_name'])) {
+                    $langCode = preg_replace('/[^a-z_]/', '', strtolower($_POST['lang_code'] ?? ''));
+                    if ($langCode === '') {
+                        $langError = 'Invalid language code';
+                    } else {
+                        $dest = __DIR__.'/lang/'.$langCode.'.php';
+                        if (file_exists($dest)) {
+                            $langError = 'Language file already exists: '.escape($langCode);
+                        } elseif (move_uploaded_file($_FILES['lang_file']['tmp_name'], $dest)) {
+                            $langSuccess = 'Language file uploaded: '.escape($langCode);
+                        } else {
+                            $langError = 'Failed to upload language file';
+                        }
+                    }
+                } elseif (isset($_POST['delete_lang'])) {
+                    $langCode = $_POST['lang_code'] ?? '';
+                    $langCode = preg_replace('/[^a-z_]/', '', strtolower($langCode));
+                    $dest = __DIR__.'/lang/'.$langCode.'.php';
+                    if ($langCode === $config['default_lang']) {
+                        $langError = 'Cannot delete the default language';
+                    } elseif (file_exists($dest)) {
+                        @unlink($dest);
+                        $langSuccess = 'Language file deleted: '.escape($langCode);
+                    } else {
+                        $langError = 'Language file not found';
+                    }
+                }
+            }
+        }
+
+        $langFiles = glob(__DIR__.'/lang/*.php');
+        $langOptions = [];
+        foreach ($langFiles as $file) {
+            $code = basename($file, '.php');
+            $langOptions[] = $code;
+        }
+        include __DIR__.'/views/admin_langs.php';
+    }
+    elseif ($action === 'admin_plugins') {
+        // Plugin management
+        if (!is_admin()) {
+            die('Admin required');
+        }
+
+        $adminPluginError = '';
+        $adminPluginSuccess = '';
+        if ($method === 'POST' && isset($_POST['csrf_token'])) {
+            if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+                $adminPluginError = 'Invalid CSRF token';
+            } else {
+                if (isset($_POST['install_plugin']) && !empty($_FILES['plugin_zip']['tmp_name'])) {
+                    $tmpPath = $_FILES['plugin_zip']['tmp_name'];
+                    $result = $pluginManager->installFromZip($tmpPath);
+                    if ($result['success']) {
+                        $adminPluginSuccess = $result['message'];
+                    } else {
+                        $adminPluginError = $result['message'];
+                    }
+                } elseif (isset($_POST['delete_plugin'])) {
+                    $pluginName = $_POST['plugin_name'] ?? '';
+                    $result = $pluginManager->delete($pluginName);
+                    if ($result['success']) {
+                        $adminPluginSuccess = $result['message'];
+                    } else {
+                        $adminPluginError = $result['message'];
+                    }
+                } elseif (isset($_POST['action'])) {
+                    $pluginName = $_POST['plugin_name'] ?? '';
+                    if ($_POST['action'] === 'enable') {
+                        if ($pluginManager->enable($pluginName)) {
+                            $adminPluginSuccess = 'Plugin enabled';
+                        } else {
+                            $adminPluginError = 'Plugin not found';
+                        }
+                    } elseif ($_POST['action'] === 'disable') {
+                        if ($pluginManager->disable($pluginName)) {
+                            $adminPluginSuccess = 'Plugin disabled';
+                        } else {
+                            $adminPluginError = 'Plugin not found';
+                        }
+                    }
+                }
+            }
+        }
+
+        $allPlugins = $pluginManager->getAll();
+        include __DIR__.'/views/admin_plugins.php';
+    }
+    elseif ($action === 'admin_themes') {
+        // Theme management
+        if (!is_admin()) {
+            die('Admin required');
+        }
+
+        $adminThemeError = '';
+        $adminThemeSuccess = '';
+        if ($method === 'POST' && isset($_POST['csrf_token'])) {
+            if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+                $adminThemeError = 'Invalid CSRF token';
+            } else {
+                if (isset($_POST['install_theme']) && !empty($_FILES['theme_zip']['tmp_name'])) {
+                    $tmpPath = $_FILES['theme_zip']['tmp_name'];
+                    $result = $themeManager->installFromZip($tmpPath);
+                    if ($result['success']) {
+                        $adminThemeSuccess = $result['message'];
+                    } else {
+                        $adminThemeError = $result['message'];
+                    }
+                } elseif (isset($_POST['activate_theme'])) {
+                    $themeName = $_POST['theme_name'] ?? '';
+                    if ($themeManager->activate($themeName)) {
+                        $adminThemeSuccess = 'Theme activated';
+                    } else {
+                        $adminThemeError = 'Theme not found';
+                    }
+                } elseif (isset($_POST['delete_theme'])) {
+                    $themeName = $_POST['theme_name'] ?? '';
+                    $result = $themeManager->delete($themeName);
+                    if ($result['success']) {
+                        $adminThemeSuccess = $result['message'];
+                    } else {
+                        $adminThemeError = $result['message'];
+                    }
+                }
+            }
+        }
+
+        $allThemes = $themeManager->getAll();
+        include __DIR__.'/views/admin_themes.php';
+    }
+    elseif ($action === 'admin_updates') {
+        // Update management
+        if (!is_admin()) {
+            die('Admin required');
+        }
+
+        $updateResults = null;
+        $updateError = '';
+        $updateSuccess = '';
+
+        if ($method === 'POST' && isset($_POST['check_updates'])) {
+            if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+                $updateError = 'Invalid CSRF token';
+            } else {
+                $updateResults = $updateManager->checkAll($config['version'] ?? '1.0.0', $pluginManager, $themeManager);
+            }
+        }
+
+        if ($method === 'POST' && isset($_POST['apply_update'])) {
+            if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+                $updateError = 'Invalid CSRF token';
+            } else {
+                $type = $_POST['type'] ?? '';
+                $name = $_POST['name'] ?? '';
+
+                if (!empty($_FILES['update_package']['tmp_name'])) {
+                    $tmpPath = $_FILES['update_package']['tmp_name'];
+                    $result = $updateManager->applyUpdate($type, $name, $tmpPath);
+                    if ($result) {
+                        $updateSuccess = 'Update applied successfully';
+                    } else {
+                        $updateError = 'Failed to apply update';
+                    }
+                } else {
+                    $updateError = 'No update package uploaded';
+                }
+            }
+        }
+
+        $updateStatus = $updateResults ?? null;
+        include __DIR__.'/views/admin_updates.php';
     }
     elseif ($action === 'forgot_password') {
         // Show forgot password form

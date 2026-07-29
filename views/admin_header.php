@@ -50,6 +50,16 @@ function render_admin_header($title = 'Admin Panel') {
             <ul class="sidebar-nav">
                 <li><a href="<?= url('admin_categories') ?>"><i class="fas fa-folder"></i> <span>Categories</span></a></li>
                 <li><a href="<?= url('admin_users') ?>"><i class="fas fa-users"></i> <span>Users</span></a></li>
+                <li><a href="<?= url('admin_plugins') ?>"><i class="fas fa-puzzle-piece"></i> <span>Plugins</span></a></li>
+                <li><a href="<?= url('admin_themes') ?>"><i class="fas fa-palette"></i> <span>Themes</span></a></li>
+            </ul>
+            <hr class="sidebar-divider">
+
+            <!-- Extensions -->
+            <div class="sidebar-heading">Extensions</div>
+            <ul class="sidebar-nav">
+                <li><a href="<?= url('admin_updates') ?>"><i class="fas fa-arrow-up"></i> <span>Updates</span></a></li>
+                <li><a href="<?= url('admin_langs') ?>"><i class="fas fa-language"></i> <span>Languages</span></a></li>
             </ul>
             <hr class="sidebar-divider">
 
