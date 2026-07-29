@@ -26,6 +26,7 @@ Current version: **0.1.0**
 - **Theme Manager** — install, activate, and delete themes from the dashboard; ships with **Freshbored**
 - **Update Manager** — check for updates and apply ZIP packages for core, plugins, and themes
 - **Language Manager** — upload and delete localization files from the dashboard
+- **Editbored** — bundled WYSIWYG Markdown editor plugin with mentions and image upload
 - Hook-based plugin system
 - SEO-friendly URLs
 - Localization (i18n) infrastructure

@@ -85,8 +85,8 @@ Themes work like plugins — each theme is a folder in `themes/` with a `style.c
 
 Plugins are PHP files in `plugins/` that define an `{name}_init()` function:
 
-- `$pluginManager->add_hook('event', $callback)` — register a hook
-- `$pluginManager->run_hook('event', ...$args)` — fire a hook
+- `$pluginManager->addHook('event', $callback)` — register a hook
+- `$pluginManager->runHook('event', ...$args)` — fire a hook
 - Plugins are auto-loaded on every request
 
 Example plugin in `plugins/analytics.php` demonstrates the pattern.

@@ -29,7 +29,7 @@
                         </div>
                         <div class="mb-3">
                             <label class="form-label"><?= t('content') ?></label>
-                            <textarea name="content" class="form-control" rows="8" required></textarea>
+                            <textarea id="editbored-content" name="content" class="form-control" rows="8" required></textarea>
                         </div>
                         <div class="mb-3">
                             <label class="form-label"><?= t('attachments') ?></label>

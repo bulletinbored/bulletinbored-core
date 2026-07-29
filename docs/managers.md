@@ -28,7 +28,7 @@ Plugins can register callbacks that run when the core fires specific events:
 ```php
 function analytics_init() {
     global $pluginManager;
-    $pluginManager->add_hook('after_post', function($threadId, $postId) {
+    $pluginManager->addHook('after_post', function($threadId, $postId) {
         // react to new posts
     });
 }

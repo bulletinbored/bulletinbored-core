@@ -1,7 +1,7 @@
 <?php
 // Shared frontend header - clean Bootstrap 5 theme
 function render_header($title = 'bulletinbored') {
-    global $config, $lang;
+    global $config, $lang, $pluginHeadAssets;
     $siteName = $config['site_name'] ?? 'bulletinbored';
     $themeName = $config['theme'] ?? 'freshbored';
 ?>
@@ -19,6 +19,7 @@ function render_header($title = 'bulletinbored') {
     }
     ?>
     <link href="<?= htmlspecialchars($themeCssUrl ?? base_url().'/themes/freshbored/style.css', ENT_QUOTES, 'UTF-8') ?>" rel="stylesheet">
+    <?php echo $pluginHeadAssets ?? ''; ?>
 </head>
 <body>
     <!-- Navbar -->
@@ -76,6 +77,12 @@ function render_header($title = 'bulletinbored') {
 }
 
 function render_footer() {
+    if (!empty($GLOBALS['pluginFooterAssets'] ?? '')) {
+        echo $GLOBALS['pluginFooterAssets'];
+    }
+    if (!empty($GLOBALS['pluginManager']) && method_exists($GLOBALS['pluginManager'], 'runHook')) {
+        $GLOBALS['pluginManager']->runHook('footer_before_render');
+    }
 ?>
     </div><!-- /.container -->
 

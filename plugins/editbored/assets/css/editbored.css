@@ -1,0 +1,137 @@
+.editbored-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 6px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px 6px 0 0;
+    background: #f9fafb;
+}
+.editbored-toolbar button {
+    background: #fff;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    padding: 4px 8px;
+    cursor: pointer;
+    font-size: 14px;
+}
+.editbored-toolbar button:hover {
+    background: #e5e7eb;
+}
+.editbored-wrap {
+    display: flex;
+    border: 1px solid #d1d5db;
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    min-height: 280px;
+}
+.editbored-textarea {
+    flex: 1;
+    border: none;
+    resize: vertical;
+    padding: 12px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 14px;
+    line-height: 1.6;
+    outline: none;
+    min-height: 280px;
+}
+.editbored-preview {
+    flex: 1;
+    border-left: 1px solid #e5e7eb;
+    padding: 12px;
+    overflow-y: auto;
+    background: #fff;
+    min-height: 280px;
+}
+.editbored-preview img {
+    max-width: 100%;
+    height: auto;
+}
+.editbored-preview blockquote {
+    border-left: 4px solid #4e73df;
+    padding-left: 12px;
+    color: #6b7280;
+    margin: 8px 0;
+}
+.editbored-preview pre {
+    background: #1f2937;
+    color: #e5e7eb;
+    padding: 12px;
+    border-radius: 6px;
+    overflow-x: auto;
+}
+.editbored-preview code {
+    background: #f3f4f6;
+    padding: 2px 4px;
+    border-radius: 4px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+.editbored-preview pre code {
+    background: none;
+    padding: 0;
+}
+.editbored-preview table {
+    border-collapse: collapse;
+    width: 100%;
+}
+.editbored-preview table th, .editbored-preview table td {
+    border: 1px solid #d1d5db;
+    padding: 6px 10px;
+}
+.editbored-preview table th {
+    background: #f3f4f6;
+}
+.editbored-mentions-dropdown {
+    position: absolute;
+    background: #fff;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    max-height: 200px;
+    overflow-y: auto;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    z-index: 1000;
+    display: none;
+}
+.editbored-mention-item {
+    padding: 8px 12px;
+    cursor: pointer;
+}
+.editbored-mention-item:hover, .editbored-mention-item.active {
+    background: #eff6ff;
+}
+.editbored-paste-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(59,130,246,0.15);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    color: #1d4ed8;
+    pointer-events: none;
+    border-radius: 6px;
+}
+.editbored-paste-overlay.visible {
+    display: flex;
+}
+.editbored-wrap.image-drag-over {
+    outline: 2px dashed #4e73df;
+    outline-offset: -4px;
+    background: #f8faff;
+}
+.editbored-progress {
+    width: 100%;
+    height: 6px;
+    background: #e5e7eb;
+    border-radius: 3px;
+    margin-top: 6px;
+    overflow: hidden;
+    display: none;
+}
+.editbored-progress-bar {
+    height: 100%;
+    background: #4e73df;
+    width: 0%;
+    transition: width 0.2s;
+}

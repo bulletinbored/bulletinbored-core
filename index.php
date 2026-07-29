@@ -330,6 +330,17 @@ $themeCssUrl = $themeManager->getCssUrl();
 $themeCssPath = $themeManager->getCssPath();
 $themeName = $activeTheme;
 
+$pluginHeadAssets = '';
+if (is_admin()) {
+    $pluginManager->captureHook('before_render');
+    $pluginManager->captureHook('admin_before_render');
+    $pluginHeadAssets = $pluginManager->getCapturedHead(true);
+} else {
+    $pluginManager->captureHook('before_render');
+    $pluginManager->captureHook('frontend_before_render');
+    $pluginHeadAssets = $pluginManager->getCapturedHead(false);
+}
+
 // Routing
 $action = $_GET['action'] ?? 'home';
 $method = $_SERVER['REQUEST_METHOD'];
@@ -1387,6 +1398,52 @@ try {
         }
         
         redirect(url('login'));
+    }
+    elseif ($action === 'editbored_upload' && $method === 'POST') {
+        // Image upload for Editbored editor
+        if (!is_logged_in()) {
+            http_response_code(403);
+            echo json_encode(['error' => 'Login required']);
+            exit;
+        }
+        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+            http_response_code(403);
+            echo json_encode(['error' => 'CSRF token invalid']);
+            exit;
+        }
+        if (empty($_FILES['editbored_image']['tmp_name']) || $_FILES['editbored_image']['error'] !== UPLOAD_ERR_OK) {
+            http_response_code(400);
+            echo json_encode(['error' => 'No image uploaded']);
+            exit;
+        }
+        $finfo = new finfo(FILEINFO_MIME_TYPE);
+        $mime = $finfo->file($_FILES['editbored_image']['tmp_name']);
+        $allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+        if (!in_array($mime, $allowed)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Invalid file type']);
+            exit;
+        }
+        $ext = match($mime) {
+            'image/jpeg' => 'jpg',
+            'image/png' => 'png',
+            'image/gif' => 'gif',
+            'image/webp' => 'webp',
+            default => 'bin',
+        };
+        $safeName = 'editbored_' . $_SESSION['user_id'] . '_' . uniqid() . '.' . $ext;
+        $uploadDir = __DIR__ . '/uploads/';
+        if (!is_dir($uploadDir)) {
+            mkdir($uploadDir, 0755, true);
+        }
+        if (move_uploaded_file($_FILES['editbored_image']['tmp_name'], $uploadDir . $safeName)) {
+            $url = base_url() . '/uploads/' . rawurlencode($safeName);
+            echo json_encode(['url' => $url, 'filename' => $safeName]);
+            exit;
+        }
+        http_response_code(500);
+        echo json_encode(['error' => 'Failed to move uploaded file']);
+        exit;
     }
     else {
         // Not found

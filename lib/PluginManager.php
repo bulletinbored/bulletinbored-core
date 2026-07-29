@@ -7,6 +7,9 @@ class PluginManager
     private array $plugins = [];
     private array $hooks = [];
     private array $manifest = [];
+    private array $capturedHead = [];
+    private string $capturedAdminHead = '';
+    private ?string $capturedFrontendHead = null;
 
     public function __construct(string $pluginsDir, string $manifestPath)
     {
@@ -32,15 +35,17 @@ class PluginManager
         file_put_contents($this->manifestPath, json_encode($this->manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
     }
 
-    private function parseMetadata(string $file): array
+    private function parseMetadata(string $file, ?string $folder = null): array
     {
         $content = file_get_contents($file);
         $meta = [
-            'name' => basename($file, '.php'),
+            'name' => $folder ?? basename($file, '.php'),
             'version' => '1.0.0',
             'author' => '',
             'description' => '',
             'file' => $file,
+            'folder' => $folder,
+            'type' => 'file',
         ];
 
         if (preg_match('/Plugin Name:\s*(.+)/i', $content, $m)) {
@@ -59,6 +64,19 @@ class PluginManager
         return $meta;
     }
 
+    private function parseManifest(string $dir): ?array
+    {
+        $manifestFile = $dir . '/manifest.json';
+        if (!file_exists($manifestFile)) {
+            return null;
+        }
+        $data = json_decode(file_get_contents($manifestFile), true);
+        if (!is_array($data)) {
+            return null;
+        }
+        return $data;
+    }
+
     public function discover(): array
     {
         $this->plugins = [];
@@ -67,10 +85,46 @@ class PluginManager
         }
 
         foreach (glob($this->pluginsDir . '/*.php') as $file) {
+            if (basename($file) === 'index.php') {
+                $this->plugins['__legacy__'] = [
+                    'name' => '__legacy__',
+                    'file' => $file,
+                    'folder' => null,
+                    'type' => 'file',
+                ];
+                continue;
+            }
             $meta = $this->parseMetadata($file);
             $key = strtolower($meta['name']);
             $meta['enabled'] = $this->manifest[$key]['enabled'] ?? true;
             $this->plugins[$key] = $meta;
+        }
+
+        foreach (glob($this->pluginsDir . '/*', GLOB_ONLYDIR) as $dir) {
+            $folder = basename($dir);
+            $manifest = $this->parseManifest($dir);
+            if ($manifest) {
+                $bootstrap = $manifest['bootstrap'] ?? ($folder . '.php');
+                $bootstrapPath = $dir . '/' . $bootstrap;
+                if (!file_exists($bootstrapPath)) {
+                    $bootstrapPath = $dir . '/' . $folder . '.php';
+                }
+                if (!file_exists($bootstrapPath)) {
+                    $bootstrapPath = null;
+                }
+                $meta = [
+                    'name' => $manifest['name'] ?? $folder,
+                    'version' => $manifest['version'] ?? '1.0.0',
+                    'author' => $manifest['author'] ?? '',
+                    'description' => $manifest['description'] ?? '',
+                    'file' => $bootstrapPath,
+                    'folder' => $folder,
+                    'type' => 'folder',
+                ];
+                $key = strtolower($meta['name']);
+                $meta['enabled'] = $this->manifest[$key]['enabled'] ?? true;
+                $this->plugins[$key] = $meta;
+            }
         }
 
         return $this->plugins;
@@ -131,7 +185,7 @@ class PluginManager
     {
         $loaded = [];
         foreach ($this->getEnabled() as $key => $plugin) {
-            if (file_exists($plugin['file'])) {
+            if (!empty($plugin['file']) && file_exists($plugin['file'])) {
                 include $plugin['file'];
                 $initFunction = $key . '_init';
                 if (function_exists($initFunction)) {
@@ -173,6 +227,28 @@ class PluginManager
         }
     }
 
+    public function captureHook(string $event, mixed ...$args): void
+    {
+        if (!isset($this->hooks[$event])) {
+            return;
+        }
+        ob_start();
+        foreach ($this->hooks[$event] as $callback) {
+            if (is_callable($callback)) {
+                call_user_func_array($callback, $args);
+            }
+        }
+        $this->capturedHead[] = ob_get_clean();
+    }
+
+    public function getCapturedHead(bool $admin = false): string
+    {
+        if ($admin) {
+            return $this->capturedAdminHead ??= implode("\n", array_filter($this->capturedHead, fn($s) => str_starts_with($s, '<script')));
+        }
+        return implode("\n", array_filter($this->capturedHead, fn($s) => str_contains($s, 'Editbored') || str_starts_with($s, '<script') || str_starts_with($s, '<link')));
+    }
+
     public function getVersion(string $name): string
     {
         $plugin = $this->getByName($name);
@@ -192,9 +268,42 @@ class PluginManager
         }
 
         $dest = rtrim($this->pluginsDir, '/') . '/';
+        $topFolders = [];
+        for ($i = 0; $i < $zip->numFiles; $i++) {
+            $name = $zip->getNameIndex($i);
+            $parts = explode('/', str_replace('\\', '/', $name));
+            if (!empty($parts[0]) && !str_contains($parts[0], '.')) {
+                $topFolders[$parts[0]] = true;
+            }
+        }
         $zip->extractTo($dest);
         $zip->close();
         @unlink($zipPath);
+
+        if (count($topFolders) === 1) {
+            $folderName = array_keys($topFolders)[0];
+            $src = $dest . $folderName;
+            foreach (glob($src . '/*') as $item) {
+                $basename = basename($item);
+                $target = $dest . $basename;
+                if (is_dir($item)) {
+                    if (!is_dir($target)) {
+                        rename($item, $target);
+                    } else {
+                        foreach (glob($item . '/*') as $sub) {
+                            $subBase = basename($sub);
+                            rename($sub, $target . '/' . $subBase);
+                        }
+                        @rmdir($item);
+                    }
+                } else {
+                    if (!file_exists($target)) {
+                        rename($item, $target);
+                    }
+                }
+            }
+            @rmdir($src);
+        }
 
         $this->plugins = [];
         $this->discover();
@@ -211,9 +320,14 @@ class PluginManager
             return ['success' => false, 'message' => 'Plugin not found'];
         }
 
-        $file = $this->plugins[$key]['file'];
-        if (file_exists($file)) {
-            @unlink($file);
+        $entry = $this->plugins[$key];
+        if ($entry['folder']) {
+            $dir = rtrim($this->pluginsDir, '/') . '/' . $entry['folder'];
+            if (is_dir($dir)) {
+                $this->deleteDir($dir);
+            }
+        } elseif (!empty($entry['file']) && file_exists($entry['file'])) {
+            @unlink($entry['file']);
         }
 
         unset($this->manifest[$key]);
@@ -221,5 +335,16 @@ class PluginManager
         $this->plugins = [];
 
         return ['success' => true, 'message' => 'Plugin deleted'];
+    }
+
+    private function deleteDir(string $dir): void
+    {
+        if (!is_dir($dir)) {
+            return;
+        }
+        foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS), RecursiveIteratorIterator::CHILD_FIRST) as $item) {
+            $item->isDir() ? @rmdir($item->getPathname()) : @unlink($item->getPathname());
+        }
+        @rmdir($dir);
     }
 }

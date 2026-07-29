@@ -1,1 +1,9 @@
-{"active":"default"}
+{
+    "active": "freshbored",
+    "analytics": {
+        "enabled": true
+    },
+    "editbored": {
+        "enabled": true
+    }
+}
