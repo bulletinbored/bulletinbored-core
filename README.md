@@ -2,6 +2,8 @@
 
 Minimal, extensible forum software with zero dependencies. Upload files and run — no Composer, no Docker, no deployment needed.
 
+Current version: **0.1.0**
+
 ## Installation
 
 1. Upload all files to a PHP-enabled web server (PHP 8.x, PDO/SQLite or PDO/MySQL extension)
@@ -52,7 +54,10 @@ $config = [
 - [Localization](docs/localization.md)
 - [Theme Development](docs/themes.md)
 - [Plugin Development](docs/plugins.md)
+- [Versioning](docs/versioning.md)
 
 ## License
 
-MIT
+BSD Zero Clause — see [LICENSE](LICENSE).
+
+Contributions are accepted under the terms of the [CLA.md](CLA.md).

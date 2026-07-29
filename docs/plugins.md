@@ -1,58 +1,6 @@
 # Plugins
 
-Create plugins as single PHP files in `plugins/`.
-
-## Plugin File Format
-
-Every plugin is a PHP file with an `{name}_init()` function:
-
-```php
-<?php
-/**
- * Plugin Name: Analytics
- * Version: 1.0.0
- * Author: Developer
- * Description: Logs page visits
- */
-
-function analytics_init() {
-    // Register hooks
-    global $pluginManager;
-    $pluginManager->add_hook('after_post', function($threadId, $postId) {
-        // ...
-    });
-}
-```
-
-## Installed Plugins Folder
-
-By default, plugins are placed directly in `plugins/` (e.g., `plugins/analytics.php`).
-
-If you install a plugin via ZIP from the dashboard, the ZIP contents are extracted into `plugins/`, so your ZIP can contain either a single `.php` file or a folder with multiple files.
-
-## Hook System
-
-Plugins register callbacks via `$pluginManager->add_hook('event', $callback)`.
-
-### Core Events
-
-| Event | Arguments | When |
-|---|---|---|
-| `after_thread` | `$threadId` | After a thread is created |
-| `after_post` | `$threadId`, `$postId` | After a reply is posted |
-| `user_registered` | `$userId`, `$username` | After a user registers |
-
-### Example: Log new threads
-
-```php
-function analytics_init() {
-    global $pluginManager;
-    $pluginManager->add_hook('after_thread', function($threadId) {
-        $log = date('c') . " Thread $threadId created\n";
-        file_put_contents(__DIR__.'/../data/threads.log', $log, FILE_APPEND);
-    });
-}
-```
+Create plugins as single PHP files in `plugins/`. Contributions and distributed plugins are accepted under the terms of the [CLA.md](../CLA.md).
 
 ## Shipping Plugins as ZIP
 

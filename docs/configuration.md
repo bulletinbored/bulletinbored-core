@@ -25,17 +25,13 @@ $config = [
     // Theme
     'theme' => 'freshbored',              // Theme name (folder in themes/)
     
-    // Localization
-    'default_lang' => 'en',            // Default language (folder in lang/)
-    'available_langs' => ['en', 'it'], // Available languages
-    
     // Uploads
     'avatar_max_size' => 2 * 1024 * 1024, // 2MB
     'avatar_allowed_types' => ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
     
     // URL
     'base_url' => '', // Leave empty for auto-detection, or set to '/forum-nuovo'
-    'version' => '1.0.0',
+    'version' => trim(file_get_contents(__DIR__.'/VERSION')),
     'plugin_manifest' => __DIR__.'/data/plugins.json',
     'theme_manifest' => __DIR__.'/data/themes.json',
     'update_manifest' => __DIR__.'/data/updates.json',
@@ -43,9 +39,11 @@ $config = [
 ];
 ```
 
-## Database
+## Version
 
-### SQLite (default)
+Do not hardcode the version; the application reads it from the `VERSION` file at the project root, e.g. `0.1.0`. See [docs/versioning.md](versioning.md) for how to manage releases.
+
+## Database
 
 SQLite requires no additional setup. The database file is created automatically in `data/database.sqlite`.
 
