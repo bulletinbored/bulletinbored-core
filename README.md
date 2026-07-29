@@ -6,7 +6,7 @@ Minimal, extensible forum software with zero dependencies. Upload files and run 
 1. Upload all files to a PHP-enabled web server (PHP 8.x, PDO/SQLite or PDO/MySQL extension)
 2. Ensure Apache `mod_rewrite` is enabled (for SEO-friendly URLs)
 3. Ensure the `data/`, `uploads/`, and `uploads/avatars/` directories are writable by the web server
-4. If installed in a subdirectory (e.g., `/forum-nuovo`), set `'base_url' => '/forum-nuovo'` in `config.php`
+4. If installed in a subdirectory (e.g., `/forum`), set `'base_url' => '/forum'` in `config.php`
 5. Visit the site — SQLite database auto-creates on first access
 6. Login with admin/changeme123 (change password immediately!)
 
@@ -175,11 +175,6 @@ The forum includes a basic translation system managed from the admin dashboard:
 
 The forum ships with English (`lang/en.php`) and Italian (`lang/it.php`) translations.
 
-## Recent Updates
-- **SEO-friendly URLs**: Thread, category, and profile pages now use clean URLs (e.g., `/thread/1-my-title`) via `.htaccess` rewrite rules.
-- **Email notifications on watched threads**: Users receive email alerts when a watched thread gets a new reply.
-- **User avatar upload**: Authenticated users can upload avatars (JPG, PNG, GIF, WebP) from their profile page.
-- **Localization (i18n)**: Basic translation infrastructure added with English and Italian language packs in `lang/`. Languages are managed from the admin dashboard settings.
 
 ## Missing Features (TODO)
 - Rich text editor (WYSIWYG) — through plugin. Which one should I choose?

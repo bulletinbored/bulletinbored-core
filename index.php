@@ -5,7 +5,7 @@ session_start();
 require __DIR__.'/config.php';
 
 // Localization
-$lang = $_GET['lang'] ?? ($_COOKIE['lang'] ?? ($config['default_lang'] ?? 'en'));
+$lang = $_GET['lang'] ?? $config['default_lang'] ?? 'en';
 if (!in_array($lang, $config['available_langs'] ?? ['en'])) {
     $lang = $config['default_lang'] ?? 'en';
 }
@@ -1045,11 +1045,15 @@ try {
         $siteName = trim($_POST['site_name'] ?? $config['site_name']);
         $allowRegistration = isset($_POST['allow_registration']) ? 1 : 0;
         $maintenanceMode = isset($_POST['maintenance_mode']) ? 1 : 0;
-        
+        $defaultLang = trim($_POST['default_lang'] ?? $config['default_lang'] ?? 'en');
+        $availableLangs = array_filter(array_map('trim', explode(',', $_POST['available_langs'] ?? implode(',', $config['available_langs'] ?? ['en']))));
+
         $config['site_name'] = $siteName;
         $config['allow_registration'] = $allowRegistration;
         $config['maintenance_mode'] = $maintenanceMode;
-        
+        $config['default_lang'] = $defaultLang;
+        $config['available_langs'] = array_values($availableLangs);
+
         $configContent = "<?php\n";
         foreach ($config as $key => $value) {
             if (is_string($value)) {
@@ -1058,7 +1062,7 @@ try {
                 $configContent .= "\$config['$key'] = " . var_export($value, true) . ";\n";
             }
         }
-        
+
         file_put_contents(__DIR__.'/config.php', $configContent);
         redirect(url('admin_settings'));
     }

@@ -15,7 +15,6 @@ $config['theme'] = 'default';
 $config['default_lang'] = 'en';
 $config['available_langs'] = array (
   0 => 'en',
-  1 => 'it',
 );
 $config['avatar_max_size'] = 2097152;
 $config['avatar_allowed_types'] = array (
