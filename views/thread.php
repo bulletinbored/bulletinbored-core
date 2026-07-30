@@ -38,7 +38,7 @@
                 </div>
                 <h1 class="h4 thread-title mb-3"><?= escape($thread['title'] ?? '') ?></h1>
                 <div class="thread-content">
-                    <p><?= nl2br(escape($thread['content'] ?? '')) ?></p>
+                    <?= marked_parse($thread['content'] ?? '') ?>
                     <?php
                     $uploadsStmt = $pdo->prepare("SELECT * FROM uploads WHERE thread_id = ? AND post_id IS NULL ORDER BY created_at ASC");
                     $uploadsStmt->execute([$_GET['id'] ?? 0]);
@@ -92,7 +92,7 @@
                                 <?php endif; ?>
                             </small>
                         </div>
-                        <div class="post-content"><p class="mb-0"><?= nl2br(escape($post['content'])) ?></p></div>
+                        <div class="post-content"><?= marked_parse($post['content'] ?? '') ?></div>
                     </div>
                 </div>
             </div>

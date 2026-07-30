@@ -8,7 +8,7 @@ class PluginManager
     private array $hooks = [];
     private array $manifest = [];
     private array $capturedHead = [];
-    private string $capturedAdminHead = '';
+    private ?string $capturedAdminHead = null;
     private ?string $capturedFrontendHead = null;
 
     public function __construct(string $pluginsDir, string $manifestPath)
@@ -244,7 +244,10 @@ class PluginManager
     public function getCapturedHead(bool $admin = false): string
     {
         if ($admin) {
-            return $this->capturedAdminHead ??= implode("\n", array_filter($this->capturedHead, fn($s) => str_starts_with($s, '<script')));
+            if ($this->capturedAdminHead === null) {
+                $this->capturedAdminHead = implode("\n", array_filter($this->capturedHead, fn($s) => str_starts_with($s, '<script') || str_starts_with($s, '<link')));
+            }
+            return $this->capturedAdminHead;
         }
         return implode("\n", array_filter($this->capturedHead, fn($s) => str_contains($s, 'Editbored') || str_starts_with($s, '<script') || str_starts_with($s, '<link')));
     }
