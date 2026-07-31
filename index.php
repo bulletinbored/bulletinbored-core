@@ -245,35 +245,9 @@ function escape($s) { return htmlspecialchars($s, ENT_QUOTES, 'UTF-8'); }
 
 function marked_parse($text) {
     if (empty($text)) return '';
-    if (function_exists('marked')) {
-        $html = marked($text);
-    } else {
-        return nl2br(escape($text));
-    }
-    $html = preg_replace_callback('/(https?:\/\/[^\s<>"\']+)/', function($matches) {
-        $url = $matches[1];
-        if (preg_match('/(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]+)/', $url, $m)) {
-            $id = $m[1];
-            return '<div class="link-preview-wrap" style="position:relative;margin:0.8em 0;"><div class="link-preview link-preview--youtube" style="position:relative;padding-top:56.25%;background:#000;border-radius:12px;overflow:hidden;"><iframe src="https://www.youtube.com/embed/' . $id . '" style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;" allowfullscreen></iframe></div></div>';
-        }
-        if (preg_match('/(?:twitter|x)\.com\/[a-zA-Z0-9_]+\/status\/(\d+)/', $url, $m)) {
-            $tid = $m[1];
-            return '<div class="link-preview-wrap" style="position:relative;margin:0.8em 0;"><div class="link-preview link-preview--twitter" style="background:#000;border-radius:12px;overflow:hidden;"><iframe src="https://platform.twitter.com/embed/Tweet.html?id=' . $tid . '" style="border:none;width:100%;height:350px;display:block;"></iframe></div></div>';
-        }
-        if (preg_match('/instagram\.com\/(?:[a-zA-Z0-9_.]+\/)?p\/[a-zA-Z0-9_-]+\/?/', $url)) {
-            return '<div class="link-preview-wrap" style="position:relative;margin:0.8em 0;"><div class="link-preview link-preview--instagram" style="min-height:400px;background:#fff;border:1px solid #dbdbdb;border-radius:12px;overflow:hidden;"><blockquote class="instagram-media" data-instgrm-captioned data-instgrm-permalink="' . $url . '" data-instgrm-version="15" style="background:#FFF;border:0;border-radius:3px;box-shadow:0 0 1px 0 rgba(0,0,0,0.5),0 1px 10px 0 rgba(0,0,0,0.15);margin:1px;max-width:540px;min-width:326px;padding:0;width:99.375%;width:-webkit-calc(100% - 2px);width:calc(100% - 2px);"><div style="padding:16px;"><a href="' . $url . '" style="background:#FFFFFF;line-height:0;padding:0 0;text-align:center;text-decoration:none;width:100%;" target="_blank"><div style="display:flex;flex-direction:row;align-items:center;"><div style="background-color:#F4F4F4;border-radius:50%;flex-grow:0;height:40px;margin-right:14px;width:40px;"></div><div style="display:flex;flex-direction:column;flex-grow:1;justify-content:center;"><div style="background-color:#F4F4F4;border-radius:4px;flex-grow:0;height:14px;margin-bottom:6px;width:100px;"></div><div style="background-color:#F4F4F4;border-radius:4px;flex-grow:0;height:14px;width:60px;"></div></div></div><div style="padding:19% 0;"></div><div style="display:block;height:50px;margin:0 auto 12px;width:50px;"><svg width="50px" height="50px" viewBox="0 0 60 60" version="1.1" xmlns="https://www.w3.org/2000/svg"><g stroke="none" stroke-width="1" fill="none" fill-rule="evenodd"><g transform="translate(-511.000000, -20.000000)" fill="#000000"><g><path d="M556.869,30.41 C554.814,30.41 553.148,32.076 553.148,34.131 C553.148,36.186 554.814,37.852 556.869,37.852 C558.924,37.852 560.59,36.186 560.59,34.131 C560.59,32.076 558.924,30.41 556.869,30.41 M541,60.657 C535.114,60.657 530.342,55.887 530.342,50 C530.342,44.114 535.114,39.342 541,39.342 C546.887,39.342 551.658,44.114 551.658,50 C551.658,55.887 546.887,60.657 541,60.657 M541,33.886 C532.1,33.886 524.886,41.1 524.886,50 C524.886,58.899 532.1,66.113 541,66.113 C549.9,66.113 557.115,58.899 557.115,50 C557.115,41.1 549.9,33.886 541,33.886 M565.378,62.101 C565.244,65.022 564.756,66.606 564.346,67.663 C563.803,69.06 563.154,70.057 562.106,71.106 C561.058,72.155 560.06,72.803 558.662,73.347 C557.607,73.757 556.021,74.244 553.102,74.378 C549.944,74.521 548.997,74.552 541,74.552 C533.003,74.552 532.056,74.521 528.898,74.378 C525.979,74.244 524.393,73.757 523.338,73.347 C521.94,72.803 520.942,72.155 519.894,71.106 C518.846,70.057 518.197,69.06 517.654,67.663 C517.244,66.606 516.755,65.022 516.623,62.101 C516.479,58.943 516.448,57.996 516.448,50 C516.448,42.003 516.479,41.056 516.623,37.899 C516.755,34.978 517.244,33.391 517.654,32.338 C518.197,30.938 518.846,29.942 519.894,28.894 C520.942,27.846 521.94,27.196 523.338,26.654 C524.393,26.244 525.979,25.756 528.898,25.623 C532.057,25.479 533.004,25.448 541,25.448 C548.997,25.448 549.943,25.479 553.102,25.623 C556.021,25.756 557.607,26.244 558.662,26.654 C560.06,27.196 561.058,27.846 562.106,28.894 C563.154,29.942 563.803,30.938 564.346,32.338 C564.756,33.391 565.244,34.978 565.378,37.899 C565.522,41.056 565.552,42.003 565.552,50 C565.552,57.996 565.522,58.943 565.378,62.101"></path></g></g></g></svg></div><div style="padding-top:8px;"><div style="color:#3897f0;font-family:Arial,sans-serif;font-size:14px;font-style:normal;font-weight:550;line-height:18px;">Visualizza questo post su Instagram</div></div><div style="padding:12.5% 0;"></div></a></div></blockquote></div></div>';
-        }
-        if (preg_match('/facebook\.com\/(?:watch\/\?v=|reel\/|(?:[a-zA-Z0-9.]+\/)?(?:videos|posts)\/)/', $url)) {
-            return '<div class="link-preview-wrap" style="position:relative;margin:0.8em 0;"><div class="link-preview link-preview--facebook" style="min-height:200px;background:#f0f2f5;border-radius:12px;overflow:hidden;padding:16px;display:flex;align-items:center;justify-content:center;"><div class="fb-post" data-href="' . $url . '" data-width="540" data-show-text="false" style="width:100%;"></div></div></div>';
-        }
-        if (preg_match('/\.(jpg|jpeg|png|gif|webp|svg)(\?.*)?$/i', $url)) {
-            return '<div class="link-preview-wrap" style="position:relative;margin:0.8em 0;"><div class="link-preview link-preview--image" style="border-radius:12px;overflow:hidden;margin:0.6em 0;"><img src="' . $url . '" alt="Image" style="max-width:100%;display:block;border-radius:12px;"></div></div>';
-        }
-        $domain = parse_url($url, PHP_URL_HOST) ?: preg_replace('/^https?:\/\//', '', $url);
-        $favicon = 'https://www.google.com/s2/favicons?domain=' . $domain . '&sz=32';
-        return '<div class="link-preview-wrap" style="position:relative;margin:0.8em 0;"><div class="link-preview link-preview--generic" style="border:1px solid #e0e0e0;border-radius:12px;overflow:hidden;background:#fff;"><a href="' . $url . '" target="_blank" style="display:flex;align-items:center;gap:12px;padding:12px 16px;text-decoration:none;color:inherit;"><img src="' . $favicon . '" alt="" style="width:32px;height:32px;border-radius:6px;flex-shrink:0;background:#f5f5f5;" onerror="this.style.display=\'none\'"><div style="min-width:0;"><div style="font-weight:600;font-size:14px;color:#1a1a1a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' . $domain . '</div><div style="font-size:12px;color:#888;margin-top:2px;">' . $domain . '</div></div></a></div></div>';
-    }, $html);
-    return $html;
+    // Content is already escaped by validate_input(), don't escape again
+    // JavaScript renderMarkdownContent() will parse it with marked.parse()
+    return '<div class="markdown-content">' . $text . '</div>';
 }
 function is_logged_in() { return isset($_SESSION['user_id']); }
 function is_admin() { return ($_SESSION['user_role'] ?? '') === 'admin'; }

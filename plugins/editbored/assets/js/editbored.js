@@ -180,6 +180,34 @@
                 document.execCommand('italic', false, null);
                 updateToolbarState(toolbar);
             }
+            // Exit code block or blockquote on Enter at end of block
+            if (e.key === "Enter" && !e.shiftKey) {
+                var sel = window.getSelection();
+                if (sel.rangeCount > 0) {
+                    var node = sel.anchorNode;
+                    var pre = node.parentElement.closest("pre"); var codeEl = node.parentElement.closest("code");
+                    var bq = node.parentElement.closest("blockquote");
+                    if (pre || bq || codeEl) {
+                        var block = pre || bq || codeEl;
+                        var range = sel.getRangeAt(0);
+                        var blockRange = document.createRange();
+                        blockRange.selectNodeContents(block);
+                        blockRange.setStart(range.endContainer, range.endOffset);
+                        var isAtEnd = blockRange.toString().trim() === "";
+                        if (isAtEnd) {
+                            e.preventDefault();
+                            var p = document.createElement("p");
+                            p.innerHTML = "<br>";
+                            block.parentNode.insertBefore(p, block.nextSibling);
+                            var newRange = document.createRange();
+                            newRange.setStart(p, 0);
+                            newRange.collapse(true);
+                            sel.removeAllRanges();
+                            sel.addRange(newRange);
+                        }
+                    }
+                }
+            }
         });
 
         editor.addEventListener('blur', function() {
@@ -612,7 +640,7 @@
     }
 
     function processContentEmbeds() {
-        var containers = document.querySelectorAll('.thread-content, .post-content');
+        var containers = document.querySelectorAll('.thread-content, .post-content, .markdown-content');
         containers.forEach(function(container) {
             var walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
             var textNodes = [];
@@ -657,14 +685,28 @@
 
     function renderMarkdownContent() {
         var containers = document.querySelectorAll('.markdown-content');
+        if (containers.length === 0) return;
+        // Check if marked is available, if not, retry
+        if (typeof marked === 'undefined') {
+            console.log('Editbored: marked not loaded yet, retrying...');
+            setTimeout(renderMarkdownContent, 200);
+            return;
+        }
         containers.forEach(function(container) {
+            if (container.getAttribute('data-rendered') === 'true') return;
+            // Store raw markdown in data attribute before rendering
             var markdown = container.textContent || container.innerText || '';
             if (!markdown.trim()) return;
-            if (typeof marked !== 'undefined' && marked.parse) {
-                container.innerHTML = marked.parse(markdown);
-            } else if (typeof marked !== 'undefined' && typeof marked === 'function') {
-                container.innerHTML = marked(markdown);
-            } else {
+            container.setAttribute('data-raw', markdown);
+            try {
+                if (marked.parse) {
+                    container.innerHTML = marked.parse(markdown);
+                } else if (typeof marked === 'function') {
+                    container.innerHTML = marked(markdown);
+                }
+                container.setAttribute('data-rendered', 'true');
+            } catch(e) {
+                console.error('Editbored: Error rendering markdown:', e);
                 container.innerHTML = '<p>' + escapeHtml(markdown).replace(/\n/g, '<br>') + '</p>';
             }
         });
