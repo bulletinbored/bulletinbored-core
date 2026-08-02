@@ -82,6 +82,14 @@
         markdownDisplay.style.cssText = 'display:none;width:100%;min-height:300px;border:1px solid #e0e0e0;border-top:none;border-radius:0 0 8px 8px;padding:12px 16px;font-family:monospace;font-size:14px;background:#f8f9fa;color:#333;resize:vertical;box-sizing:border-box;';
         markdownDisplay.readOnly = true;
 
+        var backBtn = document.createElement('button');
+        backBtn.type = 'button';
+        backBtn.className = 'editbored-back-to-rich';
+        backBtn.textContent = 'Back to rich text';
+        backBtn.addEventListener('click', function() {
+            toggleMarkdownView(editor, markdownDisplay);
+        });
+
         var progress = document.createElement('div');
         progress.className = 'editbored-progress';
         var progressBar = document.createElement('div');
@@ -91,6 +99,7 @@
         wrap.appendChild(toolbar);
         wrap.appendChild(editor);
         wrap.appendChild(markdownDisplay);
+        wrap.appendChild(backBtn);
         wrap.appendChild(progress);
 
         ta.parentNode.insertBefore(wrap, ta);
@@ -299,6 +308,7 @@
     function toggleMarkdownView(editor, markdownDisplay) {
         var wrap = editor.closest('.editbored-wrap');
         var toolbar = wrap.querySelector('.editbored-toolbar');
+        var backBtn = wrap.querySelector('.editbored-back-to-rich');
         var isMarkdownMode = markdownDisplay.style.display !== 'none';
 
         if (isMarkdownMode) {
@@ -306,16 +316,19 @@
             markdownDisplay.style.display = 'none';
             editor.style.display = 'block';
             toolbar.style.display = 'flex';
+            if (backBtn) backBtn.style.display = 'none';
             // Parse markdown back to HTML
             if (typeof marked !== 'undefined' && markdownDisplay.value) {
                 editor.innerHTML = marked.parse(markdownDisplay.value);
             }
+            editor.focus();
         } else {
             // Switch to markdown view
             markdownDisplay.value = htmlToMarkdown(editor.innerHTML);
             editor.style.display = 'none';
             markdownDisplay.style.display = 'block';
             toolbar.style.display = 'none';
+            if (backBtn) backBtn.style.display = 'block';
         }
     }
 

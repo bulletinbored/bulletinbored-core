@@ -4,7 +4,7 @@
  * Version: 1.0.0
  * Author: mlzog
  * Description: WYSIWYG Markdown editor with mentions and image upload
- * License: BSD Zero Clause
+ * License: MIT License
  */
 
 function editbored_init() {
@@ -28,7 +28,7 @@ function editbored_init() {
     $csrfToken = $_SESSION['csrf_token'] ?? '';
     $cssUrl = $pluginUrl . '/assets/css/editbored.css';
     $mentionsUrl = $pluginUrl . '/assets/js/mentions.js?v=1';
-    $editorUrl = $pluginUrl . '/assets/js/editbored.js?v=11';
+    $editorUrl = $pluginUrl . '/assets/js/editbored.js?v=12';
 
     $head = '<link href="' . $cssUrl . '" rel="stylesheet">' . "\n";
     $head .= '<script>window.Editbored = window.Editbored || {};window.Editbored.users = ' . $usersJson . ';window.Editbored.uploadUrl = ' . json_encode($uploadUrl) . ';window.Editbored.csrfToken = ' . json_encode($csrfToken) . ';</script>' . "\n";

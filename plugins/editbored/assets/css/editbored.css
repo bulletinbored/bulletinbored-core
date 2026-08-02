@@ -261,6 +261,35 @@
     text-decoration: underline;
 }
 
+/* Mention styles for rendered output */
+.markdown-content .mention, .thread-content .mention, .post-content .mention {
+    background: #e3f2fd;
+    color: #1976d2;
+    border-radius: 4px;
+    padding: 0.1em 0.3em;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+/* Back to rich text button */
+.editbored-back-to-rich {
+    display: none;
+    margin: 8px 0;
+    padding: 6px 14px;
+    background: #007AFF;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    align-self: flex-start;
+    transition: background 0.15s ease;
+}
+.editbored-back-to-rich:hover {
+    background: #0066d6;
+}
+
 /* Frontend markdown rendering styles */
 .markdown-content h1, .thread-content h1, .post-content h1,
 .markdown-content h2, .thread-content h2, .post-content h2,
