@@ -25,7 +25,7 @@ Folder-based plugins use `manifest.json`:
 
 ```json
 {
-    "name": "Editbored",
+    "name": "editbored",
     "version": "1.0.0",
     "author": "mlzog",
     "description": "WYSIWYG Markdown editor",
@@ -47,6 +47,7 @@ Plugins register callbacks via `$pluginManager->addHook('event', $callback)`.
 | `before_render` | — | Before a page is rendered |
 | `frontend_before_render` | — | Before a frontend page is rendered |
 | `admin_before_render` | — | Before an admin page is rendered |
+| `footer_before_render` | — | Before the footer is rendered |
 
 ### Example
 
@@ -167,9 +168,9 @@ The installer automatically detects a single top-level folder and flattens it.
 - **Install**: upload a ZIP to add the plugin
 - **Update**: the Update Manager can apply new versions as ZIP packages
 
-## Example: Editbored Plugin
+## Example: editbored Plugin
 
-The forum ships with the **Editbored** plugin as an example of a folder-based plugin:
+The forum ships with the **editbored** plugin as an example of a folder-based plugin:
 
 - Uses a WYSIWYG Markdown editor on thread/reply forms
 - Injects CSS, JS, and user data via hooks

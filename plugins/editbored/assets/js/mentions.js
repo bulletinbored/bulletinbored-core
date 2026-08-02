@@ -1,7 +1,7 @@
 (function() {
     'use strict';
 
-    const USERS = (window.Editbored && window.Editbored.users) ? window.Editbored.users : [];
+    const USERS = (window.editbored && window.editbored.users) ? window.editbored.users : [];
     let dropdown = null;
     let activeIndex = -1;
     let currentMatches = [];

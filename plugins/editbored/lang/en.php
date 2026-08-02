@@ -1,6 +1,6 @@
 <?php
 return [
-    'plugin_name' => 'Editbored',
+    'plugin_name' => 'editbored',
     'bold' => 'Bold',
     'italic' => 'Italic',
     'strikethrough' => 'Strikethrough',

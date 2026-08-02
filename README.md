@@ -23,10 +23,10 @@ Current version: **0.1.0**
 - Password reset via email
 - Admin dashboard: categories, moderation, users, settings
 - **Plugin Manager** — install, enable, disable, and delete plugins from the dashboard
-- **Theme Manager** — install, activate, and delete themes from the dashboard; ships with **Freshbored**
+- **Theme Manager** — install, activate, and delete themes from the dashboard; ships with **freshbored**
 - **Update Manager** — check for updates and apply ZIP packages for core, plugins, and themes
 - **Language Manager** — upload and delete localization files from the dashboard
-- **Editbored** — bundled WYSIWYG Markdown editor plugin with mentions and image upload
+- **editbored** — bundled WYSIWYG Markdown editor plugin with mentions and image upload
 - Hook-based plugin system
 - SEO-friendly URLs
 - Localization (i18n) infrastructure

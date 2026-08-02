@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name: Editbored
+ * Plugin Name: editbored
  * Version: 1.0.0
  * Author: mlzog
  * Description: WYSIWYG Markdown editor with mentions and image upload
@@ -31,14 +31,14 @@ function editbored_init() {
     $editorUrl = $pluginUrl . '/assets/js/editbored.js?v=12';
 
     $head = '<link href="' . $cssUrl . '" rel="stylesheet">' . "\n";
-    $head .= '<script>window.Editbored = window.Editbored || {};window.Editbored.users = ' . $usersJson . ';window.Editbored.uploadUrl = ' . json_encode($uploadUrl) . ';window.Editbored.csrfToken = ' . json_encode($csrfToken) . ';</script>' . "\n";
+    $head .= '<script>window.editbored = window.editbored || {};window.editbored.users = ' . $usersJson . ';window.editbored.uploadUrl = ' . json_encode($uploadUrl) . ';window.editbored.csrfToken = ' . json_encode($csrfToken) . ';</script>' . "\n";
 
     $footer = '<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>' . "\n";
     $footer .= '<script async src="https://www.instagram.com/embed.js"></script>' . "\n";
     $footer .= '<div id="fb-root"></div><script async defer crossorigin="anonymous" src="https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v21.0"></script>' . "\n";
     $footer .= '<script src="' . $mentionsUrl . '"></script>' . "\n";
     $footer .= '<script src="' . $editorUrl . '"></script>' . "\n";
-    $footer .= '<script>window.Editbored = window.Editbored || {};window.Editbored.init && window.Editbored.init();</script>' . "\n";
+    $footer .= '<script>window.editbored = window.editbored || {};window.editbored.init && window.editbored.init();</script>' . "\n";
 
     $pluginManager->addHook('frontend_before_render', function() use ($head) {
         echo $head;

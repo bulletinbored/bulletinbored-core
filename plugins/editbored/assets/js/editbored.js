@@ -1,9 +1,9 @@
 (function() {
     'use strict';
 
-    const USERS = (window.Editbored && window.Editbored.users) ? window.Editbored.users : [];
-    const UPLOAD_URL = (window.Editbored && window.Editbored.uploadUrl) ? window.Editbored.uploadUrl : '';
-    const CSRF = (window.Editbored && window.Editbored.csrfToken) ? window.Editbored.csrfToken : '';
+    const USERS = (window.editbored && window.editbored.users) ? window.editbored.users : [];
+    const UPLOAD_URL = (window.editbored && window.editbored.uploadUrl) ? window.editbored.uploadUrl : '';
+    const CSRF = (window.editbored && window.editbored.csrfToken) ? window.editbored.csrfToken : '';
 
     var icons = {
         bold: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"></path><path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"></path></svg>',
@@ -719,7 +719,7 @@
             }
             // Content is markdown (old method), parse with marked
             if (typeof marked === 'undefined') {
-                console.log('Editbored: marked not loaded yet, retrying...');
+                console.log('editbored: marked not loaded yet, retrying...');
                 setTimeout(renderMarkdownContent, 200);
                 return;
             }
@@ -732,7 +732,7 @@
                 }
                 container.setAttribute('data-rendered', 'true');
             } catch(e) {
-                console.error('Editbored: Error rendering markdown:', e);
+                console.error('editbored: Error rendering markdown:', e);
                 container.innerHTML = '<p>' + escapeHtml(raw).replace(/\n/g, '<br>') + '</p>';
             }
         });
@@ -752,9 +752,9 @@
         init();
     }
 
-    window.Editbored = window.Editbored || {};
-    window.Editbored.init = init;
-    window.Editbored.refresh = function() {
+    window.editbored = window.editbored || {};
+    window.editbored.init = init;
+    window.editbored.refresh = function() {
         findTextareas().forEach(wrapTextarea);
     };
 })();

@@ -1409,7 +1409,7 @@ try {
         redirect(url('login'));
     }
     elseif ($action === 'editbored_upload' && $method === 'POST') {
-        // Image upload for Editbored editor
+        // Image upload for editbored editor
         if (!is_logged_in()) {
             http_response_code(403);
             echo json_encode(['error' => 'Login required']);

@@ -249,7 +249,7 @@ class PluginManager
             }
             return $this->capturedAdminHead;
         }
-        return implode("\n", array_filter($this->capturedHead, fn($s) => str_contains($s, 'Editbored') || str_starts_with($s, '<script') || str_starts_with($s, '<link')));
+        return implode("\n", array_filter($this->capturedHead, fn($s) => str_contains($s, 'editbored') || str_starts_with($s, '<script') || str_starts_with($s, '<link')));
     }
 
     public function getVersion(string $name): string

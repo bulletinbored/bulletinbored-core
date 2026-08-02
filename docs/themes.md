@@ -2,7 +2,7 @@
 
 Distributed themes and contributions are accepted under the terms of the [CLA.md](../CLA.md).
 
-The forum ships with **Freshbored**, a Bootstrap 5 dark navbar theme.
+The forum ships with **freshbored**, a Bootstrap 5 dark navbar theme.
 
 ## Theme Structure
 

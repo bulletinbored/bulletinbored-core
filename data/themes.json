@@ -1,7 +1,7 @@
 {
     "active": "freshbored",
     "freshbored": {
-        "name": "Freshbored",
+        "name": "freshbored",
         "version": "1.0.0",
         "author": "bulletinbored",
         "description": "Bootstrap 5 dark navbar theme"
