@@ -98,7 +98,12 @@
         ta.style.display = 'none';
 
         if (ta.value) {
-            if (typeof marked !== 'undefined') {
+            // Check if content looks like HTML (from new save method) or markdown (from old method)
+            if (/<[a-z][\s\S]*>/i.test(ta.value)) {
+                // Content is HTML, load directly
+                editor.innerHTML = ta.value;
+            } else if (typeof marked !== 'undefined') {
+                // Content is markdown, parse with marked
                 editor.innerHTML = marked.parse(ta.value);
             } else {
                 editor.textContent = ta.value;
@@ -111,7 +116,9 @@
             ta.removeAttribute('required');
             form.addEventListener('submit', function(e) {
                 try {
-                    ta.value = htmlToMarkdown(editor.innerHTML);
+                    // Save HTML directly instead of converting to markdown
+                    // This preserves all formatting (bold, italic, etc.)
+                    ta.value = editor.innerHTML;
                 } catch(e) {
                     ta.value = editor.textContent || editor.innerText || '';
                 }
@@ -686,28 +693,34 @@
     function renderMarkdownContent() {
         var containers = document.querySelectorAll('.markdown-content');
         if (containers.length === 0) return;
-        // Check if marked is available, if not, retry
-        if (typeof marked === 'undefined') {
-            console.log('Editbored: marked not loaded yet, retrying...');
-            setTimeout(renderMarkdownContent, 200);
-            return;
-        }
         containers.forEach(function(container) {
             if (container.getAttribute('data-rendered') === 'true') return;
-            // Store raw markdown in data attribute before rendering
-            var markdown = container.textContent || container.innerText || '';
-            if (!markdown.trim()) return;
-            container.setAttribute('data-raw', markdown);
+            var raw = container.textContent || container.innerText || '';
+            if (!raw.trim()) return;
+            // Check if content is already HTML (saved by new method)
+            var html = container.innerHTML;
+            if (/<[a-z][\s\S]*>/i.test(html)) {
+                // Content is already HTML, just mark as rendered
+                container.setAttribute('data-rendered', 'true');
+                return;
+            }
+            // Content is markdown (old method), parse with marked
+            if (typeof marked === 'undefined') {
+                console.log('Editbored: marked not loaded yet, retrying...');
+                setTimeout(renderMarkdownContent, 200);
+                return;
+            }
+            container.setAttribute('data-raw', raw);
             try {
                 if (marked.parse) {
-                    container.innerHTML = marked.parse(markdown);
+                    container.innerHTML = marked.parse(raw);
                 } else if (typeof marked === 'function') {
-                    container.innerHTML = marked(markdown);
+                    container.innerHTML = marked(raw);
                 }
                 container.setAttribute('data-rendered', 'true');
             } catch(e) {
                 console.error('Editbored: Error rendering markdown:', e);
-                container.innerHTML = '<p>' + escapeHtml(markdown).replace(/\n/g, '<br>') + '</p>';
+                container.innerHTML = '<p>' + escapeHtml(raw).replace(/\n/g, '<br>') + '</p>';
             }
         });
         // Process embeds after rendering

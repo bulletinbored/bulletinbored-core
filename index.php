@@ -245,8 +245,13 @@ function escape($s) { return htmlspecialchars($s, ENT_QUOTES, 'UTF-8'); }
 
 function marked_parse($text) {
     if (empty($text)) return '';
-    // Content is already escaped by validate_input(), don't escape again
-    // JavaScript renderMarkdownContent() will parse it with marked.parse()
+    // Check if content is HTML (saved by editbored editor)
+    // The content is escaped by validate_input(), so HTML tags appear as <tag>
+    if (str_contains($text, '&lt;')) {
+        // Unescape HTML and output directly
+        return '<div class="markdown-content">' . html_entity_decode($text, ENT_QUOTES, 'UTF-8') . '</div>';
+    }
+    // Content is markdown, JavaScript renderMarkdownContent() will parse it with marked.parse()
     return '<div class="markdown-content">' . $text . '</div>';
 }
 function is_logged_in() { return isset($_SESSION['user_id']); }
