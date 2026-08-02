@@ -1,0 +1,122 @@
+.textmebored-nav-item {
+    position: relative;
+}
+
+.textmebored-bell {
+    position: relative;
+    color: #fff;
+    text-decoration: none;
+    transition: color 0.15s ease;
+}
+
+.textmebored-bell:hover {
+    color: #f8f9fa;
+}
+
+.textmebored-unread-count {
+    position: absolute;
+    top: -4px;
+    right: -8px;
+    font-size: 10px;
+    padding: 2px 6px;
+    min-width: 18px;
+    text-align: center;
+    line-height: 1;
+}
+
+.textmebored-dropdown {
+    padding: 0;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+}
+
+.textmebored-dropdown .dropdown-header {
+    background: #f8f9fa;
+    padding: 10px 16px;
+    font-weight: 600;
+    font-size: 14px;
+    color: #333;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.textmebored-dropdown .dropdown-divider {
+    margin: 0;
+}
+
+.textmebored-item {
+    display: block;
+    padding: 10px 16px;
+    color: #333;
+    text-decoration: none;
+    border-bottom: 1px solid #f0f0f0;
+    transition: background 0.15s ease;
+    cursor: pointer;
+}
+
+.textmebored-item:last-child {
+    border-bottom: none;
+}
+
+.textmebored-item:hover {
+    background: #f8f9fa;
+    color: #000;
+}
+
+.textmebored-item.unread {
+    background: #f0f7ff;
+}
+
+.textmebored-item-title {
+    font-weight: 600;
+    font-size: 13px;
+    margin-bottom: 2px;
+    color: #1a1a1a;
+}
+
+.textmebored-item-message {
+    font-size: 12px;
+    color: #666;
+    line-height: 1.4;
+}
+
+.textmebored-item-time {
+    font-size: 11px;
+    color: #999;
+    margin-top: 2px;
+}
+
+.textmebored-empty-msg {
+    padding: 16px;
+    font-size: 13px;
+    color: #888;
+}
+
+.textmebored-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 8px 16px;
+    background: #f8f9fa;
+    border-top: 1px solid #e0e0e0;
+}
+
+.textmebored-actions .btn-sm {
+    font-size: 12px;
+    padding: 4px 10px;
+}
+
+.textmebored-nav-item .nav-link {
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.textmebored-caret {
+    padding: 0.5rem 0.4rem;
+    color: #fff;
+    text-decoration: none;
+}
+.textmebored-caret:hover {
+    color: #f8f9fa;
+}

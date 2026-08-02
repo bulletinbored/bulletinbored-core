@@ -47,4 +47,5 @@ return [
     'notify_replies' => 'Notify me of replies',
     'reply_notification_subject' => 'New reply in: {title}',
     'reply_notification_body' => '<p>Hello {username},</p><p>There is a new reply in the thread <strong>{title}</strong> by <strong>{author}</strong>.</p><p><a href="{link}">View thread</a></p>',
+    'send_message' => 'Send message',
 ];

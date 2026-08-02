@@ -154,6 +154,25 @@ if ($dbDriver === 'mysql') {
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(thread_id, user_id)
             );
+            CREATE TABLE notifications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                type VARCHAR(50) DEFAULT 'info',
+                title TEXT NOT NULL,
+                message TEXT,
+                link TEXT,
+                read INTEGER DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE private_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sender_id INTEGER NOT NULL,
+                recipient_id INTEGER NOT NULL,
+                subject TEXT DEFAULT '',
+                content TEXT NOT NULL,
+                read INTEGER DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
         ");
         
         // Insert default data
@@ -220,6 +239,37 @@ if ($dbDriver === 'mysql') {
                     user_id INTEGER NOT NULL,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     UNIQUE(thread_id, user_id)
+                )
+            ");
+        } catch (PDOException $e) {}
+
+        // Create notifications table if not exists
+        try {
+            $pdo->exec("
+                CREATE TABLE IF NOT EXISTS notifications (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    type VARCHAR(50) DEFAULT 'info',
+                    title TEXT NOT NULL,
+                    message TEXT,
+                    link TEXT,
+                    read INTEGER DEFAULT 0,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            ");
+        } catch (PDOException $e) {}
+
+        // Create private_messages table if not exists
+        try {
+            $pdo->exec("
+                CREATE TABLE IF NOT EXISTS private_messages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    sender_id INTEGER NOT NULL,
+                    recipient_id INTEGER NOT NULL,
+                    subject TEXT DEFAULT '',
+                    content TEXT NOT NULL,
+                    read INTEGER DEFAULT 0,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
             ");
         } catch (PDOException $e) {}
@@ -1453,6 +1503,86 @@ try {
         http_response_code(500);
         echo json_encode(['error' => 'Failed to move uploaded file']);
         exit;
+    }
+    elseif ($action === 'notifications') {
+        // Notification center
+        if (!is_logged_in()) {
+            die('Login required');
+        }
+        if ($method === 'POST' && validate_csrf_token($_POST['csrf_token'] ?? '')) {
+            if (isset($_POST['do']) && $_POST['do'] === 'mark_read' && isset($_GET['id'])) {
+                $id = (int)$_GET['id'];
+                if ($id > 0) {
+                    $pdo->prepare("UPDATE notifications SET read = 1 WHERE id = ? AND user_id = ?")
+                        ->execute([$id, $_SESSION['user_id']]);
+                }
+            }
+            if (isset($_POST['do']) && $_POST['do'] === 'mark_all_read') {
+                $pdo->prepare("UPDATE notifications SET read = 1 WHERE user_id = ? AND read = 0")
+                    ->execute([$_SESSION['user_id']]);
+            }
+            redirect('?action=notifications');
+        }
+        $notifications = $pdo->prepare("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC");
+        $notifications->execute([$_SESSION['user_id']]);
+        $notifications = $notifications->fetchAll();
+        include __DIR__.'/views/notifications.php';
+    }
+    elseif ($action === 'messages') {
+        // Private messages center
+        if (!is_logged_in()) {
+            die('Login required');
+        }
+        if ($method === 'POST' && isset($_POST['content']) && validate_csrf_token($_POST['csrf_token'] ?? '')) {
+            $recipientId = (int)($_GET['conversation'] ?? 0);
+            $content = trim($_POST['content'] ?? '');
+            if ($recipientId > 0 && $content !== '') {
+                $stmt = $pdo->prepare("INSERT INTO private_messages (sender_id, recipient_id, subject, content) VALUES (?, ?, '', ?)");
+                $stmt->execute([$_SESSION['user_id'], $recipientId, $content]);
+            }
+            redirect('?action=messages&conversation=' . $recipientId);
+        }
+        $conversationUserId = (int)($_GET['conversation'] ?? 0);
+        if ($conversationUserId > 0) {
+            $messages = $pdo->prepare("
+                SELECT pm.*, u.username as sender_name
+                FROM private_messages pm
+                JOIN users u ON pm.sender_id = u.id
+                WHERE (pm.sender_id = :me AND pm.recipient_id = :other) OR (pm.sender_id = :other AND pm.recipient_id = :me)
+                ORDER BY pm.created_at ASC
+            ");
+            $messages->execute(['me' => $_SESSION['user_id'], 'other' => $conversationUserId]);
+            $messages = $messages->fetchAll();
+
+            $pdo->prepare("UPDATE private_messages SET read = 1 WHERE recipient_id = :me AND sender_id = :other AND read = 0")
+                ->execute(['me' => $_SESSION['user_id'], 'other' => $conversationUserId]);
+
+            $otherUser = $pdo->prepare("SELECT username FROM users WHERE id = ?");
+            $otherUser->execute([$conversationUserId]);
+            $otherUsername = $otherUser->fetchColumn();
+
+            include __DIR__.'/views/messages.php';
+        } else {
+            $conversations = $pdo->prepare("
+                SELECT
+                    CASE WHEN sender_id = :uid THEN recipient_id ELSE sender_id END as other_user_id,
+                    MAX(created_at) as last_message_at,
+                    MAX(read) as last_read,
+                    (SELECT content FROM private_messages pm2
+                     WHERE ((pm2.sender_id = :uid AND pm2.recipient_id = CASE WHEN pm.sender_id = :uid THEN pm.recipient_id ELSE pm.sender_id END)
+                         OR (pm2.recipient_id = :uid AND pm2.sender_id = CASE WHEN pm.sender_id = :uid THEN pm.recipient_id ELSE pm.sender_id END))
+                     ORDER BY pm2.created_at DESC LIMIT 1) as last_message,
+                    (SELECT username FROM users u WHERE u.id = CASE WHEN pm.sender_id = :uid THEN pm.recipient_id ELSE pm.sender_id END) as other_username,
+                    SUM(CASE WHEN recipient_id = :uid AND read = 0 THEN 1 ELSE 0 END) as unread_count
+                FROM private_messages pm
+                WHERE sender_id = :uid OR recipient_id = :uid
+                GROUP BY other_user_id
+                ORDER BY last_message_at DESC
+            ");
+            $conversations->execute(['uid' => $_SESSION['user_id']]);
+            $conversations = $conversations->fetchAll();
+            include __DIR__.'/views/messages.php';
+        }
     }
     else {
         // Not found

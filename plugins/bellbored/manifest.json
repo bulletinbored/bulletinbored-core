@@ -1,0 +1,7 @@
+{
+    "name": "bellbored",
+    "version": "1.0.0",
+    "author": "mlzog",
+    "description": "Notification center for the forum",
+    "bootstrap": "bellbored.php"
+}

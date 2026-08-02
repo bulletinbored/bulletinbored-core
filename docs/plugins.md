@@ -179,6 +179,62 @@ The forum ships with the **editbored** plugin as an example of a folder-based pl
 
 See `plugins/editbored/` for the full implementation.
 
+## Example: bellbored Plugin
+
+The forum ships with the **bellbored** notification center plugin:
+
+- Adds a notification bell icon to the navbar for logged-in users
+- Creates notifications when new threads or replies are posted in watched threads
+- Sends welcome notifications to newly registered users
+- Stores notifications in a dedicated `notifications` database table
+- Supports marking notifications as read (single or bulk)
+- AJAX-powered dropdown with unread count badge
+
+### Directory Structure
+
+```
+plugins/
+└── bellbored/
+    ├── manifest.json
+    ├── bellbored.php
+    ├── api.php
+    ├── assets/
+    │   ├── css/
+    │   │   └── bellbored.css
+    │   └── js/
+    │       └── bellbored.js
+    └── lang/
+        └── en.php
+```
+
+## Example: textmebored Plugin
+
+The forum ships with the **textmebored** private messaging plugin:
+
+- Adds an envelope icon to the navbar for logged-in users
+- Provides a conversation list with unread message indicators
+- Opens a modal conversation view for reading and sending private messages
+- Stores messages in a dedicated `private_messages` database table
+- Supports real-time message sending via AJAX
+- Auto-marks messages as read when opening a conversation
+
+### Directory Structure
+
+```
+plugins/
+└── textmebored/
+    ├── manifest.json
+    ├── textmebored.php
+    ├── api.php
+    ├── assets/
+    │   ├── css/
+    │   │   └── textmebored.css
+    │   └── js/
+    │       └── textmebored.js
+    └── lang/
+        └── en.php
+```
+
 ## Plugin Manager API
 
 ```php

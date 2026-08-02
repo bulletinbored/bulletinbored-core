@@ -21,7 +21,9 @@
                     </span>
                     <p class="text-muted small mb-0"><i class="fas fa-calendar me-1"></i><?= t('joined') ?>: <?= escape($profileUser['created_at'] ?? 'N/A') ?></p>
                     <?php if (function_exists('is_logged_in') && is_logged_in() && $_SESSION['user_id'] == $profileUser['id']): ?>
-                        <hr><a href="<?= url('edit_profile') ?>" class="btn btn-forum btn-sm w-100"><i class="fas fa-edit me-1"></i><?= t('edit_profile') ?></a>
+                        <hr><a href="<?= url('edit_profile') ?>" class="btn btn-forum btn-sm w-100 mb-2"><i class="fas fa-edit me-1"></i><?= t('edit_profile') ?></a>
+                    <?php elseif (function_exists('is_logged_in') && is_logged_in()): ?>
+                        <hr><button class="btn btn-forum btn-sm w-100 mb-2" onclick="if(window.textmebored && window.textmebored.openConversation){window.textmebored.openConversation(<?= (int)$profileUser['id'] ?>, '<?= escape(addslashes($profileUser['username'])) ?>');}else{alert('Messaggistica non disponibile');}"><i class="fas fa-envelope me-1"></i><?= t('send_message') ?></button>
                     <?php endif; ?>
                 </div>
             </div>
