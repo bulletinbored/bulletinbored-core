@@ -52,8 +52,90 @@ function url($action, $params = []) {
             $user = $params['user'] ?? '';
             unset($query['user']);
             return $base . '/u/' . urlencode($user) . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'home':
+            return $base . '/';
+        case 'login':
+            return $base . '/login' . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'register':
+            return $base . '/register' . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'logout':
+            return $base . '/logout' . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'forgot_password':
+            return $base . '/forgot-password' . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'reset_password':
+            return $base . '/reset-password' . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'new_thread':
+            return $base . '/new-thread' . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'edit_profile':
+            return $base . '/edit-profile' . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'edit_post':
+            $id = $params['id'] ?? 0;
+            unset($query['id']);
+            return $base . '/edit-post/' . $id . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'delete_post':
+            $id = $params['id'] ?? 0;
+            unset($query['id']);
+            return $base . '/delete-post/' . $id . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'reply':
+            return $base . '/reply' . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'watch':
+            return $base . '/watch' . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'unwatch':
+            return $base . '/unwatch' . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'notifications':
+            return $base . '/notifications' . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'messages':
+            return $base . '/messages' . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'search':
+            return $base . '/search' . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'admin':
+            return $base . '/admin' . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'admin_moderation':
+            return $base . '/admin/moderation' . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'admin_categories':
+            return $base . '/admin/categories' . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'admin_users':
+            return $base . '/admin/users' . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'admin_settings':
+            return $base . '/admin/settings' . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'admin_langs':
+            return $base . '/admin/langs' . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'admin_plugins':
+            return $base . '/admin/plugins' . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'admin_themes':
+            return $base . '/admin/themes' . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'admin_updates':
+            return $base . '/admin/updates' . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'moderate':
+            return $base . '/admin/moderate' . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'create_category':
+        case 'edit_category':
+            return $base . '/admin/categories' . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'delete_category':
+            return $base . '/admin/delete-category' . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'delete_user':
+            return $base . '/admin/delete-user' . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'do_login':
+        case 'do_register':
+        case 'do_forgot_password':
+        case 'do_reset_password':
+        case 'create_thread':
+        case 'update_profile':
+        case 'upload_avatar':
+        case 'editbored_upload':
+            $path = [
+                'do_login' => '/login',
+                'do_register' => '/register',
+                'do_forgot_password' => '/forgot-password',
+                'do_reset_password' => '/reset-password',
+                'create_thread' => '/new-thread',
+                'update_profile' => '/edit-profile',
+                'upload_avatar' => '/edit-profile',
+                'editbored_upload' => '/editbored-upload',
+            ][$action];
+            return $base . $path . (!empty($query) ? '?' . http_build_query($query) : '');
         default:
-            return $base . '/?' . http_build_query(array_merge(['action' => $action], $params));
+            return $base . '/' . ltrim($action, '/') . (!empty($query) ? '?' . http_build_query($query) : '');
     }
 }
 
@@ -410,6 +492,7 @@ if (!isset($_GET['action'])) {
     if ($base !== '' && str_starts_with($reqPath, $base . '/')) {
         $reqPath = substr($reqPath, strlen($base) + 1);
     }
+
     if (preg_match('#^thread/([0-9]+)(?:-[^/]+)?$#', $reqPath, $m)) {
         $_GET['action'] = 'thread';
         $_GET['id'] = $m[1];
@@ -419,6 +502,50 @@ if (!isset($_GET['action'])) {
     } elseif (preg_match('#^u/([^/]+)$#', $reqPath, $m)) {
         $_GET['action'] = 'profile';
         $_GET['user'] = urldecode($m[1]);
+    } elseif (preg_match('#^edit-post/([0-9]+)$#', $reqPath, $m)) {
+        $_GET['action'] = 'edit_post';
+        $_GET['id'] = (int)$m[1];
+    } elseif (preg_match('#^delete-post/([0-9]+)$#', $reqPath, $m)) {
+        $_GET['action'] = 'delete_post';
+        $_GET['id'] = (int)$m[1];
+    } elseif ($reqPath === '' || $reqPath === 'index.php') {
+        $_GET['action'] = 'home';
+    } elseif (preg_match('#^admin$#', $reqPath)) {
+        $_GET['action'] = 'admin';
+    } elseif (preg_match('#^admin/moderation$#', $reqPath)) {
+        $_GET['action'] = 'admin_moderation';
+    } elseif (preg_match('#^admin/categories$#', $reqPath)) {
+        $_GET['action'] = 'admin_categories';
+    } elseif (preg_match('#^admin/users$#', $reqPath)) {
+        $_GET['action'] = 'admin_users';
+    } elseif (preg_match('#^admin/settings$#', $reqPath)) {
+        $_GET['action'] = 'admin_settings';
+    } elseif (preg_match('#^admin/langs$#', $reqPath)) {
+        $_GET['action'] = 'admin_langs';
+    } elseif (preg_match('#^admin/plugins$#', $reqPath)) {
+        $_GET['action'] = 'admin_plugins';
+    } elseif (preg_match('#^admin/themes$#', $reqPath)) {
+        $_GET['action'] = 'admin_themes';
+    } elseif (preg_match('#^admin/updates$#', $reqPath)) {
+        $_GET['action'] = 'admin_updates';
+    } elseif (preg_match('#^admin/moderate$#', $reqPath)) {
+        $_GET['action'] = 'moderate';
+    } elseif (preg_match('#^admin/delete-category$#', $reqPath)) {
+        $_GET['action'] = 'delete_category';
+    } elseif (preg_match('#^admin/delete-user$#', $reqPath)) {
+        $_GET['action'] = 'delete_user';
+    } elseif (preg_match('#^edit-profile$#', $reqPath)) {
+        $_GET['action'] = 'edit_profile';
+    } elseif (preg_match('#^forgot-password$#', $reqPath)) {
+        $_GET['action'] = 'forgot_password';
+    } elseif (preg_match('#^reset-password$#', $reqPath)) {
+        $_GET['action'] = 'reset_password';
+    } elseif (preg_match('#^new-thread$#', $reqPath)) {
+        $_GET['action'] = 'new_thread';
+    } elseif (preg_match('#^editbored-upload$#', $reqPath)) {
+        $_GET['action'] = 'editbored_upload';
+    } elseif (preg_match('#^[^/]+$#', $reqPath, $m)) {
+        $_GET['action'] = $m[0];
     }
 }
 
@@ -487,66 +614,60 @@ try {
         include __DIR__.'/views/thread.php';
     }
     elseif ($action === 'new_thread') {
-        // Show new thread form
+        // Show new thread form / handle submission
         if (!is_logged_in()) {
             die('Login required');
         }
-        
-        $categories = $pdo->query("SELECT * FROM categories ORDER BY position")->fetchAll();
-        include __DIR__.'/views/new_thread.php';
-    }
-    elseif ($action === 'create_thread' && $method === 'POST') {
-        // Handle new thread submission
-        if (!is_logged_in()) {
-            die('Login required');
-        }
-        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
-            die('CSRF token invalid');
-        }
-        
-        $title = validate_input($_POST['title'] ?? '');
-        $content = validate_input($_POST['content'] ?? '');
-        $categoryId = (int)($_POST['category_id'] ?? 1);
-        
-        if ($title === '' || $content === '') {
-            die('Title and content are required');
-        }
-        
-        $stmt = $pdo->prepare("
-            INSERT INTO threads (category_id, user_id, title, content) 
-            VALUES (?, ?, ?, ?)
-        ");
-        $stmt->execute([$categoryId, $_SESSION['user_id'], $title, $content]);
-        $threadId = $pdo->lastInsertId();
-        
-        // Handle file uploads
-        if (!empty($_FILES['attachments']['name'][0])) {
-            foreach ($_FILES['attachments']['tmp_name'] as $index => $tmpName) {
-                if ($_FILES['attachments']['error'][$index] === UPLOAD_ERR_OK) {
-                    $originalName = basename($_FILES['attachments']['name'][$index]);
-                    $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
-                    $safeName = uniqid().'.'.$extension;
-                    $uploadPath = __DIR__.'/uploads/'.$safeName;
-                    
-                    if (move_uploaded_file($tmpName, $uploadPath)) {
-                        $pdo->prepare("
-                            INSERT INTO uploads (thread_id, user_id, filename, original_name, size) 
-                            VALUES (?, ?, ?, ?, ?)
-                        ")->execute([
-                            $threadId,
-                            $_SESSION['user_id'],
-                            $safeName,
-                            $originalName,
-                            $_FILES['attachments']['size'][$index]
-                        ]);
+        if ($method === 'POST') {
+            if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+                die('CSRF token invalid');
+            }
+            
+            $title = validate_input($_POST['title'] ?? '');
+            $content = validate_input($_POST['content'] ?? '');
+            $categoryId = (int)($_POST['category_id'] ?? 1);
+            
+            if ($title === '' || $content === '') {
+                die('Title and content are required');
+            }
+            
+            $stmt = $pdo->prepare("
+                INSERT INTO threads (category_id, user_id, title, content) 
+                VALUES (?, ?, ?, ?)
+            ");
+            $stmt->execute([$categoryId, $_SESSION['user_id'], $title, $content]);
+            $threadId = $pdo->lastInsertId();
+            
+            // Handle file uploads
+            if (!empty($_FILES['attachments']['name'][0])) {
+                foreach ($_FILES['attachments']['name'] as $index => $originalName) {
+                    if ($_FILES['attachments']['error'][$index] === UPLOAD_ERR_OK) {
+                        $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+                        $safeName = uniqid().'.'.$extension;
+                        $uploadPath = __DIR__.'/uploads/'.$safeName;
+                        
+                        if (move_uploaded_file($_FILES['attachments']['tmp_name'][$index], $uploadPath)) {
+                            $pdo->prepare("
+                                INSERT INTO uploads (thread_id, user_id, filename, original_name, size) 
+                                VALUES (?, ?, ?, ?, ?)
+                            ")->execute([
+                                $threadId,
+                                $_SESSION['user_id'],
+                                $safeName,
+                                basename($originalName),
+                                $_FILES['attachments']['size'][$index]
+                            ]);
+                        }
                     }
                 }
             }
+            
+            $pluginManager->runHook('after_thread', $threadId);
+            
+            redirect(url('thread', ['id' => $threadId, 'slug' => slugify($_POST['title'] ?? '')]));
         }
-        
-        $pluginManager->runHook('after_thread', $threadId);
-        
-        redirect(url('thread', ['id' => $threadId, 'slug' => slugify($_POST['title'] ?? '')]));
+        $categories = $pdo->query("SELECT * FROM categories ORDER BY position")->fetchAll();
+        include __DIR__.'/views/new_thread.php';
     }
     elseif ($action === 'reply' && $method === 'POST') {
         // Handle reply submission
@@ -603,7 +724,7 @@ try {
         redirect(url('thread', ['id' => $threadId, 'slug' => slugify($threadTitle)]));
     }
     elseif ($action === 'edit_post' && isset($_GET['id'])) {
-        // Show edit post form
+        // Show edit post form / handle post update
         if (!is_logged_in()) {
             die('Login required');
         }
@@ -627,43 +748,40 @@ try {
             die('Not authorized');
         }
         
+        if ($method === 'POST') {
+            if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+                die('CSRF token invalid');
+            }
+            
+            $postId = (int)($_POST['post_id'] ?? 0);
+            $content = validate_input($_POST['content'] ?? '');
+            
+            if ($postId <= 0 || $content === '') {
+                die('Invalid post or empty content');
+            }
+            
+            // Check permissions
+            $postStmt2 = $pdo->prepare("SELECT user_id FROM posts WHERE id = ?");
+            $postStmt2->execute([$postId]);
+            $post = $postStmt2->fetch();
+            if (!$post || ($post['user_id'] !== $_SESSION['user_id'] && !is_admin())) {
+                die('Not authorized');
+            }
+            
+            $pdo->prepare("UPDATE posts SET content = ? WHERE id = ?")
+                ->execute([$content, $postId]);
+            
+            // Get thread ID for redirect
+            $tidStmt = $pdo->prepare("SELECT thread_id FROM posts WHERE id = ?");
+            $tidStmt->execute([$postId]);
+            $threadId = $tidStmt->fetchColumn();
+            $titleStmt = $pdo->prepare("SELECT title FROM threads WHERE id = ?");
+            $titleStmt->execute([$threadId]);
+            $threadTitle = $titleStmt->fetchColumn();
+            redirect(url('thread', ['id' => $threadId, 'slug' => slugify($threadTitle)]));
+        }
+        
         include __DIR__.'/views/edit_post.php';
-    }
-    elseif ($action === 'update_post' && $method === 'POST') {
-        // Handle post update
-        if (!is_logged_in()) {
-            die('Login required');
-        }
-        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
-            die('CSRF token invalid');
-        }
-        
-        $postId = (int)($_POST['post_id'] ?? 0);
-        $content = validate_input($_POST['content'] ?? '');
-        
-        if ($postId <= 0 || $content === '') {
-            die('Invalid post or empty content');
-        }
-        
-        // Check permissions
-        $postStmt2 = $pdo->prepare("SELECT user_id FROM posts WHERE id = ?");
-        $postStmt2->execute([$postId]);
-        $post = $postStmt2->fetch();
-        if (!$post || ($post['user_id'] !== $_SESSION['user_id'] && !is_admin())) {
-            die('Not authorized');
-        }
-        
-        $pdo->prepare("UPDATE posts SET content = ? WHERE id = ?")
-            ->execute([$content, $postId]);
-        
-        // Get thread ID for redirect
-        $tidStmt = $pdo->prepare("SELECT thread_id FROM posts WHERE id = ?");
-        $tidStmt->execute([$postId]);
-        $threadId = $tidStmt->fetchColumn();
-        $titleStmt = $pdo->prepare("SELECT title FROM threads WHERE id = ?");
-        $titleStmt->execute([$threadId]);
-        $threadTitle = $titleStmt->fetchColumn();
-        redirect(url('thread', ['id' => $threadId, 'slug' => slugify($threadTitle)]));
     }
     elseif ($action === 'delete_post' && isset($_GET['id']) && $method === 'POST') {
         // Handle post deletion
@@ -706,142 +824,77 @@ try {
         }
         redirect($_SERVER['HTTP_REFERER'] ?? url('home'));
     }
-    elseif ($action === 'upload_avatar' && $method === 'POST' && is_logged_in()) {
-        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
-            die('CSRF token invalid');
-        }
-
-        $avatarDir = __DIR__.'/uploads/avatars/';
-        if (!is_dir($avatarDir)) {
-            @mkdir($avatarDir, 0777, true);
-        }
-
-        if (empty($_FILES['avatar']['name']) || $_FILES['avatar']['error'] !== UPLOAD_ERR_OK) {
-            $_SESSION['avatar_upload_error'] = 'No file uploaded or upload error occurred.';
-            redirect(url('edit_profile'));
-        }
-
-        $allowed = $config['avatar_allowed_types'] ?? ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-        $maxSize = $config['avatar_max_size'] ?? 2*1024*1024;
-
-        $finfo = new finfo(FILEINFO_MIME_TYPE);
-        $mime = $finfo->file($_FILES['avatar']['tmp_name']);
-
-        if (!in_array($mime, $allowed)) {
-            $_SESSION['avatar_upload_error'] = 'Invalid file type. Allowed: JPG, PNG, GIF, WebP.';
-            redirect(url('edit_profile'));
-        }
-
-        if ($_FILES['avatar']['size'] > $maxSize) {
-            $_SESSION['avatar_upload_error'] = 'File is too large. Max 2MB.';
-            redirect(url('edit_profile'));
-        }
-
-        $ext = match($mime) {
-            'image/jpeg' => 'jpg',
-            'image/png' => 'png',
-            'image/gif' => 'gif',
-            'image/webp' => 'webp',
-            default => 'bin',
-        };
-
-        $safeName = 'avatar_'.$_SESSION['user_id'].'.'.$ext;
-        $uploadPath = $avatarDir . $safeName;
-
-        foreach (glob($avatarDir . 'avatar_'.$_SESSION['user_id'].'.*') as $oldAvatar) {
-            @unlink($oldAvatar);
-        }
-
-        if (move_uploaded_file($_FILES['avatar']['tmp_name'], $uploadPath)) {
-            try {
-                $pdo->prepare("UPDATE users SET avatar = ? WHERE id = ?")
-                    ->execute([$safeName, $_SESSION['user_id']]);
-                $_SESSION['avatar'] = $safeName;
-                $_SESSION['avatar_upload_success'] = 'Avatar uploaded successfully.';
-            } catch (Exception $e) {
-                $_SESSION['avatar_upload_error'] = 'Database error: ' . $e->getMessage();
-                @unlink($uploadPath);
-            }
-        } else {
-            $_SESSION['avatar_upload_error'] = 'Failed to move uploaded file. Check directory permissions.';
-        }
-
-        redirect(url('edit_profile'));
-    }
     elseif ($action === 'login') {
-        // Show login form
+        // Show login form / handle login submission
         if (is_logged_in()) {
             redirect(url('home'));
         }
+        if ($method === 'POST') {
+            if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+                die('CSRF token invalid');
+            }
+            
+            $username = $_POST['username'] ?? '';
+            $password = $_POST['password'] ?? '';
+            
+            $stmt = $pdo->prepare("SELECT * FROM users WHERE username = ?");
+            $stmt->execute([$username]);
+            $user = $stmt->fetch();
+            
+            if ($user && password_verify($password, $user['password'])) {
+                $_SESSION['user_id'] = $user['id'];
+                $_SESSION['user_role'] = $user['role'];
+                $_SESSION['username'] = $user['username'];
+                $_SESSION['email'] = $user['email'] ?? '';
+                $_SESSION['avatar'] = $user['avatar'] ?? '';
+                redirect(url('home'));
+            } else {
+                $error = 'Invalid credentials';
+            }
+        }
         include __DIR__.'/views/login.php';
     }
-    elseif ($action === 'do_login' && $method === 'POST') {
-        // Handle login submission
-        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
-            die('CSRF token invalid');
-        }
-        
-        $username = $_POST['username'] ?? '';
-        $password = $_POST['password'] ?? '';
-        
-        $stmt = $pdo->prepare("SELECT * FROM users WHERE username = ?");
-        $stmt->execute([$username]);
-        $user = $stmt->fetch();
-        
-        if ($user && password_verify($password, $user['password'])) {
-            $_SESSION['user_id'] = $user['id'];
-            $_SESSION['user_role'] = $user['role'];
-            $_SESSION['username'] = $user['username'];
-            $_SESSION['email'] = $user['email'] ?? '';
-            $_SESSION['avatar'] = $user['avatar'] ?? '';
-            redirect(url('home'));
-        } else {
-            $error = 'Invalid credentials';
-            include __DIR__.'/views/login.php';
-        }
-    }
     elseif ($action === 'register') {
-        // Show registration form
+        // Show registration form / handle registration
+        if ($method === 'POST') {
+            if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+                die('CSRF token invalid');
+            }
+            
+            $username = validate_input($_POST['username'] ?? '');
+            $password = $_POST['password'] ?? '';
+            
+            if ($username === '' || $password === '') {
+                die('Username and password are required');
+            }
+            
+            // Check if username exists
+            $existsStmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE username = ?");
+            $existsStmt->execute([$username]);
+            $exists = $existsStmt->fetchColumn();
+            if ($exists > 0) {
+                die('Username already taken');
+            }
+            
+            $email = validate_input($_POST['email'] ?? '');
+            
+            $pdo->prepare("INSERT INTO users (username, password, email, role) VALUES (?, ?, ?, 'user')")
+                ->execute([$username, password_hash($password, PASSWORD_DEFAULT), $email]);
+            
+            $pluginManager->runHook('user_registered', $pdo->lastInsertId(), $username);
+            
+            // Send welcome email
+            if (!empty($email)) {
+                $subject = 'Welcome to '.($config['site_name'] ?? 'bulletinbored');
+                $body = '<p>Hello '.escape($username).',</p>
+                        <p>Welcome to '.($config['site_name'] ?? 'bulletinbored').'!</p>
+                        <p>Your account has been successfully created. You can now login and start participating in discussions.</p>';
+                send_email($email, $subject, $body);
+            }
+            
+            redirect(url('login'));
+        }
         include __DIR__.'/views/register.php';
-    }
-    elseif ($action === 'do_register' && $method === 'POST') {
-        // Handle registration
-        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
-            die('CSRF token invalid');
-        }
-        
-        $username = validate_input($_POST['username'] ?? '');
-        $password = $_POST['password'] ?? '';
-        
-        if ($username === '' || $password === '') {
-            die('Username and password are required');
-        }
-        
-        // Check if username exists
-        $existsStmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE username = ?");
-        $existsStmt->execute([$username]);
-        $exists = $existsStmt->fetchColumn();
-        if ($exists > 0) {
-            die('Username already taken');
-        }
-        
-        $email = validate_input($_POST['email'] ?? '');
-        
-        $pdo->prepare("INSERT INTO users (username, password, email, role) VALUES (?, ?, ?, 'user')")
-            ->execute([$username, password_hash($password, PASSWORD_DEFAULT), $email]);
-        
-        $pluginManager->runHook('user_registered', $pdo->lastInsertId(), $username);
-        
-        // Send welcome email
-        if (!empty($email)) {
-            $subject = 'Welcome to '.($config['site_name'] ?? 'bulletinbored');
-            $body = '<p>Hello '.escape($username).',</p>
-                    <p>Welcome to '.escape($config['site_name'] ?? 'bulletinbored').'!</p>
-                    <p>Your account has been successfully created. You can now login and start participating in discussions.</p>';
-            send_email($email, $subject, $body);
-        }
-        
-        redirect(url('login'));
     }
     elseif ($action === 'logout') {
         // Handle logout
@@ -873,59 +926,112 @@ try {
         include __DIR__.'/views/profile.php';
     }
     elseif ($action === 'edit_profile') {
-        // Show edit profile form
+        // Show edit profile form / handle profile update / upload avatar
         if (!is_logged_in()) {
             die('Login required');
+        }
+        if ($method === 'POST') {
+            if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+                die('CSRF token invalid');
+            }
+            if (!empty($_FILES['avatar']['name'])) {
+                $avatarDir = __DIR__.'/uploads/avatars/';
+                if (!is_dir($avatarDir)) {
+                    @mkdir($avatarDir, 0777, true);
+                }
+
+                if (empty($_FILES['avatar']['name']) || $_FILES['avatar']['error'] !== UPLOAD_ERR_OK) {
+                    $_SESSION['avatar_upload_error'] = 'No file uploaded or upload error occurred.';
+                    redirect(url('edit_profile'));
+                }
+
+                $allowed = $config['avatar_allowed_types'] ?? ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+                $maxSize = $config['avatar_max_size'] ?? 2*1024*1024;
+
+                $finfo = new finfo(FILEINFO_MIME_TYPE);
+                $mime = $finfo->file($_FILES['avatar']['tmp_name']);
+
+                if (!in_array($mime, $allowed)) {
+                    $_SESSION['avatar_upload_error'] = 'Invalid file type. Allowed: JPG, PNG, GIF, WebP.';
+                    redirect(url('edit_profile'));
+                }
+
+                if ($_FILES['avatar']['size'] > $maxSize) {
+                    $_SESSION['avatar_upload_error'] = 'File is too large. Max 2MB.';
+                    redirect(url('edit_profile'));
+                }
+
+                $ext = match($mime) {
+                    'image/jpeg' => 'jpg',
+                    'image/png' => 'png',
+                    'image/gif' => 'gif',
+                    'image/webp' => 'webp',
+                    default => 'bin',
+                };
+
+                $safeName = 'avatar_'.$_SESSION['user_id'].'.'.$ext;
+                $uploadPath = $avatarDir . $safeName;
+
+                foreach (glob($avatarDir . 'avatar_'.$_SESSION['user_id'].'.*') as $oldAvatar) {
+                    @unlink($oldAvatar);
+                }
+
+                if (move_uploaded_file($_FILES['avatar']['tmp_name'], $uploadPath)) {
+                    try {
+                        $pdo->prepare("UPDATE users SET avatar = ? WHERE id = ?")
+                            ->execute([$safeName, $_SESSION['user_id']]);
+                        $_SESSION['avatar'] = $safeName;
+                        $_SESSION['avatar_upload_success'] = 'Avatar uploaded successfully.';
+                    } catch (Exception $e) {
+                        $_SESSION['avatar_upload_error'] = 'Database error: ' . $e->getMessage();
+                        @unlink($uploadPath);
+                    }
+                } else {
+                    $_SESSION['avatar_upload_error'] = 'Failed to move uploaded file. Check directory permissions.';
+                }
+
+                redirect(url('edit_profile'));
+            } else {
+                $updates = [];
+                $params = [];
+                
+                if (!empty($_POST['username'])) {
+                    $newUsername = validate_input($_POST['username']);
+                    $existingStmt = $pdo->prepare("SELECT id FROM users WHERE username = ? AND id <> ?");
+                    $existingStmt->execute([$newUsername, $_SESSION['user_id']]);
+                    $existing = $existingStmt->fetchColumn();
+                    if ($existing) {
+                        die('Username already taken');
+                    }
+                    $updates[] = "username = ?";
+                    $params[] = $newUsername;
+                }
+                
+                if (isset($_POST['email'])) {
+                    $newEmail = validate_input($_POST['email']);
+                    $updates[] = "email = ?";
+                    $params[] = $newEmail;
+                }
+                
+                if (!empty($_POST['password'])) {
+                    $updates[] = "password = ?";
+                    $params[] = password_hash($_POST['password'], PASSWORD_DEFAULT);
+                }
+                
+                if (!empty($updates)) {
+                    $params[] = $_SESSION['user_id'];
+                    $pdo->prepare("UPDATE users SET ".implode(', ', $updates)." WHERE id = ?")
+                        ->execute($params);
+                    
+                    if (!empty($_POST['username'])) {
+                        $_SESSION['username'] = validate_input($_POST['username']);
+                    }
+                }
+                
+                redirect(url('profile', ['user' => $_SESSION['username']]));
+            }
         }
         include __DIR__.'/views/edit_profile.php';
-    }
-    elseif ($action === 'update_profile' && $method === 'POST') {
-        // Handle profile update
-        if (!is_logged_in()) {
-            die('Login required');
-        }
-        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
-            die('CSRF token invalid');
-        }
-        
-        $updates = [];
-        $params = [];
-        
-        if (!empty($_POST['username'])) {
-            $newUsername = validate_input($_POST['username']);
-            // Check if username is taken by another user
-            $existingStmt = $pdo->prepare("SELECT id FROM users WHERE username = ? AND id <> ?");
-            $existingStmt->execute([$newUsername, $_SESSION['user_id']]);
-            $existing = $existingStmt->fetchColumn();
-            if ($existing) {
-                die('Username already taken');
-            }
-            $updates[] = "username = ?";
-            $params[] = $newUsername;
-        }
-        
-        if (isset($_POST['email'])) {
-            $newEmail = validate_input($_POST['email']);
-            $updates[] = "email = ?";
-            $params[] = $newEmail;
-        }
-        
-        if (!empty($_POST['password'])) {
-            $updates[] = "password = ?";
-            $params[] = password_hash($_POST['password'], PASSWORD_DEFAULT);
-        }
-        
-        if (!empty($updates)) {
-            $params[] = $_SESSION['user_id'];
-            $pdo->prepare("UPDATE users SET ".implode(', ', $updates)." WHERE id = ?")
-                ->execute($params);
-            
-            if (!empty($_POST['username'])) {
-                $_SESSION['username'] = validate_input($_POST['username']);
-            }
-        }
-        
-        redirect(url('profile', ['user' => $_SESSION['username']]));
     }
     elseif ($action === 'search') {
         // Search functionality
@@ -1095,30 +1201,32 @@ try {
         
         redirect(url('admin'));
     }
-    elseif ($action === 'create_category' && $method === 'POST' && is_admin()) {
-        // Create new category
-        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
-            die('CSRF token invalid');
+    elseif ($action === 'admin_categories') {
+        // Show categories management page / handle create & edit
+        if (!is_admin()) {
+            die('Admin required');
         }
-        $name = validate_input($_POST['name'] ?? '');
-        $description = validate_input($_POST['description'] ?? '');
-        if ($name !== '') {
-            $pdo->prepare("INSERT INTO categories (name, description) VALUES (?, ?)")->execute([$name, $description]);
+        if ($method === 'POST') {
+            if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+                die('CSRF token invalid');
+            }
+            if (isset($_GET['id'])) {
+                $catId = (int)$_GET['id'];
+                $name = validate_input($_POST['name'] ?? '');
+                $description = validate_input($_POST['description'] ?? '');
+                if ($catId > 0 && $name !== '') {
+                    $pdo->prepare("UPDATE categories SET name = ?, description = ? WHERE id = ?")->execute([$name, $description, $catId]);
+                }
+            } else {
+                $name = validate_input($_POST['name'] ?? '');
+                $description = validate_input($_POST['description'] ?? '');
+                if ($name !== '') {
+                    $pdo->prepare("INSERT INTO categories (name, description) VALUES (?, ?)")->execute([$name, $description]);
+                }
+            }
+            redirect(url('admin_categories'));
         }
-        redirect(url('admin'));
-    }
-    elseif ($action === 'edit_category' && $method === 'POST' && is_admin()) {
-        // Edit category
-        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
-            die('CSRF token invalid');
-        }
-        $catId = (int)($_GET['id'] ?? 0);
-        $name = validate_input($_POST['name'] ?? '');
-        $description = validate_input($_POST['description'] ?? '');
-        if ($catId > 0 && $name !== '') {
-            $pdo->prepare("UPDATE categories SET name = ?, description = ? WHERE id = ?")->execute([$name, $description, $catId]);
-        }
-        redirect(url('admin'));
+        include __DIR__.'/views/admin_categories.php';
     }
     elseif ($action === 'delete_category' && $method === 'POST' && is_admin()) {
         // Delete category
@@ -1129,7 +1237,7 @@ try {
         if ($catId > 0) {
             $pdo->prepare("DELETE FROM categories WHERE id = ?")->execute([$catId]);
         }
-        redirect(url('admin'));
+        redirect(url('admin_categories'));
     }
     elseif ($action === 'delete_user' && $method === 'POST' && is_admin()) {
         // Delete user
@@ -1177,13 +1285,6 @@ try {
             die('Admin required');
         }
         include __DIR__.'/views/admin_moderation.php';
-    }
-    elseif ($action === 'admin_categories') {
-        // Show categories management page
-        if (!is_admin()) {
-            die('Admin required');
-        }
-        include __DIR__.'/views/admin_categories.php';
     }
     elseif ($action === 'admin_users') {
         // Show users management page
@@ -1384,101 +1485,103 @@ try {
         include __DIR__.'/views/admin_updates.php';
     }
     elseif ($action === 'forgot_password') {
-        // Show forgot password form
-        include __DIR__.'/views/forgot_password.php';
-    }
-    elseif ($action === 'do_forgot_password' && $method === 'POST') {
-        // Handle forgot password request
-        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
-            die('CSRF token invalid');
-        }
-        $email = validate_input($_POST['email'] ?? '');
-        $userStmt = $pdo->prepare("SELECT * FROM users WHERE email = ?");
-        $userStmt->execute([$email]);
-        $user = $userStmt->fetch();
-        
-        if ($user) {
-            // Generate reset token
-            $token = bin2hex(random_bytes(32));
-            $expires = date('Y-m-d H:i:s', strtotime('+1 hour'));
-            $pdo->prepare("INSERT INTO password_resets (user_id, token, expires_at) VALUES (?, ?, ?)")
-                ->execute([$user['id'], password_hash($token, PASSWORD_DEFAULT), $expires]);
-            
-            // Send email
-            $resetLink = url('reset_password', ['token' => $token]);
-            $subject = 'Password Reset Request';
-            $body = '<p>Hello '.escape($user['username']).',</p>
-                    <p>You requested a password reset. Click the button below to reset your password:</p>
-                    <p style="text-align:center;"><a class="btn" href="'.$resetLink.'">Reset Password</a></p>
-                    <p>Or copy this link: <br><code>'.$resetLink.'</code></p>
-                    <p>This link expires in 1 hour.</p>
-                    <p>If you did not request this, please ignore this email.</p>';
-            send_email($email, $subject, $body);
-        }
-        
-        // Always show success (don't reveal if email exists)
-        $success = 'If an account with that email exists, a password reset link has been sent.';
-        include __DIR__.'/views/forgot_password.php';
-    }
-    elseif ($action === 'reset_password' && isset($_GET['token'])) {
-        // Show reset password form
-        include __DIR__.'/views/reset_password.php';
-    }
-    elseif ($action === 'do_reset_password' && $method === 'POST') {
-        // Handle password reset
-        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
-            die('CSRF token invalid');
-        }
-        $token = $_POST['token'] ?? '';
-        $password = $_POST['password'] ?? '';
-        $confirm = $_POST['confirm_password'] ?? '';
-        
-        if ($password !== $confirm) {
-            $error = 'Passwords do not match.';
-            include __DIR__.'/views/reset_password.php';
-            exit;
-        }
-        if (strlen($password) < 6) {
-            $error = 'Password must be at least 6 characters.';
-            include __DIR__.'/views/reset_password.php';
-            exit;
-        }
-        
-        // Find valid token
-        $tokensStmt = $pdo->prepare("SELECT * FROM password_resets WHERE used = 0 AND expires_at > datetime('now') ORDER BY created_at DESC");
-        $tokensStmt->execute();
-        $validToken = null;
-        foreach ($tokensStmt->fetchAll() as $row) {
-            if (password_verify($token, $row['token'])) {
-                $validToken = $row;
-                break;
+        // Show forgot password form / handle request
+        if ($method === 'POST') {
+            if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+                die('CSRF token invalid');
             }
+            $email = validate_input($_POST['email'] ?? '');
+            $userStmt = $pdo->prepare("SELECT * FROM users WHERE email = ?");
+            $userStmt->execute([$email]);
+            $user = $userStmt->fetch();
+            
+            if ($user) {
+                // Generate reset token
+                $token = bin2hex(random_bytes(32));
+                $expires = date('Y-m-d H:i:s', strtotime('+1 hour'));
+                $pdo->prepare("INSERT INTO password_resets (user_id, token, expires_at) VALUES (?, ?, ?)")
+                    ->execute([$user['id'], password_hash($token, PASSWORD_DEFAULT), $expires]);
+                
+                // Send email
+                $resetLink = url('reset_password', ['token' => $token]);
+                $subject = 'Password Reset Request';
+                $body = '<p>Hello '.escape($user['username']).',</p>
+                        <p>You requested a password reset. Click the button below to reset your password:</p>
+                        <p style="text-align:center;"><a class="btn" href="'.$resetLink.'">Reset Password</a></p>
+                        <p>Or copy this link: <br><code>'.$resetLink.'</code></p>
+                        <p>This link expires in 1 hour.</p>
+                        <p>If you did not request this, please ignore this email.</p>';
+                send_email($email, $subject, $body);
+            }
+            
+            // Always show success (don't reveal if email exists)
+            $success = 'If an account with that email exists, a password reset link has been sent.';
         }
-        
-        if (!$validToken) {
-            $error = 'Invalid or expired reset token.';
-            include __DIR__.'/views/reset_password.php';
+        include __DIR__.'/views/forgot_password.php';
+    }
+    elseif ($action === 'reset_password') {
+        // Show reset password form / handle reset
+        if ($method === 'POST') {
+            if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+                die('CSRF token invalid');
+            }
+            $token = $_POST['token'] ?? '';
+            $password = $_POST['password'] ?? '';
+            $confirm = $_POST['confirm_password'] ?? '';
+            
+            if ($password !== $confirm) {
+                $error = 'Passwords do not match.';
+                include __DIR__.'/views/reset_password.php';
+                exit;
+            }
+            if (strlen($password) < 6) {
+                $error = 'Password must be at least 6 characters.';
+                include __DIR__.'/views/reset_password.php';
+                exit;
+            }
+            
+            // Find valid token
+            $tokensStmt = $pdo->prepare("SELECT * FROM password_resets WHERE used = 0 AND expires_at > datetime('now') ORDER BY created_at DESC");
+            $tokensStmt->execute();
+            $validToken = null;
+            foreach ($tokensStmt->fetchAll() as $row) {
+                if (password_verify($token, $row['token'])) {
+                    $validToken = $row;
+                    break;
+                }
+            }
+            
+            if (!$validToken) {
+                $error = 'Invalid or expired reset token.';
+                include __DIR__.'/views/reset_password.php';
+                exit;
+            }
+            
+            // Update password
+            $pdo->prepare("UPDATE users SET password = ? WHERE id = ?")
+                ->execute([password_hash($password, PASSWORD_DEFAULT), $validToken['user_id']]);
+            $pdo->prepare("UPDATE password_resets SET used = 1 WHERE id = ?")->execute([$validToken['id']]);
+            
+            // Send confirmation email
+            $userStmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
+            $userStmt->execute([$validToken['user_id']]);
+            $user = $userStmt->fetch();
+            if ($user && !empty($user['email'])) {
+                $subject = 'Password Reset Successful';
+                $body = '<p>Hello '.escape($user['username']).',</p>
+                        <p>Your password has been successfully reset.</p>
+                        <p>If you did not make this change, please contact an administrator immediately.</p>';
+                send_email($user['email'], $subject, $body);
+            }
+            
+            redirect(url('login'));
+        }
+        if (!isset($_GET['token'])) {
+            http_response_code(404);
+            echo 'Page not found';
             exit;
         }
-        
-        // Update password
-        $pdo->prepare("UPDATE users SET password = ? WHERE id = ?")
-            ->execute([password_hash($password, PASSWORD_DEFAULT), $validToken['user_id']]);
-        $pdo->prepare("UPDATE password_resets SET used = 1 WHERE id = ?")->execute([$validToken['id']]);
-        
-        // Send confirmation email
-        $userStmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
-        $userStmt->execute([$validToken['user_id']]);
-        $user = $userStmt->fetch();
-        if ($user && !empty($user['email'])) {
-            $subject = 'Password Reset Successful';
-            $body = '<p>Hello '.escape($user['username']).',</p>
-                    <p>Your password has been successfully reset.</p>
-                    <p>If you did not make this change, please contact an administrator immediately.</p>';
-            send_email($user['email'], $subject, $body);
-        }
-        
-        redirect(url('login'));
+        include __DIR__.'/views/reset_password.php';
     }
     elseif ($action === 'editbored_upload' && $method === 'POST') {
         // Image upload for editbored editor
@@ -1543,7 +1646,7 @@ try {
                 $pdo->prepare("UPDATE notifications SET read = 1 WHERE user_id = ? AND read = 0")
                     ->execute([$_SESSION['user_id']]);
             }
-            redirect('?action=notifications');
+            redirect(url('notifications'));
         }
         $notifications = $pdo->prepare("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC");
         $notifications->execute([$_SESSION['user_id']]);
@@ -1562,7 +1665,7 @@ try {
                 $stmt = $pdo->prepare("INSERT INTO private_messages (sender_id, recipient_id, subject, content) VALUES (?, ?, '', ?)");
                 $stmt->execute([$_SESSION['user_id'], $recipientId, $content]);
             }
-            redirect('?action=messages&conversation=' . $recipientId);
+            redirect(url('messages', ['conversation' => $recipientId]));
         }
         $conversationUserId = (int)($_GET['conversation'] ?? 0);
         if ($conversationUserId > 0) {

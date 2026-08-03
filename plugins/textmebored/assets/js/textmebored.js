@@ -114,7 +114,7 @@
         isLoading = true;
 
         var xhr = new XMLHttpRequest();
-        xhr.open('GET', window.textmebored.apiUrl + '?action=conversations', true);
+        xhr.open('GET', window.textmebored.apiUrl + '/conversations', true);
         xhr.setRequestHeader('Accept', 'application/json');
         xhr.onreadystatechange = function () {
             if (xhr.readyState !== 4) return;
@@ -136,7 +136,7 @@
 
     function fetchMessages(userId) {
         var xhr = new XMLHttpRequest();
-        xhr.open('GET', window.textmebored.apiUrl + '?action=messages&user_id=' + encodeURIComponent(userId), true);
+        xhr.open('GET', window.textmebored.apiUrl + '/messages?user_id=' + encodeURIComponent(userId), true);
         xhr.setRequestHeader('Accept', 'application/json');
         xhr.onreadystatechange = function () {
             if (xhr.readyState !== 4) return;
@@ -286,7 +286,7 @@
             if (!username || !content) return;
 
             var xhr = new XMLHttpRequest();
-            xhr.open('POST', window.textmebored.apiUrl + '?action=resolve_user', true);
+            xhr.open('POST', window.textmebored.apiUrl + '/resolve_user', true);
             xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
             xhr.setRequestHeader('Accept', 'application/json');
             xhr.onreadystatechange = function () {
@@ -321,7 +321,7 @@
 
         toggle = document.createElement('a');
         toggle.className = 'nav-link';
-        toggle.href = '?action=messages';
+        toggle.href = window.textmebored.baseUrl + '/messages';
         toggle.innerHTML = '<i class="fas fa-envelope me-1"></i><span class="badge bg-danger rounded-pill textmebored-unread-count" style="display:none;">0</span>';
         toggle.addEventListener('click', function(e) {
             if (dropdown && dropdown.style.display !== 'none') {
@@ -351,7 +351,7 @@
 
         var viewMessagesBtn = document.createElement('a');
         viewMessagesBtn.className = 'btn btn-sm btn-outline-secondary';
-        viewMessagesBtn.href = '?action=messages';
+        viewMessagesBtn.href = window.textmebored.baseUrl + '/messages';
         viewMessagesBtn.textContent = 'View messages';
 
         actionsContainer.appendChild(viewMessagesBtn);
@@ -392,7 +392,7 @@
 
             var viewMessagesBtn = document.createElement('a');
             viewMessagesBtn.className = 'btn btn-sm btn-outline-secondary';
-            viewMessagesBtn.href = '?action=messages';
+            viewMessagesBtn.href = window.textmebored.baseUrl + '/messages';
             viewMessagesBtn.textContent = 'View messages';
 
             actionsContainer.appendChild(viewMessagesBtn);

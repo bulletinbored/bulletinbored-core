@@ -121,7 +121,7 @@
         isLoading = true;
 
         var xhr = new XMLHttpRequest();
-        xhr.open('GET', window.bellbored.apiUrl + '?action=list&page=' + currentPage, true);
+        xhr.open('GET', window.bellbored.apiUrl + '/list?page=' + currentPage, true);
         xhr.setRequestHeader('Accept', 'application/json');
         xhr.onreadystatechange = function () {
             if (xhr.readyState !== 4) return;
@@ -176,7 +176,7 @@
 
         toggle = document.createElement('a');
         toggle.className = 'nav-link';
-        toggle.href = '?action=notifications';
+        toggle.href = window.bellbored.baseUrl + '/notifications';
         toggle.innerHTML = '<i class="fas fa-bell me-1"></i><span class="badge bg-danger rounded-pill bellbored-unread-count" style="display:none;">0</span>';
         toggle.addEventListener('click', function(e) {
             if (dropdown && dropdown.style.display !== 'none') {
@@ -206,7 +206,7 @@
 
         var viewAllBtn = document.createElement('a');
         viewAllBtn.className = 'btn btn-sm btn-outline-secondary';
-        viewAllBtn.href = '?action=notifications';
+        viewAllBtn.href = window.bellbored.baseUrl + '/notifications';
         viewAllBtn.textContent = 'View all';
 
         var markAllBtn = document.createElement('button');
@@ -256,7 +256,7 @@
 
             var viewAllBtn = document.createElement('a');
             viewAllBtn.className = 'btn btn-sm btn-outline-secondary';
-            viewAllBtn.href = '?action=notifications';
+            viewAllBtn.href = window.bellbored.baseUrl + '/notifications';
             viewAllBtn.textContent = 'View all';
 
             var markAllBtn = document.createElement('button');

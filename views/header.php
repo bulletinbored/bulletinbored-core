@@ -56,7 +56,7 @@ function render_header($title = 'bulletinbored') {
                             </a>
                             <ul class="dropdown-menu dropdown-menu-end">
                                 <li><a class="dropdown-item" href="<?= url('profile', ['user' => $_SESSION['username'] ?? '']) ?>"><i class="fas fa-id-card me-2"></i><?= t('profile') ?></a></li>
-                                <li><a class="dropdown-item" href="?action=messages"><i class="fas fa-envelope me-2"></i>New message</a></li>
+                                <li><a class="dropdown-item" href="<?= url('messages') ?>"><i class="fas fa-envelope me-2"></i>New message</a></li>
                                 <?php if (function_exists('is_admin') && is_admin()): ?>
                                     <li><a class="dropdown-item" href="<?= url('admin') ?>"><i class="fas fa-cog me-2"></i><?= t('admin_panel') ?></a></li>
                                 <?php endif; ?>

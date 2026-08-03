@@ -24,7 +24,12 @@ function bellbored_validate_csrf_token($token) {
 }
 
 if ($method === 'GET') {
-    $action = $_GET['action'] ?? 'list';
+    $requestUri = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH);
+    $scriptName = $_SERVER['SCRIPT_NAME'] ?? '';
+    $path = substr($requestUri, strlen($scriptName));
+    $path = ltrim($path, '/');
+    $pathAction = $path ? explode('/', $path)[0] : '';
+    $action = $pathAction ?: $_GET['action'] ?? 'list';
 
     if ($action === 'list') {
         $page = max(1, (int)($_GET['page'] ?? 1));

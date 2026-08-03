@@ -8,4 +8,4 @@
 [X] Messaggi privati (tramite plugin)
 [X] Centro notifiche (tramite plugin)
 [ ] Aggiustare ricerca (non funziona)
-[ ] Eliminare ?action= dagli URL
+[X] Eliminare ?action= dagli URL

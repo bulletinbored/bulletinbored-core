@@ -9,7 +9,7 @@
     <h4 class="mb-3"><i class="fas fa-bell me-2"></i><?= t('notifications') ?></h4>
 
     <?php if (!empty($notifications ?? [])): ?>
-        <form method="POST" action="?action=notifications" class="text-end mb-3">
+        <form method="POST" action="<?= url('notifications') ?>" class="text-end mb-3">
             <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
             <input type="hidden" name="do" value="mark_all_read">
             <button type="submit" class="btn btn-sm btn-outline-success"><i class="fas fa-check-double me-1"></i>Mark all read</button>
@@ -41,7 +41,7 @@
                                 <a href="<?= escape($n['link']) ?>" class="btn btn-sm btn-outline-primary"><i class="fas fa-external-link-alt me-1"></i>View</a>
                             <?php endif; ?>
                             <?php if (!$n['read']): ?>
-                                <form method="POST" action="?action=notifications&do=mark_read&id=<?= (int)$n['id'] ?>" class="d-inline" onsubmit="return confirm('Mark as read?')">
+                                <form method="POST" action="<?= url('notifications', ['do' => 'mark_read', 'id' => $n['id']]) ?>" class="d-inline" onsubmit="return confirm('Mark as read?')">
                                     <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                                     <button type="submit" class="btn btn-sm btn-outline-success"><i class="fas fa-check me-1"></i>Mark read</button>
                                 </form>

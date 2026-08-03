@@ -59,7 +59,7 @@ function bellbored_init() {
 
         foreach ($watchers as $watcher) {
             if (!empty($watcher['email'])) {
-                $link = $baseUrl . '/?action=thread&id=' . $threadId;
+                $link = url('thread', ['id' => $threadId]);
                 $pdo->prepare("
                     INSERT INTO notifications (user_id, type, title, message, link)
                     VALUES (?, 'thread', ?, ?, ?)
@@ -93,7 +93,7 @@ function bellbored_init() {
 
         foreach ($watchers as $watcher) {
             if (!empty($watcher['email'])) {
-                $link = $baseUrl . '/?action=thread&id=' . $threadId;
+                $link = url('thread', ['id' => $threadId]);
                 $pdo->prepare("
                     INSERT INTO notifications (user_id, type, title, message, link)
                     VALUES (?, 'reply', ?, ?, ?)
@@ -114,7 +114,7 @@ function bellbored_init() {
     $csrfToken = htmlspecialchars($_SESSION['csrf_token'] ?? '', ENT_QUOTES);
 
     $head = '<link href="' . $cssUrl . '" rel="stylesheet">' . "\n";
-    $head .= '<script>window.bellbored = window.bellbored || {};window.bellbored.apiUrl = ' . json_encode($apiUrl) . ';window.bellbored.csrfToken = ' . json_encode($csrfToken) . ';</script>' . "\n";
+    $head .= '<script>window.bellbored = window.bellbored || {};window.bellbored.apiUrl = ' . json_encode($apiUrl) . ';window.bellbored.baseUrl = ' . json_encode($baseUrl) . ';window.bellbored.csrfToken = ' . json_encode($csrfToken) . ';</script>' . "\n";
 
     $footer = '<script src="' . $jsUrl . '"></script>' . "\n";
     $footer .= '<script>setTimeout(function(){window.bellbored = window.bellbored || {};window.bellbored.init && window.bellbored.init();}, 0);</script>' . "\n";
