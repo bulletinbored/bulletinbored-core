@@ -38,6 +38,13 @@
         document.removeEventListener('click', onDocClick);
     }
 
+    function closeOtherDropdowns() {
+        var otherDropdown = document.querySelector('.bellbored-dropdown');
+        if (otherDropdown && otherDropdown.style.display !== 'none') {
+            otherDropdown.style.display = 'none';
+        }
+    }
+
     function onDocClick(e) {
         if (navItem && !navItem.contains(e.target)) {
             closeDropdown();
@@ -50,6 +57,7 @@
         if (!conversations || conversations.length === 0) {
             bellItem.innerHTML = '';
             bellItem.appendChild(emptyMsg);
+            bellItem.appendChild(actionsContainer);
             unreadBadge.style.display = 'none';
             return;
         }
@@ -309,7 +317,7 @@
         if (!userMenu) return;
 
         navItem = document.createElement('li');
-        navItem.className = 'nav-item';
+        navItem.className = 'nav-item textmebored-nav-item';
 
         toggle = document.createElement('a');
         toggle.className = 'nav-link';
@@ -340,12 +348,21 @@
 
         actionsContainer = document.createElement('li');
         actionsContainer.className = 'textmebored-actions';
-        actionsContainer.style.display = 'none';
+
+        var viewMessagesBtn = document.createElement('a');
+        viewMessagesBtn.className = 'btn btn-sm btn-outline-secondary';
+        viewMessagesBtn.href = '?action=messages';
+        viewMessagesBtn.textContent = 'View messages';
+
+        actionsContainer.appendChild(viewMessagesBtn);
+
+        dropdown.appendChild(actionsContainer);
 
         toggle.addEventListener('click', function(e) {
             e.preventDefault();
             e.stopPropagation();
             if (dropdown.style.display === 'none') {
+                closeOtherDropdowns();
                 dropdown.style.display = 'block';
                 document.addEventListener('click', onDocClick);
                 if (!bellItem.querySelector('.textmebored-item')) {
@@ -372,7 +389,15 @@
 
             actionsContainer = document.createElement('li');
             actionsContainer.className = 'textmebored-actions';
-            actionsContainer.style.display = 'none';
+
+            var viewMessagesBtn = document.createElement('a');
+            viewMessagesBtn.className = 'btn btn-sm btn-outline-secondary';
+            viewMessagesBtn.href = '?action=messages';
+            viewMessagesBtn.textContent = 'View messages';
+
+            actionsContainer.appendChild(viewMessagesBtn);
+
+            dropdown.appendChild(actionsContainer);
 
             fetchConversations();
         }

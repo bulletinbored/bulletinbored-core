@@ -69,6 +69,7 @@
             <div class="card-body text-center py-5 text-muted">
                 <i class="fas fa-inbox fa-2x mb-3"></i>
                 <p class="mb-0">No messages yet. Click "New message" to start a conversation.</p>
+                <button class="btn btn-forum btn-sm mt-3" onclick="if(window.textmebored && window.textmebored.newConversation){window.textmebored.newConversation();}"><i class="fas fa-envelope me-1"></i>New message</button>
             </div>
         </div>
     <?php endif; ?>

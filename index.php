@@ -400,6 +400,28 @@ if (is_admin()) {
 }
 $pluginHeadAssets = $pluginManager->getCapturedHead(false);
 
+// Pretty URL support: when no rewrite layer (Apache .htaccess or router.php)
+// has populated $_GET, parse /thread/N-slug, /category/N-slug and /u/user
+// from the request path so the correct page is rendered.
+if (!isset($_GET['action'])) {
+    $reqPath = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH);
+    $reqPath = ltrim($reqPath, '/');
+    $base = trim(base_url(), '/');
+    if ($base !== '' && str_starts_with($reqPath, $base . '/')) {
+        $reqPath = substr($reqPath, strlen($base) + 1);
+    }
+    if (preg_match('#^thread/([0-9]+)(?:-[^/]+)?$#', $reqPath, $m)) {
+        $_GET['action'] = 'thread';
+        $_GET['id'] = $m[1];
+    } elseif (preg_match('#^category/([0-9]+)(?:-[^/]+)?$#', $reqPath, $m)) {
+        $_GET['action'] = 'category';
+        $_GET['id'] = $m[1];
+    } elseif (preg_match('#^u/([^/]+)$#', $reqPath, $m)) {
+        $_GET['action'] = 'profile';
+        $_GET['user'] = urldecode($m[1]);
+    }
+}
+
 // Routing
 $action = $_GET['action'] ?? 'home';
 $method = $_SERVER['REQUEST_METHOD'];

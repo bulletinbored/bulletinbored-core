@@ -38,6 +38,13 @@
         document.removeEventListener('click', onDocClick);
     }
 
+    function closeOtherDropdowns() {
+        var otherDropdown = document.querySelector('.textmebored-dropdown');
+        if (otherDropdown && otherDropdown.style.display !== 'none') {
+            otherDropdown.style.display = 'none';
+        }
+    }
+
     function onDocClick(e) {
         if (navItem && !navItem.contains(e.target)) {
             closeDropdown();
@@ -57,6 +64,7 @@
         if (!notifications || notifications.length === 0) {
             bellItem.innerHTML = '';
             bellItem.appendChild(emptyMsg);
+            bellItem.appendChild(actionsContainer);
             return;
         }
 
@@ -164,7 +172,7 @@
         if (!userMenu) return;
 
         navItem = document.createElement('li');
-        navItem.className = 'nav-item';
+        navItem.className = 'nav-item bellbored-nav-item';
 
         toggle = document.createElement('a');
         toggle.className = 'nav-link';
@@ -195,7 +203,11 @@
 
         actionsContainer = document.createElement('li');
         actionsContainer.className = 'bellbored-actions';
-        actionsContainer.style.display = 'none';
+
+        var viewAllBtn = document.createElement('a');
+        viewAllBtn.className = 'btn btn-sm btn-outline-secondary';
+        viewAllBtn.href = '?action=notifications';
+        viewAllBtn.textContent = 'View all';
 
         var markAllBtn = document.createElement('button');
         markAllBtn.className = 'btn btn-sm btn-outline-secondary';
@@ -205,12 +217,16 @@
             markAllRead();
         });
 
+        actionsContainer.appendChild(viewAllBtn);
         actionsContainer.appendChild(markAllBtn);
+
+        dropdown.appendChild(actionsContainer);
 
         toggle.addEventListener('click', function(e) {
             e.preventDefault();
             e.stopPropagation();
             if (dropdown.style.display === 'none') {
+                closeOtherDropdowns();
                 dropdown.style.display = 'block';
                 document.addEventListener('click', onDocClick);
                 if (!bellItem.querySelector('.bellbored-item')) {
@@ -237,7 +253,11 @@
 
             actionsContainer = document.createElement('li');
             actionsContainer.className = 'bellbored-actions';
-            actionsContainer.style.display = 'none';
+
+            var viewAllBtn = document.createElement('a');
+            viewAllBtn.className = 'btn btn-sm btn-outline-secondary';
+            viewAllBtn.href = '?action=notifications';
+            viewAllBtn.textContent = 'View all';
 
             var markAllBtn = document.createElement('button');
             markAllBtn.className = 'btn btn-sm btn-outline-secondary';
@@ -247,7 +267,10 @@
                 markAllRead();
             });
 
+            actionsContainer.appendChild(viewAllBtn);
             actionsContainer.appendChild(markAllBtn);
+
+            dropdown.appendChild(actionsContainer);
 
             fetchNotifications();
         }

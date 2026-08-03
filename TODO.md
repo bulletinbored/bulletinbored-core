@@ -5,5 +5,7 @@
 [ ] Creare nella dashboard una scheda per amministrare i permessi e i ruoli
 [ ] Azioni di moderazione in frontend
 [ ] Predisposizione per localizzazione plugin-temi
-[X] Messaggi privati (tramite plugin) - DA VERIFICARE - Numero notifiche spostato
-[X] Centro notifiche (tramite plugin) - DA VERIFICARE
+[X] Messaggi privati (tramite plugin)
+[X] Centro notifiche (tramite plugin)
+[ ] Aggiustare ricerca (non funziona)
+[ ] Eliminare ?action= dagli URL
