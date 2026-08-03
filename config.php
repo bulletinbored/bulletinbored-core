@@ -1,6 +1,6 @@
 <?php
 $config['db_driver'] = 'sqlite';
-$config['db_path'] = 'C:\\xampp\\htdocs\\forum-nuovo/data/database.sqlite';
+$config['db_path'] = __DIR__ . '/data/database.sqlite';
 $config['db_host'] = 'localhost';
 $config['db_name'] = 'forum';
 $config['db_user'] = 'root';
@@ -23,7 +23,7 @@ $config['avatar_allowed_types'] = array (
   2 => 'image/gif',
   3 => 'image/webp',
 );
-$config['base_url'] = '/forum-nuovo';
+$config['base_url'] = '';
 $config['allow_registration'] = 0;
 $config['maintenance_mode'] = 0;
 $config['version'] = trim(file_get_contents(__DIR__.'/VERSION'));
