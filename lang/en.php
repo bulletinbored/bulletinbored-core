@@ -76,6 +76,7 @@ return [
     'approve_thread' => 'Approve thread',
     'thread_locked' => 'This thread is locked. No new replies can be posted.',
     'user_banned' => 'Your account has been banned.',
+    'user_suspended' => 'Your account has been temporarily suspended.',
     'ban_user' => 'Ban user',
     'unban_user' => 'Unban user',
     'status' => 'Status',

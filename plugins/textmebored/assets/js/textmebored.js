@@ -236,75 +236,125 @@
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
     }
 
-    function newConversation() {
-        var existing = document.getElementById('textmebored-compose-modal');
-        if (existing) {
-            existing.remove();
-        }
+function newConversation() {
+    var existing = document.getElementById('textmebored-compose-modal');
+    if (existing) {
+        existing.remove();
+    }
 
-        var modal = document.createElement('div');
-        modal.id = 'textmebored-compose-modal';
-        modal.className = 'textmebored-modal-overlay';
+    var modal = document.createElement('div');
+    modal.id = 'textmebored-compose-modal';
+    modal.className = 'textmebored-modal-overlay';
 
-        var modalHtml = '<div class="textmebored-modal">';
-        modalHtml += '<div class="textmebored-modal-header">';
-        modalHtml += '<span class="textmebored-modal-title">New Message</span>';
-        modalHtml += '<button class="textmebored-modal-close">&times;</button>';
-        modalHtml += '</div>';
-        modalHtml += '<div class="textmebored-modal-input" style="padding:16px;">';
-        modalHtml += '<form class="textmebored-compose-form">';
-        modalHtml += '<input type="hidden" name="csrf_token" value="' + escapeHtml(window.textmebored.csrfToken || '') + '">';
-        modalHtml += '<input type="hidden" name="action" value="send">';
-        modalHtml += '<div class="mb-3"><label class="form-label">To (username)</label><input type="text" name="to_username" class="form-control" placeholder="Enter username" required autocomplete="off"></div>';
-        modalHtml += '<div class="mb-3"><label class="form-label">Message</label><input type="text" name="content" class="form-control" placeholder="Type a message..." required autocomplete="off"></div>';
-        modalHtml += '<button type="submit" class="btn btn-forum btn-sm"><i class="fas fa-paper-plane me-1"></i>Send</button>';
-        modalHtml += '</form>';
-        modalHtml += '</div>';
-        modalHtml += '</div>';
+    var modalHtml = '<div class="textmebored-modal">';
+    modalHtml += '<div class="textmebored-modal-header">';
+    modalHtml += '<span class="textmebored-modal-title">New Message</span>';
+    modalHtml += '<button class="textmebored-modal-close">&times;</button>';
+    modalHtml += '</div>';
+    modalHtml += '<div class="textmebored-modal-input" style="padding:16px;">';
+    modalHtml += '<form class="textmebored-compose-form">';
+    modalHtml += '<input type="hidden" name="csrf_token" value="' + escapeHtml(window.textmebored.csrfToken || '') + '">';
+    modalHtml += '<input type="hidden" name="action" value="send">';
+    modalHtml += '<div class="mb-3"><label class="form-label">To (username)</label><input type="text" name="to_username" id="textmebored-username" class="form-control" placeholder="Enter username" required autocomplete="off" style="position:relative;z-index:1000;"></div>';
+    modalHtml += '<div class="mb-3"><label class="form-label">Message</label><input type="text" name="content" class="form-control" placeholder="Type a message..." required autocomplete="off"></div>';
+    modalHtml += '<button type="submit" class="btn btn-forum btn-sm"><i class="fas fa-paper-plane me-1"></i>Send</button>';
+    modalHtml += '</form>';
+    modalHtml += '<div id="textmebored-user-suggestions" class="position-absolute" style="background:white;border:1px solid #ccc;max-height:200px;overflow-y:auto;z-index:1001;width:100%;display:none;"></div>';
+    modalHtml += '</div>';
+    modalHtml += '</div>';
 
-        modal.innerHTML = modalHtml;
-        document.body.appendChild(modal);
+    modal.innerHTML = modalHtml;
+    document.body.appendChild(modal);
 
-        var closeBtn = modal.querySelector('.textmebored-modal-close');
-        closeBtn.addEventListener('click', function () {
+    var closeBtn = modal.querySelector('.textmebored-modal-close');
+    closeBtn.addEventListener('click', function () {
+        modal.remove();
+    });
+
+    modal.addEventListener('click', function (e) {
+        if (e.target === modal) {
             modal.remove();
-        });
+        }
+    });
 
-        modal.addEventListener('click', function (e) {
-            if (e.target === modal) {
-                modal.remove();
-            }
-        });
-
-        var composeForm = modal.querySelector('.textmebored-compose-form');
-        composeForm.addEventListener('submit', function (e) {
-            e.preventDefault();
-            var usernameInput = composeForm.querySelector('input[name="to_username"]');
-            var contentInput = composeForm.querySelector('input[name="content"]');
-            var username = usernameInput.value.trim();
-            var content = contentInput.value.trim();
-            if (!username || !content) return;
-
+    var usernameInput = modal.querySelector('#textmebored-username');
+    var suggestionsBox = modal.querySelector('#textmebored-user-suggestions');
+    
+    var debounceTimer;
+    usernameInput.addEventListener('input', function() {
+        clearTimeout(debounceTimer);
+        var query = this.value.trim();
+        suggestionsBox.innerHTML = '';
+        suggestionsBox.style.display = 'none';
+        
+        if (query.length < 1) return;
+        
+        debounceTimer = setTimeout(function() {
             var xhr = new XMLHttpRequest();
-            xhr.open('POST', window.textmebored.apiUrl + '/resolve_user', true);
+            xhr.open('POST', window.textmebored.apiUrl + '/search_users', true);
             xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
             xhr.setRequestHeader('Accept', 'application/json');
             xhr.onreadystatechange = function () {
                 if (xhr.readyState === 4 && xhr.status === 200) {
                     try {
                         var data = JSON.parse(xhr.responseText);
-                        if (data.success) {
-                            modal.remove();
-                            openConversation(data.user_id, username);
-                        } else {
-                            alert(data.error || 'User not found');
+                        if (data.success && data.users && data.users.length > 0) {
+                            data.users.forEach(function(user) {
+                                var div = document.createElement('div');
+                                div.className = 'p-2 cursor-pointer hover-bg-light';
+                                div.textContent = user.username;
+                                div.dataset.userId = user.id;
+                                div.addEventListener('click', function() {
+                                    usernameInput.value = user.username;
+                                    suggestionsBox.style.display = 'none';
+                                });
+                                suggestionsBox.appendChild(div);
+                            });
+                            suggestionsBox.style.display = 'block';
                         }
                     } catch (err) {
-                        alert('Error resolving user');
+                        // ignore
                     }
                 }
             };
-            xhr.send('username=' + encodeURIComponent(username) + '&csrf_token=' + encodeURIComponent(window.textmebored.csrfToken || ''));
+            xhr.send('query=' + encodeURIComponent(query) + '&csrf_token=' + encodeURIComponent(window.textmebored.csrfToken || ''));
+        }, 300);
+    });
+
+    usernameInput.addEventListener('blur', function() {
+        setTimeout(function() {
+            suggestionsBox.style.display = 'none';
+        }, 200);
+    });
+
+    var composeForm = modal.querySelector('.textmebored-compose-form');
+    composeForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        var input = composeForm.querySelector('input[name="content"]');
+        var content = input.value.trim();
+        if (!content) return;
+
+        var username = usernameInput.value.trim();
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', window.textmebored.apiUrl + '/resolve_user', true);
+        xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+        xhr.setRequestHeader('Accept', 'application/json');
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState === 4 && xhr.status === 200) {
+                try {
+                    var data = JSON.parse(xhr.responseText);
+                    if (data.success) {
+                        modal.remove();
+                        openConversation(data.user_id, username);
+                    } else {
+                        alert(data.error || 'User not found');
+                    }
+                } catch (err) {
+                    alert('Error resolving user');
+                }
+            }
+        };
+        xhr.send('username=' + encodeURIComponent(username) + '&csrf_token=' + encodeURIComponent(window.textmebored.csrfToken || ''));
         });
     }
 

@@ -29,7 +29,7 @@
             <div class="flex-grow-1 min-w-0">
                 <div class="d-flex justify-content-start mb-2">
                     <small class="text-muted thread-meta">
-                        <i class="fas fa-user me-1"></i><strong><?= escape($thread['author']) ?></strong> &middot;
+                        <i class="fas fa-user me-1"></i><a href="<?= url('profile', ['id' => $thread['author_id'] ?? 0]) ?>" class="text-decoration-none"><?= escape($thread['author']) ?></a> &middot;
                         <i class="fas fa-clock me-1"></i><?= $threadFormattedDate ?> &middot;
                         <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
                             <a href="<?= $isWatching ? url('unwatch', ['thread_id' => $thread['id']]) : url('watch', ['thread_id' => $thread['id']]) ?>" class="text-decoration-none"><i class="fas fa-bell"></i></a>
@@ -158,7 +158,7 @@
                     <div class="flex-grow-1 min-w-0">
                         <div class="d-flex justify-content-start mb-1">
                             <small class="text-muted thread-meta">
-                                <i class="fas fa-user me-1"></i><strong><?= escape($post['author']) ?></strong> &middot;
+                                <i class="fas fa-user me-1"></i><a href="<?= url('profile', ['user' => escape($post['author'])]) ?>" class="fw-bold text-decoration-none"><?= escape($post['author']) ?></a> &middot;
                                 <i class="fas fa-clock me-1"></i><?= $postFormattedDate ?>
                                 <?php if (function_exists('is_logged_in') && is_logged_in() && ($_SESSION['user_id'] == $post['user_id'] || is_admin())): ?>
                                     &middot; <a href="<?= url('edit_post', ['id' => $post['id']]) ?>" class="text-decoration-none"><i class="fas fa-edit"></i></a>

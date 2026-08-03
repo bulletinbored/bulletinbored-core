@@ -84,8 +84,10 @@ function url($action, $params = []) {
             return $base . '/unwatch' . (!empty($query) ? '?' . http_build_query($query) : '');
         case 'notifications':
             return $base . '/notifications' . (!empty($query) ? '?' . http_build_query($query) : '');
-        case 'messages':
-            return $base . '/messages' . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'profile':
+            $user = $params['user'] ?? '';
+            unset($query['user']);
+            return $base . '/u/' . urlencode($user) . (!empty($query) ? '?' . http_build_query($query) : '');
         case 'search':
             return $base . '/search' . (!empty($query) ? '?' . http_build_query($query) : '');
         case 'admin':
@@ -94,8 +96,10 @@ function url($action, $params = []) {
             return $base . '/admin/moderation' . (!empty($query) ? '?' . http_build_query($query) : '');
         case 'admin_categories':
             return $base . '/admin/categories' . (!empty($query) ? '?' . http_build_query($query) : '');
-        case 'admin_users':
-            return $base . '/admin/users' . (!empty($query) ? '?' . http_build_query($query) : '');
+case 'admin_users':
+             return $base . '/admin/users' . (!empty($query) ? '?' . http_build_query($query) : '');
+         case 'admin_user_edit':
+             return $base . '/admin/users/' . ($params['id'] ?? 0) . '/edit' . (!empty($query) ? '?' . http_build_query($query) : '');
         case 'admin_settings':
             return $base . '/admin/settings' . (!empty($query) ? '?' . http_build_query($query) : '');
         case 'admin_langs':
@@ -438,6 +442,15 @@ function escape($s) { return htmlspecialchars($s, ENT_QUOTES, 'UTF-8'); }
 
 function is_banned() { return ($_SESSION['user_status'] ?? '') === 'banned'; }
 
+function is_suspended() {
+    $status = $_SESSION['user_status'] ?? '';
+    $suspensionTime = $_SESSION['user_suspension_time'] ?? 0;
+    if ($status === 'suspended' && $suspensionTime > 0 && time() >= $suspensionTime) {
+        return false;
+    }
+    return $status === 'suspended';
+}
+
 function marked_parse($text) {
     if (empty($text)) return '';
     // Check if content is HTML (saved by editbored editor)
@@ -589,7 +602,10 @@ if (!isset($_GET['action'])) {
         $_GET['action'] = 'admin_plugins';
     } elseif (preg_match('#^admin/themes$#', $reqPath)) {
         $_GET['action'] = 'admin_themes';
-} elseif (preg_match('#^admin/updates$#', $reqPath)) {
+} elseif (preg_match('#^admin/users/([0-9]+)/edit$#', $reqPath, $m)) {
+          $_GET['action'] = 'admin_user_edit';
+          $_GET['id'] = (int)$m[1];
+      } elseif (preg_match('#^admin/updates$#', $reqPath)) {
          $_GET['action'] = 'admin_updates';
      } elseif (preg_match('#^admin/roles$#', $reqPath)) {
          $_GET['action'] = 'admin_roles';
@@ -625,7 +641,7 @@ $action = $_GET['action'] ?? 'home';
 $method = $_SERVER['REQUEST_METHOD'];
 
 // Redirect banned users to home
-if (is_logged_in() && is_banned()) {
+if (is_logged_in() && (is_banned() || is_suspended())) {
     session_destroy();
     redirect(url('home'));
 }
@@ -921,6 +937,8 @@ try {
             if ($user && password_verify($password, $user['password'])) {
                 if ($user['status'] === 'banned') {
                     $error = 'user_banned';
+                } elseif ($user['status'] === 'suspended' && !empty($user['suspension_time']) && time() < $user['suspension_time']) {
+                    $error = 'user_suspended';
                 } else {
                     $_SESSION['user_id'] = $user['id'];
                     $_SESSION['user_role'] = $user['role'];
@@ -928,6 +946,12 @@ try {
                     $_SESSION['email'] = $user['email'] ?? '';
                     $_SESSION['avatar'] = $user['avatar'] ?? '';
                     $_SESSION['user_status'] = $user['status'];
+                    $_SESSION['user_suspension_time'] = $user['suspension_time'] ?? 0;
+                    if ($user['status'] === 'suspended' && !empty($user['suspension_time']) && time() >= $user['suspension_time']) {
+                        $pdo->prepare("UPDATE users SET status = 'active', suspension_time = 0 WHERE id = ?")->execute([$user['id']]);
+                        $_SESSION['user_status'] = 'active';
+                        $_SESSION['user_suspension_time'] = 0;
+                    }
                     redirect(url('home'));
                 }
             } else {
@@ -1378,29 +1402,75 @@ elseif ($action === 'delete_user' && $method === 'POST' && is_admin()) {
          }
          redirect(url('admin_users'));
      }
-     elseif ($action === 'ban_user' && $method === 'POST' && is_admin()) {
-         // Ban a user
-         if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
-             die('CSRF token invalid');
-         }
-         $userId = (int)($_GET['id'] ?? 0);
-         if ($userId > 0) {
-             $pdo->prepare("UPDATE users SET status = 'banned' WHERE id = ? AND role <> 'admin'")->execute([$userId]);
-         }
-         redirect(url('admin_users'));
-     }
-     elseif ($action === 'unban_user' && $method === 'POST' && is_admin()) {
-         // Unban a user
-         if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
-             die('CSRF token invalid');
-         }
-         $userId = (int)($_GET['id'] ?? 0);
-         if ($userId > 0) {
-             $pdo->prepare("UPDATE users SET status = 'active' WHERE id = ?")->execute([$userId]);
-         }
-         redirect(url('admin_users'));
-     }
-     elseif ($action === 'admin_settings' && $method === 'POST' && is_admin()) {
+elseif ($action === 'ban_user' && $method === 'POST' && is_admin()) {
+          // Ban a user
+          if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+              die('CSRF token invalid');
+          }
+          $userId = (int)($_GET['id'] ?? 0);
+          $username = '';
+          if ($userId > 0) {
+              $userStmt = $pdo->prepare("SELECT username FROM users WHERE id = ?");
+              $userStmt->execute([$userId]);
+              $username = $userStmt->fetchColumn() ?? '';
+              $pdo->prepare("UPDATE users SET status = 'banned' WHERE id = ? AND role <> 'admin'")->execute([$userId]);
+          }
+          $redirect = $_POST['redirect'] ?? '';
+          if ($redirect && $username) {
+              redirect($redirect);
+          } elseif ($username) {
+              redirect(url('profile', ['user' => $username]));
+          } else {
+              redirect(url('admin_users'));
+          }
+      }
+elseif ($action === 'unban_user' && $method === 'POST' && is_admin()) {
+        // Unban a user
+        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+            die('CSRF token invalid');
+        }
+        $userId = (int)($_GET['id'] ?? 0);
+        $username = '';
+        if ($userId > 0) {
+            $userStmt = $pdo->prepare("SELECT username FROM users WHERE id = ?");
+            $userStmt->execute([$userId]);
+            $username = $userStmt->fetchColumn() ?? '';
+            $pdo->prepare("UPDATE users SET status = 'active', suspension_time = 0 WHERE id = ?")->execute([$userId]);
+        }
+        $redirect = $_POST['redirect'] ?? '';
+        if ($redirect && $username) {
+            redirect($redirect);
+        } elseif ($username) {
+            redirect(url('profile', ['user' => $username]));
+        } else {
+            redirect(url('admin_users'));
+        }
+    }
+    elseif ($action === 'suspend_user' && $method === 'POST' && is_admin()) {
+        // Suspend a user for specified days
+        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+            die('CSRF token invalid');
+        }
+        $userId = (int)($_GET['id'] ?? 0);
+        $days = max(1, (int)($_POST['days'] ?? 1));
+        $suspensionTime = time() + ($days * 86400);
+        $username = '';
+        if ($userId > 0) {
+            $userStmt = $pdo->prepare("SELECT username FROM users WHERE id = ?");
+            $userStmt->execute([$userId]);
+            $username = $userStmt->fetchColumn() ?? '';
+            $pdo->prepare("UPDATE users SET status = 'suspended', suspension_time = ? WHERE id = ?")->execute([$suspensionTime, $userId]);
+        }
+        $redirect = $_POST['redirect'] ?? '';
+        if ($redirect && $username) {
+            redirect($redirect);
+        } elseif ($username) {
+            redirect(url('profile', ['user' => $username]));
+        } else {
+            redirect(url('admin_users'));
+        }
+    }
+    elseif ($action === 'admin_settings' && $method === 'POST' && is_admin()) {
         // Save admin settings
         if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
             die('CSRF token invalid');
@@ -1471,14 +1541,45 @@ elseif ($action === 'admin_moderation') {
          }
          redirect(url('admin_roles'));
      }
-     elseif ($action === 'admin_users') {
-        // Show users management page
-        if (!is_admin()) {
-            die('Admin required');
-        }
-        include __DIR__.'/views/admin_users.php';
-    }
-    elseif ($action === 'admin_settings') {
+elseif ($action === 'admin_users') {
+         // Show users management page
+         if (!is_admin()) {
+             die('Admin required');
+         }
+         include __DIR__.'/views/admin_users.php';
+     }
+     elseif ($action === 'admin_user_edit' && isset($_GET['id'])) {
+         // Edit user page
+         if (!is_admin()) {
+             die('Admin required');
+         }
+         $editUserId = (int)($_GET['id'] ?? 0);
+         if ($editUserId <= 0) {
+             redirect(url('admin_users'));
+         }
+         $editUser = $pdo->prepare("SELECT * FROM users WHERE id = ?");
+         $editUser->execute([$editUserId]);
+         $editUser = $editUser->fetch();
+         if (!$editUser) {
+             redirect(url('admin_users'));
+         }
+         if ($method === 'POST') {
+             if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+                 die('CSRF token invalid');
+             }
+             $newUsername = trim($_POST['username'] ?? '');
+             $newEmail = trim($_POST['email'] ?? '');
+             $newRole = $_POST['role'] ?? 'user';
+             $newStatus = $_POST['status'] ?? 'active';
+             if ($newUsername !== '') {
+                 $pdo->prepare("UPDATE users SET username = ?, email = ?, role = ?, status = ? WHERE id = ?")
+                     ->execute([$newUsername, $newEmail, $newRole, $newStatus, $editUserId]);
+             }
+             redirect(url('admin_user_edit', ['id' => $editUserId]));
+         }
+         include __DIR__.'/views/admin_user_edit.php';
+     }
+     elseif ($action === 'admin_settings') {
         // Show settings page
         if (!is_admin()) {
             die('Admin required');

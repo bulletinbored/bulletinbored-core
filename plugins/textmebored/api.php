@@ -170,6 +170,50 @@ if ($method === 'POST') {
         exit;
     }
 
+    if ($action === 'resolve_user') {
+        $username = trim($_POST['username'] ?? '');
+        if ($username === '') {
+            http_response_code(400);
+            echo json_encode(['error' => 'Username is required']);
+            exit;
+        }
+
+        $stmt = $pdo->prepare("SELECT id FROM users WHERE username = ? AND id <> ?");
+        $stmt->execute([$username, $_SESSION['user_id']]);
+        $userId = $stmt->fetchColumn();
+
+        if (!$userId) {
+            http_response_code(404);
+            echo json_encode(['error' => 'User not found']);
+            exit;
+        }
+
+        echo json_encode([
+            'success' => true,
+            'user_id' => (int)$userId,
+        ]);
+        exit;
+    }
+
+    if ($action === 'search_users') {
+        $query = trim($_POST['query'] ?? '');
+        if ($query === '') {
+            http_response_code(400);
+            echo json_encode(['error' => 'Query is required']);
+            exit;
+        }
+
+        $stmt = $pdo->prepare("SELECT id, username FROM users WHERE username LIKE ? AND id <> ? LIMIT 10");
+        $stmt->execute(["{$query}%", $_SESSION['user_id']]);
+        $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        echo json_encode([
+            'success' => true,
+            'users' => $users,
+        ]);
+        exit;
+    }
+
     http_response_code(400);
     echo json_encode(['error' => 'Invalid action']);
     exit;

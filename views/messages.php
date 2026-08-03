@@ -63,8 +63,11 @@
                     </div>
                 </a>
             <?php endforeach; ?>
-        </div>
-    <?php else: ?>
+</div>
+                     <div class="mt-3">
+                         <button class="btn btn-forum btn-sm" onclick="if(window.textmebored && window.textmebored.newConversation){window.textmebored.newConversation();}"><i class="fas fa-envelope me-1"></i>New message</button>
+                     </div>
+                 <?php else: ?>
         <div class="card">
             <div class="card-body text-center py-5 text-muted">
                 <i class="fas fa-inbox fa-2x mb-3"></i>

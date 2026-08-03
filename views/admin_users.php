@@ -28,7 +28,7 @@ $users = $pdo->query("SELECT * FROM users ORDER BY id ASC")->fetchAll();
                         <?php foreach ($users as $u): ?>
                         <tr>
                             <td><?= $u['id'] ?></td>
-                            <td><?= escape($u['username']) ?></td>
+                            <td><a href="<?= url('admin_user_edit', ['id' => $u['id']]) ?>" class="text-decoration-none"><?= escape($u['username']) ?></a></td>
                             <td><?= escape($u['email'] ?? 'N/A') ?></td>
                             <td>
                                 <span class="badge <?= $u['role'] === 'admin' ? 'bg-warning' : 'bg-info' ?>">
@@ -36,26 +36,50 @@ $users = $pdo->query("SELECT * FROM users ORDER BY id ASC")->fetchAll();
                                 </span>
                             </td>
                             <td>
-                                <?php if ($u['status'] === 'banned'): ?>
-                                    <span class="badge bg-danger">Banned</span>
-                                <?php elseif ($u['status'] === 'suspended'): ?>
-                                    <span class="badge bg-warning">Suspended</span>
-                                <?php else: ?>
-                                    <span class="badge bg-success">Active</span>
-                                <?php endif; ?>
+                                <?php 
+                                $status = $u['status'] ?? 'active';
+                                $suspensionTime = $u['suspension_time'] ?? 0;
+                                $now = time();
+                                
+                                if ($suspensionTime > $now) {
+                                    $remaining = $suspensionTime - $now;
+                                    $days = floor($remaining / 86400);
+                                    $hours = floor(($remaining % 86400) / 3600);
+                                    $minutes = floor(($remaining % 3600) / 60);
+                                    $timeStr = '';
+                                    if ($days > 0) $timeStr .= $days . 'd ';
+                                    if ($hours > 0) $timeStr .= $hours . 'h ';
+                                    if ($minutes > 0) $timeStr .= $minutes . 'm';
+                                    echo '<span class="badge bg-warning">Suspended (' . trim($timeStr) . ' left)</span>';
+                                } elseif ($status === 'banned') {
+                                    echo '<span class="badge bg-danger">Banned</span>';
+                                } elseif ($status === 'active') {
+                                    echo '<span class="badge bg-success">Active</span>';
+                                } else {
+                                    echo '<span class="badge bg-secondary">' . escape(ucfirst($status)) . '</span>';
+                                }
+                                ?>
                             </td>
                             <td><?= escape($u['created_at'] ?? 'N/A') ?></td>
                             <td class="text-end">
                                 <?php if ($u['role'] !== 'admin'): ?>
-                                    <?php if ($u['status'] === 'banned'): ?>
+                                    <?php if ($u['status'] === 'banned' || ($suspensionTime > $now && $now < $suspensionTime)): ?>
                                     <form method="POST" action="<?= url('unban_user', ['id' => $u['id']]) ?>" class="d-inline" onsubmit="return confirm('Unban this user?')">
                                         <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                                        <input type="hidden" name="redirect" value="/admin/users">
                                         <button class="btn btn-sm btn-success"><i class="fas fa-unlock"></i> Unban</button>
                                     </form>
                                     <?php else: ?>
                                     <form method="POST" action="<?= url('ban_user', ['id' => $u['id']]) ?>" class="d-inline" onsubmit="return confirm('Ban this user?')">
                                         <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                                        <input type="hidden" name="redirect" value="/admin/users">
                                         <button class="btn btn-sm btn-warning"><i class="fas fa-ban"></i> Ban</button>
+                                    </form>
+                                    <form method="POST" action="<?= url('suspend_user', ['id' => $u['id']]) ?>" class="d-inline ms-1" onsubmit="return confirm('Suspend this user?')">
+                                        <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                                        <input type="number" name="days" min="1" max="30" placeholder="Days" class="form-control form-control-sm" style="width: auto;">
+                                        <input type="hidden" name="redirect" value="/admin/users">
+                                        <button class="btn btn-sm btn-info" title="Suspend temporarily"><i class="fas fa-lock"></i></button>
                                     </form>
                                     <?php endif; ?>
                                     <form method="POST" action="<?= url('delete_user', ['id' => $u['id']]) ?>" class="d-inline ms-1" onsubmit="return confirm('Delete this user?')">
