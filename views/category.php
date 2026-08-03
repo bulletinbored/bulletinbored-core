@@ -22,9 +22,18 @@
         <?php foreach ($threads as $thread): ?>
             <div class="card">
                 <div class="card-body">
-                    <h5 class="card-title mb-1">
-                        <a href="<?= url('thread', ['id' => $thread['id'], 'slug' => slugify($thread['title'] ?? '')]) ?>" class="thread-title"><?= escape($thread['title']) ?></a>
-                    </h5>
+<h5 class="card-title mb-1">
+                         <a href="<?= url('thread', ['id' => $thread['id'], 'slug' => slugify($thread['title'] ?? '')]) ?>" class="thread-title"><?= escape($thread['title']) ?></a>
+                         <?php if ($thread['status'] === 'sticky'): ?>
+                             <span class="badge bg-info ms-1" style="font-size:0.65rem"><i class="fas fa-thumbtack"></i></span>
+                         <?php endif; ?>
+                         <?php if ($thread['status'] === 'locked'): ?>
+                             <span class="badge bg-warning ms-1" style="font-size:0.65rem"><i class="fas fa-lock"></i></span>
+                         <?php endif; ?>
+                         <?php if ($thread['status'] === 'hidden'): ?>
+                             <span class="badge bg-dark ms-1" style="font-size:0.65rem"><i class="fas fa-eye-slash"></i></span>
+                         <?php endif; ?>
+                     </h5>
                     <p class="card-text text-muted small mb-2"><?= nl2br(escape(substr($thread['content'] ?? '', 0, 200))) ?><?php if (strlen($thread['content'] ?? '') > 200): ?>...<?php endif; ?></p>
                     <small class="text-muted"><i class="fas fa-user me-1"></i><?= escape($thread['author']) ?> &middot; <i class="fas fa-clock me-1"></i><?= escape($thread['created_at'] ?? '') ?></small>
                 </div>

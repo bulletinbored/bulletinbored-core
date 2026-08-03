@@ -35,9 +35,85 @@
                             <a href="<?= $isWatching ? url('unwatch', ['thread_id' => $thread['id']]) : url('watch', ['thread_id' => $thread['id']]) ?>" class="text-decoration-none"><i class="fas fa-bell"></i></a>
                         <?php endif; ?>
                     </small>
+                    <?php if (function_exists('is_admin') && is_admin()): ?>
+                    <div class="ms-auto">
+                        <div class="btn-group btn-group-sm">
+                            <?php if ($thread['status'] === 'pending'): ?>
+                                <form method="POST" action="<?= url('frontend_moderate') ?>" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                                    <input type="hidden" name="do" value="approve">
+                                    <input type="hidden" name="id" value="<?= $thread['id'] ?>">
+                                    <button class="btn btn-success btn-sm" title="Approve"><i class="fas fa-check"></i></button>
+                                </form>
+                            <?php endif; ?>
+                            <?php if ($thread['status'] === 'locked'): ?>
+                                <form method="POST" action="<?= url('frontend_moderate') ?>" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                                    <input type="hidden" name="do" value="unlock">
+                                    <input type="hidden" name="id" value="<?= $thread['id'] ?>">
+                                    <button class="btn btn-outline-warning btn-sm" title="Unlock"><i class="fas fa-unlock"></i></button>
+                                </form>
+                            <?php else: ?>
+                                <form method="POST" action="<?= url('frontend_moderate') ?>" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                                    <input type="hidden" name="do" value="lock">
+                                    <input type="hidden" name="id" value="<?= $thread['id'] ?>">
+                                    <button class="btn btn-outline-warning btn-sm" title="Lock"><i class="fas fa-lock"></i></button>
+                                </form>
+                            <?php endif; ?>
+                            <?php if ($thread['status'] === 'sticky'): ?>
+                                <form method="POST" action="<?= url('frontend_moderate') ?>" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                                    <input type="hidden" name="do" value="unsticky">
+                                    <input type="hidden" name="id" value="<?= $thread['id'] ?>">
+                                    <button class="btn btn-outline-info btn-sm" title="Unsticky"><i class="fas fa-thumbtack"></i></button>
+                                </form>
+                            <?php else: ?>
+                                <form method="POST" action="<?= url('frontend_moderate') ?>" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                                    <input type="hidden" name="do" value="sticky">
+                                    <input type="hidden" name="id" value="<?= $thread['id'] ?>">
+                                    <button class="btn btn-outline-info btn-sm" title="Sticky"><i class="fas fa-thumbtack"></i></button>
+                                </form>
+                            <?php endif; ?>
+                            <?php if ($thread['status'] === 'hidden'): ?>
+                                <form method="POST" action="<?= url('frontend_moderate') ?>" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                                    <input type="hidden" name="do" value="approve">
+                                    <input type="hidden" name="id" value="<?= $thread['id'] ?>">
+                                    <button class="btn btn-outline-success btn-sm" title="Restore"><i class="fas fa-eye"></i></button>
+                                </form>
+                            <?php else: ?>
+                                <form method="POST" action="<?= url('frontend_moderate') ?>" class="d-inline" onsubmit="return confirm('Hide this thread?')">
+                                    <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                                    <input type="hidden" name="do" value="hide">
+                                    <input type="hidden" name="id" value="<?= $thread['id'] ?>">
+                                    <button class="btn btn-outline-dark btn-sm" title="Hide"><i class="fas fa-eye-slash"></i></button>
+                                </form>
+                            <?php endif; ?>
+                            <form method="POST" action="<?= url('frontend_moderate') ?>" class="d-inline" onsubmit="return confirm('Delete this thread?')">
+                                <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                                <input type="hidden" name="do" value="delete">
+                                <input type="hidden" name="id" value="<?= $thread['id'] ?>">
+                                <button class="btn btn-outline-danger btn-sm" title="Delete"><i class="fas fa-trash"></i></button>
+                            </form>
+                        </div>
+                    </div>
+                    <?php endif; ?>
                 </div>
-                <h1 class="h4 thread-title mb-3"><?= escape($thread['title'] ?? '') ?></h1>
-                <div class="thread-content">
+<h1 class="h4 thread-title mb-3"><?= escape($thread['title'] ?? '') ?></h1>
+                 <div class="mb-2">
+                     <?php if ($thread['status'] === 'sticky'): ?>
+                         <span class="badge bg-info me-1"><i class="fas fa-thumbtack me-1"></i>Sticky</span>
+                     <?php endif; ?>
+                     <?php if ($thread['status'] === 'locked'): ?>
+                         <span class="badge bg-warning me-1"><i class="fas fa-lock me-1"></i>Locked</span>
+                     <?php endif; ?>
+                     <?php if ($thread['status'] === 'hidden'): ?>
+                         <span class="badge bg-dark me-1"><i class="fas fa-eye-slash me-1"></i>Hidden</span>
+                     <?php endif; ?>
+                 </div>
+                 <div class="thread-content">
                     <?= marked_parse($thread['content'] ?? '') ?>
                     <?php
                     $uploadsStmt = $pdo->prepare("SELECT * FROM uploads WHERE thread_id = ? AND post_id IS NULL ORDER BY created_at ASC");
@@ -110,6 +186,14 @@
     <?php endif; ?>
 
     <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
+        <?php if ($thread['status'] === 'locked' && !is_admin()): ?>
+        <div class="card">
+            <div class="card-body text-center py-4">
+                <i class="fas fa-lock fa-2x text-muted mb-3"></i>
+                <p class="text-muted mb-0"><?= t('thread_locked') ?></p>
+            </div>
+        </div>
+        <?php else: ?>
         <div class="card">
             <div class="card-header"><i class="fas fa-reply me-2"></i><?= t('reply') ?></div>
             <div class="card-body">
@@ -121,6 +205,7 @@
                 </form>
             </div>
         </div>
+        <?php endif; ?>
     <?php else: ?>
         <div class="alert alert-info"><i class="fas fa-info-circle me-2"></i><a href="<?= url('login') ?>">Login</a> <?= t('login_required') ?>.</div>
     <?php endif; ?>

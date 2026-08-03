@@ -19,6 +19,7 @@ $users = $pdo->query("SELECT * FROM users ORDER BY id ASC")->fetchAll();
                             <th>Username</th>
                             <th>Email</th>
                             <th>Role</th>
+                            <th>Status</th>
                             <th>Registered</th>
                             <th class="text-end">Actions</th>
                         </tr>
@@ -34,13 +35,33 @@ $users = $pdo->query("SELECT * FROM users ORDER BY id ASC")->fetchAll();
                                     <?= escape(ucfirst($u['role'])) ?>
                                 </span>
                             </td>
+                            <td>
+                                <?php if ($u['status'] === 'banned'): ?>
+                                    <span class="badge bg-danger">Banned</span>
+                                <?php elseif ($u['status'] === 'suspended'): ?>
+                                    <span class="badge bg-warning">Suspended</span>
+                                <?php else: ?>
+                                    <span class="badge bg-success">Active</span>
+                                <?php endif; ?>
+                            </td>
                             <td><?= escape($u['created_at'] ?? 'N/A') ?></td>
                             <td class="text-end">
                                 <?php if ($u['role'] !== 'admin'): ?>
-                                <form method="POST" action="<?= url('delete_user', ['id' => $u['id']]) ?>" class="d-inline" onsubmit="return confirm('Delete this user?')">
-                                    <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
-                                    <button class="btn btn-danger btn-sm"><i class="fas fa-trash"></i></button>
-                                </form>
+                                    <?php if ($u['status'] === 'banned'): ?>
+                                    <form method="POST" action="<?= url('unban_user', ['id' => $u['id']]) ?>" class="d-inline" onsubmit="return confirm('Unban this user?')">
+                                        <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                                        <button class="btn btn-sm btn-success"><i class="fas fa-unlock"></i> Unban</button>
+                                    </form>
+                                    <?php else: ?>
+                                    <form method="POST" action="<?= url('ban_user', ['id' => $u['id']]) ?>" class="d-inline" onsubmit="return confirm('Ban this user?')">
+                                        <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                                        <button class="btn btn-sm btn-warning"><i class="fas fa-ban"></i> Ban</button>
+                                    </form>
+                                    <?php endif; ?>
+                                    <form method="POST" action="<?= url('delete_user', ['id' => $u['id']]) ?>" class="d-inline ms-1" onsubmit="return confirm('Delete this user?')">
+                                        <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                                        <button class="btn btn-danger btn-sm"><i class="fas fa-trash"></i></button>
+                                    </form>
                                 <?php endif; ?>
                             </td>
                         </tr>

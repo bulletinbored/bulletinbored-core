@@ -104,18 +104,26 @@ function url($action, $params = []) {
             return $base . '/admin/plugins' . (!empty($query) ? '?' . http_build_query($query) : '');
         case 'admin_themes':
             return $base . '/admin/themes' . (!empty($query) ? '?' . http_build_query($query) : '');
-        case 'admin_updates':
-            return $base . '/admin/updates' . (!empty($query) ? '?' . http_build_query($query) : '');
-        case 'moderate':
+case 'admin_updates':
+             return $base . '/admin/updates' . (!empty($query) ? '?' . http_build_query($query) : '');
+         case 'admin_roles':
+             return $base . '/admin/roles' . (!empty($query) ? '?' . http_build_query($query) : '');
+         case 'admin_roles_action':
+             return $base . '/admin/roles-action' . (!empty($query) ? '?' . http_build_query($query) : '');
+         case 'moderate':
             return $base . '/admin/moderate' . (!empty($query) ? '?' . http_build_query($query) : '');
         case 'create_category':
         case 'edit_category':
             return $base . '/admin/categories' . (!empty($query) ? '?' . http_build_query($query) : '');
         case 'delete_category':
             return $base . '/admin/delete-category' . (!empty($query) ? '?' . http_build_query($query) : '');
-        case 'delete_user':
-            return $base . '/admin/delete-user' . (!empty($query) ? '?' . http_build_query($query) : '');
-        case 'do_login':
+case 'delete_user':
+             return $base . '/admin/delete-user' . (!empty($query) ? '?' . http_build_query($query) : '');
+         case 'ban_user':
+             return $base . '/admin/ban-user' . (!empty($query) ? '?' . http_build_query($query) : '');
+         case 'unban_user':
+             return $base . '/admin/unban-user' . (!empty($query) ? '?' . http_build_query($query) : '');
+         case 'do_login':
         case 'do_register':
         case 'do_forgot_password':
         case 'do_reset_password':
@@ -157,12 +165,15 @@ if ($dbDriver === 'mysql') {
     
     // MySQL tables
     $tables = [
-        "users" => "id INT AUTO_INCREMENT PRIMARY KEY, username VARCHAR(255) UNIQUE NOT NULL, password VARCHAR(255) NOT NULL, email VARCHAR(255), role VARCHAR(50) DEFAULT 'user', avatar VARCHAR(255), created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
+        "users" => "id INT AUTO_INCREMENT PRIMARY KEY, username VARCHAR(255) UNIQUE NOT NULL, password VARCHAR(255) NOT NULL, email VARCHAR(255), role VARCHAR(50) DEFAULT 'user', avatar VARCHAR(255), status VARCHAR(50) DEFAULT 'active', created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
         "categories" => "id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255) NOT NULL, description TEXT, position INT DEFAULT 0",
         "threads" => "id INT AUTO_INCREMENT PRIMARY KEY, category_id INT, user_id INT, title TEXT, content TEXT, status VARCHAR(50) DEFAULT 'visible', created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP",
         "posts" => "id INT AUTO_INCREMENT PRIMARY KEY, thread_id INT, user_id INT, content TEXT, status VARCHAR(50) DEFAULT 'visible', created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
         "uploads" => "id INT AUTO_INCREMENT PRIMARY KEY, thread_id INT, post_id INT, user_id INT, filename VARCHAR(255), original_name VARCHAR(255), size INT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
-        "thread_watchers" => "id INT AUTO_INCREMENT PRIMARY KEY, thread_id INT NOT NULL, user_id INT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE KEY unique_watch (thread_id, user_id)"
+        "thread_watchers" => "id INT AUTO_INCREMENT PRIMARY KEY, thread_id INT NOT NULL, user_id INT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE KEY unique_watch (thread_id, user_id)",
+        "notifications" => "id INT AUTO_INCREMENT PRIMARY KEY, user_id INT NOT NULL, type VARCHAR(50) DEFAULT 'info', title TEXT NOT NULL, message TEXT, link TEXT, read INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
+        "private_messages" => "id INT AUTO_INCREMENT PRIMARY KEY, sender_id INT NOT NULL, recipient_id INT NOT NULL, subject TEXT DEFAULT '', content TEXT NOT NULL, read INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
+        "roles" => "id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(50) NOT NULL UNIQUE, permissions TEXT DEFAULT '[]', created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
     ];
     
     foreach ($tables as $name => $schema) {
@@ -176,6 +187,16 @@ if ($dbDriver === 'mysql') {
             ->execute([$config['admin_user'], password_hash($config['admin_pass'], PASSWORD_DEFAULT)]);
     }
     
+    // Create default roles if not exists
+    $defaultRoles = [
+        ['admin', json_encode(['can_approve_threads', 'can_delete_threads', 'can_delete_posts', 'can_lock_threads', 'can_sticky_threads', 'can_edit_posts', 'can_edit_threads', 'can_ban_users', 'can_manage_roles'])],
+        ['moderator', json_encode(['can_approve_threads', 'can_delete_threads', 'can_delete_posts', 'can_lock_threads', 'can_sticky_threads', 'can_edit_posts', 'can_edit_threads'])],
+        ['user', json_encode(['can_create_threads', 'can_create_posts', 'can_edit_own_posts', 'can_delete_own_posts'])],
+    ];
+    foreach ($defaultRoles as $role) {
+        $pdo->prepare("INSERT OR IGNORE INTO roles (name, permissions) VALUES (?, ?)")->execute($role);
+    }
+    
     // Create default category
     $pdo->prepare("INSERT IGNORE INTO categories (name, description, position) VALUES ('General', 'General discussion', 1)")->execute();
 } else {
@@ -186,15 +207,16 @@ if ($dbDriver === 'mysql') {
         $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
         
         $pdo->exec("
-            CREATE TABLE users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE NOT NULL,
-                password TEXT NOT NULL,
-                email TEXT,
-                role TEXT DEFAULT 'user',
-                avatar TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            );
+CREATE TABLE users (
+                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                 username TEXT UNIQUE NOT NULL,
+                 password TEXT NOT NULL,
+                 email TEXT,
+                 role TEXT DEFAULT 'user',
+                 avatar TEXT,
+                 status TEXT DEFAULT 'active',
+                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+             );
             CREATE TABLE categories (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
@@ -253,6 +275,18 @@ if ($dbDriver === 'mysql') {
                 subject TEXT DEFAULT '',
                 content TEXT NOT NULL,
                 read INTEGER DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE roles (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                permissions TEXT DEFAULT '[]',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE roles (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                permissions TEXT DEFAULT '[]',
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
         ");
@@ -355,6 +389,30 @@ if ($dbDriver === 'mysql') {
                 )
             ");
         } catch (PDOException $e) {}
+
+        // Create roles table if not exists
+        try {
+            $pdo->exec("
+                CREATE TABLE IF NOT EXISTS roles (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL UNIQUE,
+                    permissions TEXT DEFAULT '[]',
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            ");
+        } catch (PDOException $e) {}
+
+        // Insert default roles if not exists
+        try {
+            $defaultRoles = [
+                ['admin', json_encode(['can_approve_threads', 'can_delete_threads', 'can_delete_posts', 'can_lock_threads', 'can_sticky_threads', 'can_edit_posts', 'can_edit_threads', 'can_ban_users', 'can_manage_roles'])],
+                ['moderator', json_encode(['can_approve_threads', 'can_delete_threads', 'can_delete_posts', 'can_lock_threads', 'can_sticky_threads', 'can_edit_posts', 'can_edit_threads'])],
+                ['user', json_encode(['can_create_threads', 'can_create_posts', 'can_edit_own_posts', 'can_delete_own_posts'])],
+            ];
+            foreach ($defaultRoles as $role) {
+                $pdo->prepare("INSERT OR IGNORE INTO roles (name, permissions) VALUES (?, ?)")->execute($role);
+            }
+        } catch (PDOException $e) {}
     }
 }
 
@@ -370,10 +428,15 @@ try {
     if (!in_array('avatar', $cols)) {
         $pdo->exec("ALTER TABLE users ADD COLUMN avatar TEXT");
     }
+    if (!in_array('status', $cols)) {
+        $pdo->exec("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'");
+    }
 } catch (PDOException $e) {}
 
 // Helper functions
 function escape($s) { return htmlspecialchars($s, ENT_QUOTES, 'UTF-8'); }
+
+function is_banned() { return ($_SESSION['user_status'] ?? '') === 'banned'; }
 
 function marked_parse($text) {
     if (empty($text)) return '';
@@ -526,15 +589,23 @@ if (!isset($_GET['action'])) {
         $_GET['action'] = 'admin_plugins';
     } elseif (preg_match('#^admin/themes$#', $reqPath)) {
         $_GET['action'] = 'admin_themes';
-    } elseif (preg_match('#^admin/updates$#', $reqPath)) {
-        $_GET['action'] = 'admin_updates';
-    } elseif (preg_match('#^admin/moderate$#', $reqPath)) {
+} elseif (preg_match('#^admin/updates$#', $reqPath)) {
+         $_GET['action'] = 'admin_updates';
+     } elseif (preg_match('#^admin/roles$#', $reqPath)) {
+         $_GET['action'] = 'admin_roles';
+     } elseif (preg_match('#^admin/roles-action$#', $reqPath)) {
+         $_GET['action'] = 'admin_roles_action';
+     } elseif (preg_match('#^admin/moderate$#', $reqPath)) {
         $_GET['action'] = 'moderate';
     } elseif (preg_match('#^admin/delete-category$#', $reqPath)) {
         $_GET['action'] = 'delete_category';
-    } elseif (preg_match('#^admin/delete-user$#', $reqPath)) {
-        $_GET['action'] = 'delete_user';
-    } elseif (preg_match('#^edit-profile$#', $reqPath)) {
+} elseif (preg_match('#^admin/delete-user$#', $reqPath)) {
+         $_GET['action'] = 'delete_user';
+     } elseif (preg_match('#^admin/ban-user$#', $reqPath)) {
+         $_GET['action'] = 'ban_user';
+     } elseif (preg_match('#^admin/unban-user$#', $reqPath)) {
+         $_GET['action'] = 'unban_user';
+     } elseif (preg_match('#^edit-profile$#', $reqPath)) {
         $_GET['action'] = 'edit_profile';
     } elseif (preg_match('#^forgot-password$#', $reqPath)) {
         $_GET['action'] = 'forgot_password';
@@ -553,6 +624,12 @@ if (!isset($_GET['action'])) {
 $action = $_GET['action'] ?? 'home';
 $method = $_SERVER['REQUEST_METHOD'];
 
+// Redirect banned users to home
+if (is_logged_in() && is_banned()) {
+    session_destroy();
+    redirect(url('home'));
+}
+
 try {
     if ($action === 'home' || $action === '') {
         // Home page - list threads with categories
@@ -561,8 +638,8 @@ try {
             FROM threads t 
             LEFT JOIN users u ON t.user_id = u.id 
             LEFT JOIN categories c ON t.category_id = c.id 
-            WHERE t.status = 'visible' 
-            ORDER BY t.created_at DESC 
+            WHERE t.status IN ('visible', 'sticky', 'locked') 
+            ORDER BY (t.status = 'sticky') DESC, t.created_at DESC 
             LIMIT 20
         ")->fetchAll();
         
@@ -842,12 +919,17 @@ try {
             $user = $stmt->fetch();
             
             if ($user && password_verify($password, $user['password'])) {
-                $_SESSION['user_id'] = $user['id'];
-                $_SESSION['user_role'] = $user['role'];
-                $_SESSION['username'] = $user['username'];
-                $_SESSION['email'] = $user['email'] ?? '';
-                $_SESSION['avatar'] = $user['avatar'] ?? '';
-                redirect(url('home'));
+                if ($user['status'] === 'banned') {
+                    $error = 'user_banned';
+                } else {
+                    $_SESSION['user_id'] = $user['id'];
+                    $_SESSION['user_role'] = $user['role'];
+                    $_SESSION['username'] = $user['username'];
+                    $_SESSION['email'] = $user['email'] ?? '';
+                    $_SESSION['avatar'] = $user['avatar'] ?? '';
+                    $_SESSION['user_status'] = $user['status'];
+                    redirect(url('home'));
+                }
             } else {
                 $error = 'Invalid credentials';
             }
@@ -916,8 +998,8 @@ try {
             SELECT t.*, u.username as author 
             FROM threads t 
             JOIN users u ON t.user_id = u.id 
-            WHERE t.user_id = ? AND t.status = 'visible' 
-            ORDER BY t.created_at DESC 
+            WHERE t.user_id = ? AND t.status IN ('visible', 'sticky', 'locked') 
+            ORDER BY (t.status = 'sticky') DESC, t.created_at DESC 
             LIMIT 20
         ");
         $userThreadsStmt->execute([$profileUser['id']]);
@@ -1047,9 +1129,9 @@ try {
                 FROM threads t 
                 LEFT JOIN categories c ON t.category_id = c.id 
                 LEFT JOIN users u ON t.user_id = u.id 
-                WHERE t.status = 'visible' 
+                WHERE t.status IN ('visible', 'sticky', 'locked') 
                 AND (t.title LIKE ? OR t.content LIKE ? OR c.name LIKE ? OR u.username LIKE ?)
-                ORDER BY t.created_at DESC
+                ORDER BY (t.status = 'sticky') DESC, t.created_at DESC
                 LIMIT ? OFFSET ?
             ");
             $threadStmt->execute([$searchTerm, $searchTerm, $searchTerm, $searchTerm, $perPage, $offset]);
@@ -1059,7 +1141,7 @@ try {
                 SELECT COUNT(*) FROM threads t 
                 LEFT JOIN categories c ON t.category_id = c.id 
                 LEFT JOIN users u ON t.user_id = u.id 
-                WHERE t.status = 'visible' 
+                WHERE t.status IN ('visible', 'sticky', 'locked') 
                 AND (t.title LIKE ? OR t.content LIKE ? OR c.name LIKE ? OR u.username LIKE ?)
             ");
             $totalStmt2->execute([$searchTerm, $searchTerm, $searchTerm, $searchTerm]);
@@ -1070,14 +1152,14 @@ try {
                 FROM threads t 
                 LEFT JOIN categories c ON t.category_id = c.id 
                 LEFT JOIN users u ON t.user_id = u.id 
-                WHERE t.status = 'visible' 
-                ORDER BY t.created_at DESC
+                WHERE t.status IN ('visible', 'sticky', 'locked') 
+                ORDER BY (t.status = 'sticky') DESC, t.created_at DESC
                 LIMIT ? OFFSET ?
             ");
             $threadStmt2->execute([$perPage, $offset]);
             $threads = $threadStmt2->fetchAll();
             
-            $total = $pdo->query("SELECT COUNT(*) FROM threads WHERE status = 'visible'")->fetchColumn();
+            $total = $pdo->query("SELECT COUNT(*) FROM threads WHERE status IN ('visible', 'sticky', 'locked')")->fetchColumn();
         }
         
         $totalPages = max(1, (int)ceil($total / $perPage));
@@ -1103,8 +1185,8 @@ try {
             SELECT t.*, u.username as author 
             FROM threads t 
             LEFT JOIN users u ON t.user_id = u.id 
-            WHERE t.category_id = ? AND t.status = 'visible' 
-            ORDER BY t.created_at DESC
+            WHERE t.category_id = ? AND t.status IN ('visible', 'sticky', 'locked') 
+            ORDER BY (t.status = 'sticky') DESC, t.created_at DESC
             LIMIT ? OFFSET ?
         ");
         $catThreadStmt->execute([$categoryId, $perPage, $offset]);
@@ -1112,7 +1194,7 @@ try {
         
         $catTotalStmt = $pdo->prepare("
             SELECT COUNT(*) FROM threads 
-            WHERE category_id = ? AND status = 'visible'
+            WHERE category_id = ? AND status IN ('visible', 'sticky', 'locked')
         ");
         $catTotalStmt->execute([$categoryId]);
         $total = $catTotalStmt->fetchColumn();
@@ -1180,28 +1262,74 @@ try {
     
     include __DIR__.'/views/admin.php';
 }
-    elseif ($action === 'moderate' && $method === 'POST' && is_admin()) {
-        // Handle moderation actions
-        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
-            die('CSRF token invalid');
-        }
-        
-        $threadId = (int)($_POST['id'] ?? 0);
-        $action = $_POST['do'] ?? '';
-        
-        if ($threadId <= 0) {
-            die('Invalid thread ID');
-        }
-        
-        if ($action === 'approve') {
-            $pdo->prepare("UPDATE threads SET status = 'visible' WHERE id = ?")->execute([$threadId]);
-        } elseif ($action === 'delete') {
-            $pdo->prepare("DELETE FROM threads WHERE id = ?")->execute([$threadId]);
-        }
-        
-        redirect(url('admin'));
-    }
-    elseif ($action === 'admin_categories') {
+elseif ($action === 'moderate' && $method === 'POST' && is_admin()) {
+         // Handle moderation actions
+         if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+             die('CSRF token invalid');
+         }
+         
+         $threadId = (int)($_POST['id'] ?? 0);
+         $action = $_POST['do'] ?? '';
+         
+         if ($threadId <= 0) {
+             die('Invalid thread ID');
+         }
+         
+         if ($action === 'approve') {
+             $pdo->prepare("UPDATE threads SET status = 'visible' WHERE id = ?")->execute([$threadId]);
+         } elseif ($action === 'delete') {
+             $pdo->prepare("DELETE FROM threads WHERE id = ?")->execute([$threadId]);
+         } elseif ($action === 'lock') {
+             $pdo->prepare("UPDATE threads SET status = 'locked' WHERE id = ?")->execute([$threadId]);
+         } elseif ($action === 'unlock') {
+             $pdo->prepare("UPDATE threads SET status = 'visible' WHERE id = ?")->execute([$threadId]);
+         } elseif ($action === 'sticky') {
+             $pdo->prepare("UPDATE threads SET status = 'sticky' WHERE id = ?")->execute([$threadId]);
+         } elseif ($action === 'unsticky') {
+             $pdo->prepare("UPDATE threads SET status = 'visible' WHERE id = ?")->execute([$threadId]);
+         } elseif ($action === 'hide') {
+             $pdo->prepare("UPDATE threads SET status = 'hidden' WHERE id = ?")->execute([$threadId]);
+         }
+         
+redirect(url('admin_moderation'));
+     }
+     elseif ($action === 'frontend_moderate' && $method === 'POST' && is_logged_in()) {
+         // Frontend moderation actions (from thread view)
+         if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+             die('CSRF token invalid');
+         }
+         $threadId = (int)($_POST['id'] ?? 0);
+         $modAction = $_POST['do'] ?? '';
+         if ($threadId <= 0) {
+             die('Invalid thread ID');
+         }
+         // Check if user is admin or has moderation permissions
+         $userRole = $_SESSION['user_role'] ?? 'user';
+         if ($userRole !== 'admin' && $userRole !== 'moderator') {
+             die('Not authorized');
+         }
+         if ($modAction === 'lock') {
+             $pdo->prepare("UPDATE threads SET status = 'locked' WHERE id = ?")->execute([$threadId]);
+         } elseif ($modAction === 'unlock') {
+             $pdo->prepare("UPDATE threads SET status = 'visible' WHERE id = ?")->execute([$threadId]);
+         } elseif ($modAction === 'sticky') {
+             $pdo->prepare("UPDATE threads SET status = 'sticky' WHERE id = ?")->execute([$threadId]);
+         } elseif ($modAction === 'unsticky') {
+             $pdo->prepare("UPDATE threads SET status = 'visible' WHERE id = ?")->execute([$threadId]);
+         } elseif ($modAction === 'hide') {
+             $pdo->prepare("UPDATE threads SET status = 'hidden' WHERE id = ?")->execute([$threadId]);
+} elseif ($modAction === 'delete') {
+              $pdo->prepare("DELETE FROM threads WHERE id = ?")->execute([$threadId]);
+              redirect(url('admin_moderation'));
+          } elseif ($modAction === 'approve') {
+             $pdo->prepare("UPDATE threads SET status = 'visible' WHERE id = ?")->execute([$threadId]);
+         }
+         $threadTitleStmt = $pdo->prepare("SELECT title FROM threads WHERE id = ?");
+         $threadTitleStmt->execute([$threadId]);
+         $threadTitle = $threadTitleStmt->fetchColumn();
+         redirect(url('thread', ['id' => $threadId, 'slug' => slugify($threadTitle ?? '')]));
+     }
+     elseif ($action === 'admin_categories') {
         // Show categories management page / handle create & edit
         if (!is_admin()) {
             die('Admin required');
@@ -1239,18 +1367,40 @@ try {
         }
         redirect(url('admin_categories'));
     }
-    elseif ($action === 'delete_user' && $method === 'POST' && is_admin()) {
-        // Delete user
-        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
-            die('CSRF token invalid');
-        }
-        $userId = (int)($_GET['id'] ?? 0);
-        if ($userId > 0) {
-            $pdo->prepare("DELETE FROM users WHERE id = ? AND role <> 'admin'")->execute([$userId]);
-        }
-        redirect(url('admin_users'));
-    }
-    elseif ($action === 'admin_settings' && $method === 'POST' && is_admin()) {
+elseif ($action === 'delete_user' && $method === 'POST' && is_admin()) {
+         // Delete user
+         if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+             die('CSRF token invalid');
+         }
+         $userId = (int)($_GET['id'] ?? 0);
+         if ($userId > 0) {
+             $pdo->prepare("DELETE FROM users WHERE id = ? AND role <> 'admin'")->execute([$userId]);
+         }
+         redirect(url('admin_users'));
+     }
+     elseif ($action === 'ban_user' && $method === 'POST' && is_admin()) {
+         // Ban a user
+         if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+             die('CSRF token invalid');
+         }
+         $userId = (int)($_GET['id'] ?? 0);
+         if ($userId > 0) {
+             $pdo->prepare("UPDATE users SET status = 'banned' WHERE id = ? AND role <> 'admin'")->execute([$userId]);
+         }
+         redirect(url('admin_users'));
+     }
+     elseif ($action === 'unban_user' && $method === 'POST' && is_admin()) {
+         // Unban a user
+         if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+             die('CSRF token invalid');
+         }
+         $userId = (int)($_GET['id'] ?? 0);
+         if ($userId > 0) {
+             $pdo->prepare("UPDATE users SET status = 'active' WHERE id = ?")->execute([$userId]);
+         }
+         redirect(url('admin_users'));
+     }
+     elseif ($action === 'admin_settings' && $method === 'POST' && is_admin()) {
         // Save admin settings
         if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
             die('CSRF token invalid');
@@ -1279,14 +1429,49 @@ try {
         file_put_contents(__DIR__.'/config.php', $configContent);
         redirect(url('admin_settings'));
     }
-    elseif ($action === 'admin_moderation') {
-        // Show moderation page
-        if (!is_admin()) {
-            die('Admin required');
-        }
-        include __DIR__.'/views/admin_moderation.php';
-    }
-    elseif ($action === 'admin_users') {
+elseif ($action === 'admin_moderation') {
+         // Show moderation page
+         if (!is_admin()) {
+             die('Admin required');
+         }
+         include __DIR__.'/views/admin_moderation.php';
+     }
+     elseif ($action === 'admin_roles') {
+         // Show roles/permissions management page
+         if (!is_admin()) {
+             die('Admin required');
+         }
+         include __DIR__.'/views/admin_roles.php';
+     }
+     elseif ($action === 'admin_roles_action' && $method === 'POST' && is_admin()) {
+         // Handle roles/permissions actions
+         if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+             die('CSRF token invalid');
+         }
+         $roleAction = $_POST['do'] ?? '';
+         if ($roleAction === 'create') {
+             $roleName = validate_input($_POST['role_name'] ?? '');
+             $permissions = $_POST['permissions'] ?? [];
+             if ($roleName !== '') {
+                 $pdo->prepare("INSERT INTO roles (name, permissions) VALUES (?, ?)")
+                     ->execute([$roleName, json_encode($permissions)]);
+             }
+         } elseif ($roleAction === 'update') {
+             $roleId = (int)($_POST['role_id'] ?? 0);
+             $permissions = $_POST['permissions'] ?? [];
+             if ($roleId > 0) {
+                 $pdo->prepare("UPDATE roles SET permissions = ? WHERE id = ?")
+                     ->execute([json_encode($permissions), $roleId]);
+             }
+         } elseif ($roleAction === 'delete') {
+             $roleId = (int)($_POST['role_id'] ?? 0);
+             if ($roleId > 0) {
+                 $pdo->prepare("DELETE FROM roles WHERE id = ? AND name <> 'admin'")->execute([$roleId]);
+             }
+         }
+         redirect(url('admin_roles'));
+     }
+     elseif ($action === 'admin_users') {
         // Show users management page
         if (!is_admin()) {
             die('Admin required');
