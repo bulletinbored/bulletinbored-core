@@ -138,6 +138,12 @@ if ($method === 'POST') {
     }
 
     $action = $_POST['action'] ?? '';
+    if ($action === '') {
+        $requestUri = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH);
+        $scriptName = $_SERVER['SCRIPT_NAME'] ?? '';
+        $path = ltrim(substr($requestUri, strlen($scriptName)), '/');
+        $action = $path ? explode('/', $path)[0] : '';
+    }
 
     if ($action === 'send') {
         $recipientId = (int)($_POST['recipient_id'] ?? 0);

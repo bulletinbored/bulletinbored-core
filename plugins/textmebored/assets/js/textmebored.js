@@ -255,11 +255,10 @@ function newConversation() {
     modalHtml += '<form class="textmebored-compose-form">';
     modalHtml += '<input type="hidden" name="csrf_token" value="' + escapeHtml(window.textmebored.csrfToken || '') + '">';
     modalHtml += '<input type="hidden" name="action" value="send">';
-    modalHtml += '<div class="mb-3"><label class="form-label">To (username)</label><input type="text" name="to_username" id="textmebored-username" class="form-control" placeholder="Enter username" required autocomplete="off" style="position:relative;z-index:1000;"></div>';
+    modalHtml += '<div class="mb-3" style="position:relative;"><label class="form-label">To (username)</label><input type="text" name="to_username" id="textmebored-username" class="form-control" placeholder="Enter username" required autocomplete="off"><div id="textmebored-user-suggestions" class="position-absolute" style="top:100%;left:0;right:0;background:white;border:1px solid #ccc;max-height:200px;overflow-y:auto;z-index:1100;display:none;"></div></div>';
     modalHtml += '<div class="mb-3"><label class="form-label">Message</label><input type="text" name="content" class="form-control" placeholder="Type a message..." required autocomplete="off"></div>';
     modalHtml += '<button type="submit" class="btn btn-forum btn-sm"><i class="fas fa-paper-plane me-1"></i>Send</button>';
     modalHtml += '</form>';
-    modalHtml += '<div id="textmebored-user-suggestions" class="position-absolute" style="background:white;border:1px solid #ccc;max-height:200px;overflow-y:auto;z-index:1001;width:100%;display:none;"></div>';
     modalHtml += '</div>';
     modalHtml += '</div>';
 
@@ -304,7 +303,9 @@ function newConversation() {
                                 div.className = 'p-2 cursor-pointer hover-bg-light';
                                 div.textContent = user.username;
                                 div.dataset.userId = user.id;
-                                div.addEventListener('click', function() {
+                                div.addEventListener('mousedown', function(e) { e.preventDefault(); });
+                                div.addEventListener('click', function(e) {
+                                    e.stopPropagation();
                                     usernameInput.value = user.username;
                                     suggestionsBox.style.display = 'none';
                                 });
