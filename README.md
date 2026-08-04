@@ -9,33 +9,20 @@ Current version: **0.1.0**
 1. Upload all files to a PHP-enabled web server (PHP 8.x, PDO/SQLite or PDO/MySQL extension)
 2. Ensure Apache `mod_rewrite` is enabled (for SEO-friendly URLs)
 3. Ensure the `data/`, `uploads/`, and `uploads/avatars/` directories are writable by the web server
-4. If installed in a subdirectory (e.g., `/forum`), set `'base_url' => '/forum'` in `config.php`
-5. Visit the site — SQLite database auto-creates on first access
-6. Login with admin/changeme123 (change password immediately!)
+4. Visit the site in your browser. If `config.php` is missing, the 2-step installer starts automatically:
+   - **Step 1**: Choose your database (SQLite or MySQL) and test the connection
+   - **Step 2**: Set your site name, administrator account, and email
+5. The installer creates `config.php` and the database automatically
+6. Log in with the administrator credentials you just created
 
-## Features
+### Manual installation
 
-- Threaded discussions with categories and pagination
-- User registration, profiles, avatars
-- File attachments on threads and replies
-- Thread watching with email notifications
-- Search across threads, categories, and users
-- Password reset via email
-- Admin dashboard: categories, moderation, users, settings
-- **Plugin Manager** — install, enable, disable, and delete plugins from the dashboard
-- **Theme Manager** — install, activate, and delete themes from the dashboard; ships with **freshbored**
-- **Update Manager** — check for updates and apply ZIP packages for core, plugins, and themes
-- **Language Manager** — upload and delete localization files from the dashboard
-- **editbored** — bundled WYSIWYG Markdown editor plugin with mentions and image upload
-- Hook-based plugin system
-- SEO-friendly URLs
-- Localization (i18n) infrastructure
-
-## Configuration
+If you prefer to configure `config.php` yourself instead of using the web installer, copy `config-sample.php` to `config.php` and set your database and site settings manually. Once `config.php` is in place, visiting the site will initialize the database on first access.
 
 See `docs/configuration.md` for the full list of options.
 
 ```php
+// config.php
 $config = [
     'db_driver' => 'sqlite',
     'db_path' => __DIR__.'/data/database.sqlite',

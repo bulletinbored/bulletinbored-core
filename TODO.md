@@ -1,7 +1,7 @@
 # TODO
 
 [X] Aggiustare i nomi editbored e freshbored (tutto minuscolo)
-[ ] Creare un installer minimale e moderno: 2 pagine (stile Wordpress), prima pagina database, seconda nome sito, username, password e email amministratore
+[X] Creare un installer minimale e moderno: 2 pagine (stile Wordpress), prima pagina database, seconda nome sito, username, password e email amministratore
 [X] Creare nella dashboard una scheda per amministrare i permessi e i ruoli
 [X] Azioni di moderazione in frontend
 [X] Add locked/sticky/hidden status indicators in thread previews

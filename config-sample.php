@@ -1,29 +1,36 @@
 <?php
-$config['db_driver'] = 'sqlite';
-$config['db_path'] = __DIR__ . '/data/database.sqlite';
-$config['db_host'] = 'localhost';
-$config['db_name'] = 'forum';
-$config['db_user'] = 'root';
-$config['db_pass'] = '';
+/**
+ * bulletinbored configuration sample
+ *
+ * Copy this file to config.php and fill in your values.
+ * The web installer can also generate config.php for you automatically.
+ */
+
+$config['db_driver'] = 'sqlite'; // 'sqlite' or 'mysql'
+$config['db_path'] = __DIR__ . '/data/database.sqlite'; // SQLite only
+$config['db_host'] = 'localhost'; // MySQL only
+$config['db_name'] = 'forum'; // MySQL only
+$config['db_user'] = 'root'; // MySQL only
+$config['db_pass'] = ''; // MySQL only
 $config['site_name'] = 'bulletinbored';
 $config['admin_user'] = 'admin';
 $config['admin_pass'] = 'changeme123';
 $config['mail_from'] = 'noreply@bulletinbored.local';
 $config['mail_from_name'] = 'bulletinbored';
-$config['mail_method'] = 'mail';
+$config['mail_method'] = 'mail'; // 'mail' or 'smtp'
 $config['theme'] = 'freshbored';
 $config['default_lang'] = 'en';
-$config['available_langs'] = array (
-  0 => 'en',
+$config['available_langs'] = array(
+    'en',
 );
 $config['avatar_max_size'] = 2097152;
-$config['avatar_allowed_types'] = array (
-  0 => 'image/jpeg',
-  1 => 'image/png',
-  2 => 'image/gif',
-  3 => 'image/webp',
+$config['avatar_allowed_types'] = array(
+    'image/jpeg',
+    'image/png',
+    'image/gif',
+    'image/webp',
 );
-$config['base_url'] = '';
+$config['base_url'] = ''; // e.g. '/forum' if installed in a subdirectory
 $config['allow_registration'] = 0;
 $config['maintenance_mode'] = 0;
 $config['site_tagline'] = '';

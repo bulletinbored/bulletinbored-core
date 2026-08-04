@@ -1,6 +1,18 @@
 <?php
 session_start();
 
+$installerPages = ['install.php', 'install2.php'];
+$scriptName = basename($_SERVER['SCRIPT_NAME'] ?? '');
+
+if (!file_exists(__DIR__ . '/config.php') && !in_array($scriptName, $installerPages)) {
+    $base = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '')), '/');
+    if ($base === '' || $base === '/') {
+        $base = '';
+    }
+    header('Location: ' . $base . '/install.php');
+    exit;
+}
+
 // Load configuration
 require __DIR__.'/config.php';
 
