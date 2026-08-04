@@ -74,7 +74,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $stmt = $pdo->query("SELECT COUNT(*) FROM users WHERE role='admin'");
                 if ($stmt->fetchColumn() == 0) {
-                    $pdo->prepare("INSERT INTO users (username, password, role, email) VALUES (?, ?, 'admin', ?)")
+                    $pdo->prepare("INSERT INTO users (username, password, role, email, email_verified) VALUES (?, ?, 'admin', ?, 1)")
                         ->execute([$adminUser, password_hash($adminPass, PASSWORD_DEFAULT), $adminEmail]);
                 }
 
@@ -185,8 +185,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     );
                 ");
 
-                $pdo->prepare("INSERT INTO users (username, password, role, email) VALUES (?, ?, 'admin', ?)")
-                    ->execute([$adminUser, password_hash($adminPass, PASSWORD_DEFAULT), $adminEmail]);
+                $stmt = $pdo->query("SELECT COUNT(*) FROM users WHERE role='admin'");
+                if ($stmt->fetchColumn() == 0) {
+                    $pdo->prepare("INSERT INTO users (username, password, role, email, email_verified) VALUES (?, ?, 'admin', ?, 1)")
+                        ->execute([$adminUser, password_hash($adminPass, PASSWORD_DEFAULT), $adminEmail]);
+                } else {
+                    $pdo->prepare("UPDATE users SET email_verified = 1 WHERE role = 'admin'")->execute();
+                }
 
                 $defaultRoles = [
                     ['admin', json_encode(['can_approve_threads', 'can_delete_threads', 'can_delete_posts', 'can_lock_threads', 'can_sticky_threads', 'can_edit_posts', 'can_edit_threads', 'can_ban_users', 'can_manage_roles'])],
@@ -223,7 +228,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $relPath = str_replace(__DIR__, '', $dbPath);
                 $configContent .= '$config[\'db_path\'] = __DIR__ . \'' . $relPath . "';\n";
             } else {
-                $configContent .= '$config[\'db_path\'] = __DIR__ . \'/data/database.sqlite\';\n';
+                $configContent .= '$config[\'db_path\'] = __DIR__ . \'/data/database.sqlite\';' . "\n";
             }
             $configContent .= '$config[\'db_host\'] = \'' . str_replace("'", "\\'", $dbHost) . "';\n";
             $configContent .= '$config[\'db_name\'] = \'' . str_replace("'", "\\'", $dbName) . "';\n";
@@ -234,25 +239,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $configContent .= '$config[\'admin_pass\'] = \'' . str_replace("'", "\\'", $adminPass) . "';\n";
             $configContent .= '$config[\'mail_from\'] = \'' . str_replace("'", "\\'", $adminEmail) . "';\n";
             $configContent .= '$config[\'mail_from_name\'] = \'' . str_replace("'", "\\'", $siteName) . "';\n";
-            $configContent .= '$config[\'mail_method\'] = \'mail\';\n';
-            $configContent .= '$config[\'theme\'] = \'freshbored\';\n';
-            $configContent .= '$config[\'default_lang\'] = \'en\';\n';
-            $configContent .= '$config[\'available_langs\'] = array (\n  0 => \'en\',\n);\n';
-            $configContent .= '$config[\'avatar_max_size\'] = 2097152;\n';
-            $configContent .= '$config[\'avatar_allowed_types\'] = array (\n  0 => \'image/jpeg\',\n  1 => \'image/png\',\n  2 => \'image/gif\',\n  3 => \'image/webp\',\n);\n';
-            $configContent .= '$config[\'base_url\'] = \'\';\n';
-            $configContent .= '$config[\'allow_registration\'] = 0;\n';
-            $configContent .= '$config[\'maintenance_mode\'] = 0;\n';
-            $configContent .= '$config[\'site_tagline\'] = \'\';\n';
-            $configContent .= '$config[\'site_icon\'] = \'\';\n';
-            $configContent .= '$config[\'timezone\'] = \'UTC\';\n';
-            $configContent .= '$config[\'date_format\'] = \'Y-m-d\';\n';
-            $configContent .= '$config[\'time_format\'] = \'H:i\';\n';
-            $configContent .= '$config[\'version\'] = trim(file_get_contents(__DIR__.\'/VERSION\'));\n';
-            $configContent .= '$config[\'plugin_manifest\'] = __DIR__.\'/data/plugins.json\';\n';
-            $configContent .= '$config[\'theme_manifest\'] = __DIR__.\'/data/themes.json\';\n';
-            $configContent .= '$config[\'update_manifest\'] = __DIR__.\'/data/updates.json\';\n';
-            $configContent .= '$config[\'update_server\'] = \'\';\n';
+            $configContent .= '$config[\'mail_method\'] = \'mail\';' . "\n";
+            $configContent .= '$config[\'theme\'] = \'freshbored\';' . "\n";
+            $configContent .= '$config[\'default_lang\'] = \'en\';' . "\n";
+            $configContent .= '$config[\'available_langs\'] = [\'en\'];' . "\n";
+            $configContent .= '$config[\'avatar_max_size\'] = 2097152;' . "\n";
+            $configContent .= '$config[\'avatar_allowed_types\'] = [\'image/jpeg\', \'image/png\', \'image/gif\', \'image/webp\'];' . "\n";
+            $configContent .= '$config[\'base_url\'] = \'\';' . "\n";
+            $configContent .= '$config[\'allow_registration\'] = 0;' . "\n";
+            $configContent .= '$config[\'maintenance_mode\'] = 0;' . "\n";
+            $configContent .= '$config[\'site_tagline\'] = \'\';' . "\n";
+            $configContent .= '$config[\'site_icon\'] = \'\';' . "\n";
+            $configContent .= '$config[\'timezone\'] = \'UTC\';' . "\n";
+            $configContent .= '$config[\'date_format\'] = \'Y-m-d\';' . "\n";
+            $configContent .= '$config[\'time_format\'] = \'H:i\';' . "\n";
+            $configContent .= '$config[\'version\'] = trim(file_get_contents(__DIR__.\'/VERSION\'));' . "\n";
+            $configContent .= '$config[\'plugin_manifest\'] = __DIR__.\'/data/plugins.json\';' . "\n";
+            $configContent .= '$config[\'theme_manifest\'] = __DIR__.\'/data/themes.json\';' . "\n";
+            $configContent .= '$config[\'update_manifest\'] = __DIR__.\'/data/updates.json\';' . "\n";
+            $configContent .= '$config[\'update_server\'] = \'\';' . "\n";
 
             file_put_contents(__DIR__ . '/config.php', $configContent, LOCK_EX);
 
