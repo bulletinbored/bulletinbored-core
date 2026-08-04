@@ -1739,12 +1739,22 @@ elseif ($action === 'unban_user' && $method === 'POST' && is_admin()) {
         $maintenanceMode = isset($_POST['maintenance_mode']) ? 1 : 0;
         $defaultLang = trim($_POST['default_lang'] ?? $config['default_lang'] ?? 'en');
         $availableLangs = array_filter(array_map('trim', explode(',', $_POST['available_langs'] ?? implode(',', $config['available_langs'] ?? ['en']))));
+        $siteTagline = trim($_POST['site_tagline'] ?? $config['site_tagline']);
+        $siteIcon = trim($_POST['site_icon'] ?? $config['site_icon']);
+        $timezone = trim($_POST['timezone'] ?? $config['timezone']);
+        $dateFormat = trim($_POST['date_format'] ?? $config['date_format']);
+        $timeFormat = trim($_POST['time_format'] ?? $config['time_format']);
 
         $config['site_name'] = $siteName;
         $config['allow_registration'] = $allowRegistration;
         $config['maintenance_mode'] = $maintenanceMode;
         $config['default_lang'] = $defaultLang;
         $config['available_langs'] = array_values($availableLangs);
+        $config['site_tagline'] = $siteTagline;
+        $config['site_icon'] = $siteIcon;
+        $config['timezone'] = $timezone;
+        $config['date_format'] = $dateFormat;
+        $config['time_format'] = $timeFormat;
 
         $configContent = "<?php\n";
         foreach ($config as $key => $value) {

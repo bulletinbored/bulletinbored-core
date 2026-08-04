@@ -14,6 +14,5 @@
 [X] Rivedere completamente layout homepage
 [ ] Licensa BSD zero clause e spiegazione nel readme
 [ ] Rivedere CLA
-[ ] Pagina settings: aggiungere voci stile Wordpress. 
+[X] Pagina settings: aggiungere voci stile Wordpress. 
 [ ] Verificare che sia richiesta conferma email dopo registrazione
-[ ] Centro notifiche: che senso ha il tasto "View"?
