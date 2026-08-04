@@ -61,4 +61,10 @@ $config = [
 
 BSD Zero Clause — see [LICENSE](LICENSE).
 
+### Why BSD Zero Clause
+
+Part of this code was written with AI assistance, and there is no established community around the project yet. To prevent the code from becoming abandonware and to maximize the chances that it survives and is used, the most permissive possible license has been chosen: the **BSD Zero Clause**.
+
+If and when a community forms, any future change to the license will be decided together with the community.
+
 Contributions are accepted under the terms of the [CLA.md](CLA.md).

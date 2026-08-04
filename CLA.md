@@ -32,14 +32,7 @@ You acknowledge that the Project Owner is under no obligation to accept,
 incorporate, or distribute your Contribution. Contributions are accepted at
 the Project Owner's sole discretion.
 
-## 5. Future License Changes
-
-You agree that the Project Owner may release future versions of the Project
-under different terms, provided that existing versions remain under the license
-terms published at the time of their release. Your contributions will remain
-available under the license terms in effect at the time of their inclusion.
-
-## 6. Moral Rights
+## 5. Moral Rights
 
 To the extent any moral rights apply to your Contribution, you waive those
 rights to the fullest extent permitted by law, or alternatively agree not to
@@ -60,4 +53,4 @@ agreement.
 
 ---
 
-Last updated: 2026-07-29
+Last updated: 2026-08-04
