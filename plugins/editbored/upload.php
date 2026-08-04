@@ -52,7 +52,7 @@ if (!is_dir($uploadDir)) {
 }
 
 if (move_uploaded_file($_FILES['editbored_image']['tmp_name'], $uploadDir . $safeName)) {
-    $base = rtrim($config['base_url'] ?? '', '/');
+    $base = rtrim(!empty($config['base_url']) ? $config['base_url'] : preg_replace('#/plugins/[^/]+/[^/]+$#', '', $_SERVER['SCRIPT_NAME'] ?? ''), '/');
     $url = $base . '/uploads/' . rawurlencode($safeName);
     echo json_encode(['url' => $url, 'filename' => $safeName]);
     exit;

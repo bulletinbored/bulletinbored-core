@@ -150,7 +150,9 @@ class ThemeManager
                 }
             }
         }
-        return base_url() . '/themes/' . rawurlencode($name ?: 'freshbored') . '/style.css';
+        $cssFile = $this->themes[$name]['css_file'] ?? null;
+        $v = ($cssFile && file_exists($cssFile)) ? filemtime($cssFile) : time();
+        return base_url() . '/themes/' . rawurlencode($name ?: 'freshbored') . '/style.css?v=' . $v;
     }
 
     public function getCssPath(?string $name = null): string

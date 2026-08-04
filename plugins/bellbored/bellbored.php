@@ -14,7 +14,7 @@ function bellbored_init() {
         return;
     }
 
-    $baseUrl = rtrim($config['base_url'] ?? '', '/');
+    $baseUrl = rtrim(base_url(), '/');
     $pluginUrl = $baseUrl . '/plugins/bellbored';
     $apiUrl = $pluginUrl . '/api.php';
 

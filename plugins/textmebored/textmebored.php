@@ -14,7 +14,7 @@ function textmebored_init() {
         return;
     }
 
-    $baseUrl = rtrim($config['base_url'] ?? '', '/');
+    $baseUrl = rtrim(base_url(), '/');
     $pluginUrl = $baseUrl . '/plugins/textmebored';
     $apiUrl = $pluginUrl . '/api.php';
 
@@ -34,8 +34,12 @@ function textmebored_init() {
         $pdo->exec("CREATE INDEX IF NOT EXISTS idx_pm_sender ON private_messages(sender_id, created_at)");
     }
 
-    $cssUrl = $pluginUrl . '/assets/css/textmebored.css';
-    $jsUrl = $pluginUrl . '/assets/js/textmebored.js';
+    $tmVer = function($rel) use ($pluginUrl) {
+        $f = __DIR__ . '/' . $rel;
+        return $pluginUrl . '/' . $rel . '?v=' . (file_exists($f) ? filemtime($f) : time());
+    };
+    $cssUrl = $tmVer('assets/css/textmebored.css');
+    $jsUrl = $tmVer('assets/js/textmebored.js');
     $csrfToken = htmlspecialchars($_SESSION['csrf_token'] ?? '', ENT_QUOTES);
 
     $head = '<link href="' . $cssUrl . '" rel="stylesheet">' . "\n";

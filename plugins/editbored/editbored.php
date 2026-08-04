@@ -14,7 +14,7 @@ function editbored_init() {
         return;
     }
 
-    $baseUrl = rtrim($config['base_url'] ?? '', '/');
+    $baseUrl = rtrim(base_url(), '/');
     $pluginUrl = $baseUrl . '/plugins/editbored';
 
     $users = [];
@@ -26,9 +26,13 @@ function editbored_init() {
     $usersJson = json_encode($users);
     $uploadUrl = $pluginUrl . '/upload.php';
     $csrfToken = $_SESSION['csrf_token'] ?? '';
-    $cssUrl = $pluginUrl . '/assets/css/editbored.css';
-    $mentionsUrl = $pluginUrl . '/assets/js/mentions.js?v=1';
-    $editorUrl = $pluginUrl . '/assets/js/editbored.js?v=12';
+    $ebVer = function($rel) use ($pluginUrl) {
+        $f = __DIR__ . '/' . $rel;
+        return $pluginUrl . '/' . $rel . '?v=' . (file_exists($f) ? filemtime($f) : time());
+    };
+    $cssUrl = $ebVer('assets/css/editbored.css');
+    $mentionsUrl = $ebVer('assets/js/mentions.js');
+    $editorUrl = $ebVer('assets/js/editbored.js');
 
     $head = '<link href="' . $cssUrl . '" rel="stylesheet">' . "\n";
     $head .= '<script>window.editbored = window.editbored || {};window.editbored.users = ' . $usersJson . ';window.editbored.uploadUrl = ' . json_encode($uploadUrl) . ';window.editbored.csrfToken = ' . json_encode($csrfToken) . ';</script>' . "\n";

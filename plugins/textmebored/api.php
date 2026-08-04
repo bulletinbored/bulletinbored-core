@@ -4,7 +4,7 @@ require_once __DIR__ . '/../../config.php';
 
 header('Content-Type: application/json');
 
-$baseUrl = rtrim($config['base_url'] ?? '', '/');
+$baseUrl = rtrim(!empty($config['base_url']) ? $config['base_url'] : preg_replace('#/plugins/[^/]+/[^/]+$#', '', $_SERVER['SCRIPT_NAME'] ?? ''), '/');
 $pluginUrl = $baseUrl . '/plugins/textmebored';
 $apiUrl = $pluginUrl . '/api.php';
 
