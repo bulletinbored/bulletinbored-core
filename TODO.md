@@ -17,6 +17,3 @@
 [X] Pagina settings: aggiungere voci stile Wordpress. 
 [X] Verificare che sia richiesta conferma email dopo registrazione
 [X] In admin/users dovrebbe essere possibile creare un utente
-[ ] Perché esistono install.php e install2.php? Posso eliminare install.php?
-[ ] Ci sono file inutili. Fai una pulizia
-[ ] Il database viene ignorato? Non mi sembra
