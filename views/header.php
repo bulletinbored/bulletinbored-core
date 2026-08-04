@@ -1,7 +1,7 @@
 <?php
 // Shared frontend header - clean Bootstrap 5 theme
 function render_header($title = 'bulletinbored') {
-    global $config, $lang, $pluginHeadAssets;
+    global $config, $lang, $pluginHeadAssets, $pdo;
     $siteName = $config['site_name'] ?? 'bulletinbored';
     $themeName = $config['theme'] ?? 'freshbored';
 ?>
@@ -49,6 +49,33 @@ function render_header($title = 'bulletinbored') {
                     </div>
                 </form>
                 <ul class="navbar-nav">
+                    <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
+                        <?php
+                        $navUnreadMsg = 0;
+                        $navUnreadNotif = 0;
+                        if (!empty($pdo)) {
+                            $me = (int)($_SESSION['user_id'] ?? 0);
+                            $stmt = $pdo->prepare("SELECT COUNT(*) FROM private_messages WHERE recipient_id = ? AND read = 0");
+                            $stmt->execute([$me]);
+                            $navUnreadMsg = (int)$stmt->fetchColumn();
+                            $stmt = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND read = 0");
+                            $stmt->execute([$me]);
+                            $navUnreadNotif = (int)$stmt->fetchColumn();
+                        }
+                        ?>
+                        <li class="nav-item">
+                            <a class="nav-link position-relative" href="<?= url('notifications') ?>" title="<?= t('notifications') ?>">
+                                <i class="fas fa-bell"></i>
+                                <?php if ($navUnreadNotif > 0): ?><span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"><?= $navUnreadNotif > 99 ? '99+' : $navUnreadNotif ?></span><?php endif; ?>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link position-relative" href="<?= url('messages') ?>" title="<?= t('messages') ?>">
+                                <i class="fas fa-envelope"></i>
+                                <?php if ($navUnreadMsg > 0): ?><span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"><?= $navUnreadMsg > 99 ? '99+' : $navUnreadMsg ?></span><?php endif; ?>
+                            </a>
+                        </li>
+                    <?php endif; ?>
                     <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
                         <li class="nav-item dropdown">
                             <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">

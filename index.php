@@ -1416,6 +1416,9 @@ elseif ($action === 'ban_user' && $method === 'POST' && is_admin()) {
               $pdo->prepare("UPDATE users SET status = 'banned' WHERE id = ? AND role <> 'admin'")->execute([$userId]);
           }
           $redirect = $_POST['redirect'] ?? '';
+          if ($redirect !== '' && str_starts_with($redirect, '/')) {
+              $redirect = base_url() . $redirect;
+          }
           if ($redirect && $username) {
               redirect($redirect);
           } elseif ($username) {
@@ -1436,9 +1439,12 @@ elseif ($action === 'unban_user' && $method === 'POST' && is_admin()) {
             $userStmt->execute([$userId]);
             $username = $userStmt->fetchColumn() ?? '';
             $pdo->prepare("UPDATE users SET status = 'active', suspension_time = 0 WHERE id = ?")->execute([$userId]);
-        }
-        $redirect = $_POST['redirect'] ?? '';
-        if ($redirect && $username) {
+          }
+          $redirect = $_POST['redirect'] ?? '';
+          if ($redirect !== '' && str_starts_with($redirect, '/')) {
+              $redirect = base_url() . $redirect;
+          }
+          if ($redirect && $username) {
             redirect($redirect);
         } elseif ($username) {
             redirect(url('profile', ['user' => $username]));
@@ -1460,9 +1466,12 @@ elseif ($action === 'unban_user' && $method === 'POST' && is_admin()) {
             $userStmt->execute([$userId]);
             $username = $userStmt->fetchColumn() ?? '';
             $pdo->prepare("UPDATE users SET status = 'suspended', suspension_time = ? WHERE id = ?")->execute([$suspensionTime, $userId]);
-        }
-        $redirect = $_POST['redirect'] ?? '';
-        if ($redirect && $username) {
+          }
+          $redirect = $_POST['redirect'] ?? '';
+          if ($redirect !== '' && str_starts_with($redirect, '/')) {
+              $redirect = base_url() . $redirect;
+          }
+          if ($redirect && $username) {
             redirect($redirect);
         } elseif ($username) {
             redirect(url('profile', ['user' => $username]));
