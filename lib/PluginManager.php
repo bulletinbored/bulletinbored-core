@@ -181,6 +181,24 @@ class PluginManager
         return true;
     }
 
+    public function loadTranslations(string $lang): void
+    {
+        foreach ($this->getAll() as $key => $plugin) {
+            $scope = 'plugin:' . $key;
+            $GLOBALS['i18n'][$scope] = [];
+            if (empty($plugin['folder'])) {
+                continue;
+            }
+            $langFile = $this->pluginsDir . '/' . $plugin['folder'] . '/lang/' . $lang . '.php';
+            if (file_exists($langFile)) {
+                $data = include $langFile;
+                if (is_array($data)) {
+                    $GLOBALS['i18n'][$scope] = $data;
+                }
+            }
+        }
+    }
+
     public function loadEnabled(): array
     {
         $loaded = [];

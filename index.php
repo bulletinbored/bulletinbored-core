@@ -10,19 +10,35 @@ if (!in_array($lang, $config['available_langs'] ?? ['en'])) {
     $lang = $config['default_lang'] ?? 'en';
 }
 setcookie('lang', $lang, time() + 365*24*60*60, '/');
-$translations = [];
-$langFile = __DIR__.'/lang/'.$lang.'.php';
-if (file_exists($langFile)) {
-    $translations = include $langFile;
-}
 
-function t($key, $params = []) {
-    global $translations;
-    $text = $translations[$key] ?? $key;
+// Translation registry: scope => [key => text].
+// The core uses the 'core' scope; each plugin/theme uses its own namespaced
+// scope so their strings stay fully separated from the core and from each
+// other (no key collisions). A translation that is missing simply returns the
+// key itself, so a plugin/theme that ships no lang file still works unchanged.
+$GLOBALS['i18n'] = [];
+$coreLangFile = __DIR__.'/lang/'.$lang.'.php';
+$GLOBALS['i18n']['core'] = file_exists($coreLangFile) ? include $coreLangFile : [];
+// Back-compat alias: code that still does `global $translations` keeps working.
+$translations = &$GLOBALS['i18n']['core'];
+
+function t($key, $params = [], $scope = 'core') {
+    $registry = $GLOBALS['i18n'] ?? [];
+    $text = $registry[$scope][$key] ?? $key;
     foreach ($params as $k => $v) {
         $text = str_replace('{'.$k.'}', $v, $text);
     }
     return $text;
+}
+
+// Plugin-scoped translation, e.g. pt('editbored', 'bold').
+function pt($pluginName, $key, $params = []) {
+    return t($key, $params, 'plugin:'.strtolower($pluginName));
+}
+
+// Theme-scoped translation, e.g. tt('freshbored', 'some_key').
+function tt($themeName, $key, $params = []) {
+    return t($key, $params, 'theme:'.strtolower($themeName));
 }
 
 function slugify($text) {
@@ -531,13 +547,18 @@ require __DIR__.'/lib/ThemeManager.php';
 require __DIR__.'/lib/UpdateManager.php';
 
 $pluginManager = new PluginManager(__DIR__.'/plugins', $config['plugin_manifest'] ?? __DIR__.'/data/plugins.json');
-$pluginManager->loadEnabled();
-
 $themeManager = new ThemeManager(
     __DIR__.'/themes',
     $config['theme_manifest'] ?? __DIR__.'/data/themes.json',
     $config['theme'] ?? 'default'
 );
+
+// Load plugin/theme translations into their own namespaced scopes, separate
+// from the core, before plugins run their init hooks.
+$pluginManager->loadTranslations($lang);
+$themeManager->loadTranslations($lang);
+
+$pluginManager->loadEnabled();
 
 $updateManager = new UpdateManager(
     $config['update_manifest'] ?? __DIR__.'/data/updates.json',

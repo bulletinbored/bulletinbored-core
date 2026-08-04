@@ -235,6 +235,56 @@ plugins/
         └── en.php
 ```
 
+## Localization
+
+Plugins can be localized independently from the core. Each plugin gets its own
+translation **scope**, so plugin strings never collide with the core or with
+other plugins (e.g. two plugins may both use a `title` key without conflict).
+
+Folder-based plugins only (file-based plugins cannot carry lang files): place
+translation files under `lang/` using the language code as filename:
+
+```
+plugins/myplugin/
+└── lang/
+    ├── en.php
+    └── it.php
+```
+
+Each file returns an associative array:
+
+```php
+<?php
+return [
+    'bold' => 'Bold',
+    'italic' => 'Italic',
+];
+```
+
+The strings are loaded automatically into the `plugin:<name>` scope (e.g.
+`plugin:myplugin`) based on the active language, and are available before the
+plugin's `init` hook runs.
+
+### Usage
+
+Use the `pt()` helper, which is equivalent to `t($key, $params, 'plugin:<name>')`:
+
+```php
+echo pt('myplugin', 'bold');                 // -> 'Bold'
+echo pt('myplugin', 'hello', ['name' => 'Joe']); // with {name} placeholder
+```
+
+You may also call the core translation function directly with an explicit scope:
+
+```php
+echo t('bold', [], 'plugin:myplugin');
+```
+
+If a key is missing in the plugin's language file, the key itself is returned
+(untranslated) — so a plugin that ships no `lang/` directory still works
+unchanged. The core translation function `t($key, $params)` continues to resolve
+only from the `core` scope and is unaffected by plugin translations.
+
 ## Plugin Manager API
 
 ```php
@@ -248,6 +298,9 @@ $pluginManager->getByName('editbored');
 $pluginManager->isEnabled('editbored');
 $pluginManager->enable('editbored');
 $pluginManager->disable('editbored');
+
+// Localization
+$pluginManager->loadTranslations($lang);   // loads plugin/lang/{$lang}.php into the plugin:<name> scope
 
 // Lifecycle
 $pluginManager->loadEnabled();

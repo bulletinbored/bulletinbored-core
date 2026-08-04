@@ -16,6 +16,21 @@ class ThemeManager
         $this->loadManifest();
     }
 
+    public function loadTranslations(string $lang): void
+    {
+        foreach ($this->getAll() as $name => $theme) {
+            $scope = 'theme:' . strtolower($name);
+            $GLOBALS['i18n'][$scope] = [];
+            $langFile = $this->themesDir . '/' . $name . '/lang/' . $lang . '.php';
+            if (file_exists($langFile)) {
+                $data = include $langFile;
+                if (is_array($data)) {
+                    $GLOBALS['i18n'][$scope] = $data;
+                }
+            }
+        }
+    }
+
     private function loadManifest(): void
     {
         if (file_exists($this->manifestPath)) {

@@ -27,6 +27,52 @@ Optional metadata file:
 }
 ```
 
+## Localization
+
+Themes can be localized independently from the core and from plugins. Each theme
+gets its own translation **scope** (`theme:<name>`), so theme strings never
+collide with the core or with plugins.
+
+Place translation files under a `lang/` directory using the language code as the
+filename:
+
+```
+themes/mytheme/
+├── style.css          # Required
+├── manifest.json      # Optional
+└── lang/
+    ├── en.php
+    └── it.php
+```
+
+Each file returns an associative array:
+
+```php
+<?php
+return [
+    'tagline' => 'Welcome to the forum',
+];
+```
+
+Strings are loaded automatically into the `theme:<name>` scope based on the
+active language. Use the `tt()` helper to translate:
+
+```php
+echo tt('mytheme', 'tagline');                  // -> 'Welcome to the forum'
+echo tt('mytheme', 'hello', ['name' => 'Joe']); // with {name} placeholder
+```
+
+You may also call the core translation function directly with an explicit scope:
+
+```php
+echo t('tagline', [], 'theme:mytheme');
+```
+
+If a key is missing in the theme's language file, the key itself is returned
+(untranslated) — so a theme that ships no `lang/` directory still works
+unchanged. The core translation function `t($key, $params)` continues to resolve
+only from the `core` scope and is unaffected by theme translations.
+
 ## Activating a Theme
 
 1. Place the theme folder in `themes/`
