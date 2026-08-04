@@ -7,8 +7,9 @@
 [X] Add locked/sticky/hidden status indicators in thread previews
 [X] Implementare ban/sospensione utenti - Rivedere redirect dopo ban e  stato in frontend
 [X] Creare utenti test (moderator e user)
-[X] Predisposizione per localizzazione plugin-temi
+[ ] Predisposizione per localizzazione plugin-temi
 [X] Messaggi privati (tramite plugin)
 [X] Centro notifiche (tramite plugin)
 [X] Eliminare ?action= dagli URL
-[ ] Rivedere completamente layout homepage
+[X] Rivedere completamente layout homepage
+[ ] Licensa BSD zero clause e spiegazione nel readme

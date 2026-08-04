@@ -1,12 +1,21 @@
 <?php
-// Shared frontend header - clean Bootstrap 5 theme
-function render_header($title = 'bulletinbored') {
+// Shared frontend chrome: top bar, left sidebar and page shell (Bootstrap 5).
+//
+// render_header($title, $options)
+//   sidebar  bool  show the left sidebar column (default true)
+//   wide     bool  full width main column, used by auth/form pages
+//   info     array extra "discussion info" rows shown on top of the sidebar
+function render_header($title = 'bulletinbored', $options = []) {
     global $config, $lang, $pluginHeadAssets, $pdo;
+
     $siteName = $config['site_name'] ?? 'bulletinbored';
-    $themeName = $config['theme'] ?? 'freshbored';
+    $options  = is_array($options) ? $options : [];
+    $showSidebar = $options['sidebar'] ?? true;
+
+    $GLOBALS['layoutOptions'] = $options;
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="<?= escape($lang ?? 'en') ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -22,69 +31,73 @@ function render_header($title = 'bulletinbored') {
     <?php echo $pluginHeadAssets ?? ''; ?>
 </head>
 <body>
-    <!-- Navbar -->
-<nav class="navbar navbar-expand-lg navbar-dark navbar-forum fixed-top">
+    <nav class="navbar navbar-expand-lg navbar-forum fixed-top">
         <div class="container">
             <a class="navbar-brand" href="<?= url('home') ?>">
-                <i class="fas fa-comments me-2"></i><?= escape($siteName) ?>
+                <span class="brand-mark"><i class="fas fa-comments"></i></span>
+                <span class="brand-text"><?= escape($siteName) ?></span>
             </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-label="Menu">
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto">
+                <ul class="navbar-nav topbar-links me-auto">
                     <li class="nav-item">
-                        <a class="nav-link" href="<?= url('home') ?>"><i class="fas fa-home me-1"></i><?= t('home') ?></a>
+                        <a class="nav-link" href="<?= url('home') ?>"><?= t('all_discussions') ?></a>
                     </li>
-                    <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
-                        <li class="nav-item">
-                            <a class="nav-link" href="<?= url('new_thread') ?>"><i class="fas fa-plus me-1"></i><?= t('new_thread') ?></a>
+                    <?php foreach (array_slice(sidebar_categories(), 0, 4) as $topCat): ?>
+                        <li class="nav-item d-none d-xl-block">
+                            <a class="nav-link" href="<?= url('category', ['id' => $topCat['id'], 'slug' => slugify($topCat['name'] ?? '')]) ?>"><?= escape($topCat['name']) ?></a>
                         </li>
-                    <?php endif; ?>
+                    <?php endforeach; ?>
                 </ul>
-                <form class="d-flex me-2" method="GET" action="<?= url('search') ?>">
-                    <div class="input-group input-group-sm">
-                        <input type="text" name="q" class="form-control" placeholder="<?= t('search') ?>..." required>
-                        <button class="btn btn-outline-light" type="submit"><i class="fas fa-search"></i></button>
-                    </div>
+
+                <form class="topbar-search me-lg-3" method="GET" action="<?= url('search') ?>" role="search">
+                    <i class="fas fa-search"></i>
+                    <input type="text" name="q" value="<?= escape($_GET['q'] ?? '') ?>" placeholder="<?= t('search') ?>…" aria-label="<?= t('search') ?>" required>
                 </form>
-                <ul class="navbar-nav">
+
+                <?php // Keep this list the LAST child: plugins append their items here. ?>
+                <ul class="navbar-nav topbar-user">
                     <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
                         <?php
                         $navUnreadMsg = 0;
                         $navUnreadNotif = 0;
                         if (!empty($pdo)) {
-                            $me = (int)($_SESSION['user_id'] ?? 0);
-                            $stmt = $pdo->prepare("SELECT COUNT(*) FROM private_messages WHERE recipient_id = ? AND read = 0");
-                            $stmt->execute([$me]);
-                            $navUnreadMsg = (int)$stmt->fetchColumn();
-                            $stmt = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND read = 0");
-                            $stmt->execute([$me]);
-                            $navUnreadNotif = (int)$stmt->fetchColumn();
+                            try {
+                                $me = (int)($_SESSION['user_id'] ?? 0);
+                                $stmt = $pdo->prepare("SELECT COUNT(*) FROM private_messages WHERE recipient_id = ? AND read = 0");
+                                $stmt->execute([$me]);
+                                $navUnreadMsg = (int)$stmt->fetchColumn();
+                                $stmt = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND read = 0");
+                                $stmt->execute([$me]);
+                                $navUnreadNotif = (int)$stmt->fetchColumn();
+                            } catch (PDOException $e) {}
                         }
                         ?>
                         <li class="nav-item">
-                            <a class="nav-link position-relative" href="<?= url('notifications') ?>" title="<?= t('notifications') ?>">
+                            <a class="nav-link nav-icon position-relative" href="<?= url('notifications') ?>" title="<?= t('notifications') ?>">
                                 <i class="fas fa-bell"></i>
-                                <?php if ($navUnreadNotif > 0): ?><span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"><?= $navUnreadNotif > 99 ? '99+' : $navUnreadNotif ?></span><?php endif; ?>
+                                <?php if ($navUnreadNotif > 0): ?><span class="nav-badge"><?= $navUnreadNotif > 99 ? '99+' : $navUnreadNotif ?></span><?php endif; ?>
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link position-relative" href="<?= url('messages') ?>" title="<?= t('messages') ?>">
+                            <a class="nav-link nav-icon position-relative" href="<?= url('messages') ?>" title="<?= t('messages') ?>">
                                 <i class="fas fa-envelope"></i>
-                                <?php if ($navUnreadMsg > 0): ?><span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"><?= $navUnreadMsg > 99 ? '99+' : $navUnreadMsg ?></span><?php endif; ?>
+                                <?php if ($navUnreadMsg > 0): ?><span class="nav-badge"><?= $navUnreadMsg > 99 ? '99+' : $navUnreadMsg ?></span><?php endif; ?>
                             </a>
                         </li>
-                    <?php endif; ?>
-                    <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
                         <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
-                                <i class="fas fa-user me-1"></i><?= escape($_SESSION['username'] ?? '') ?>
+                            <a class="nav-link dropdown-toggle d-flex align-items-center gap-2" href="#" data-bs-toggle="dropdown">
+                                <?= render_avatar($_SESSION['username'] ?? '', $_SESSION['avatar'] ?? '', 28) ?>
+                                <span class="d-none d-lg-inline"><?= escape($_SESSION['username'] ?? '') ?></span>
                             </a>
                             <ul class="dropdown-menu dropdown-menu-end">
                                 <li><a class="dropdown-item" href="<?= url('profile', ['user' => $_SESSION['username'] ?? '']) ?>"><i class="fas fa-id-card me-2"></i><?= t('profile') ?></a></li>
-                                <li><a class="dropdown-item" href="<?= url('messages') ?>"><i class="fas fa-envelope me-2"></i>New message</a></li>
+                                <li><a class="dropdown-item" href="<?= url('edit_profile') ?>"><i class="fas fa-sliders-h me-2"></i><?= t('edit_profile') ?></a></li>
+                                <li><a class="dropdown-item" href="<?= url('messages') ?>"><i class="fas fa-envelope me-2"></i><?= t('messages') ?></a></li>
                                 <?php if (function_exists('is_admin') && is_admin()): ?>
+                                    <li><hr class="dropdown-divider"></li>
                                     <li><a class="dropdown-item" href="<?= url('admin') ?>"><i class="fas fa-cog me-2"></i><?= t('admin_panel') ?></a></li>
                                 <?php endif; ?>
                                 <li><hr class="dropdown-divider"></li>
@@ -92,15 +105,25 @@ function render_header($title = 'bulletinbored') {
                             </ul>
                         </li>
                     <?php else: ?>
-                        <li class="nav-item"><a class="nav-link" href="<?= url('login') ?>"><i class="fas fa-sign-in-alt me-1"></i><?= t('login') ?></a></li>
-                        <li class="nav-item"><a class="nav-link" href="<?= url('register') ?>"><i class="fas fa-user-plus me-1"></i><?= t('register') ?></a></li>
+                        <li class="nav-item"><a class="nav-link" href="<?= url('login') ?>"><?= t('login') ?></a></li>
+                        <li class="nav-item"><a class="btn btn-brand btn-sm ms-lg-2" href="<?= url('register') ?>"><?= t('register') ?></a></li>
                     <?php endif; ?>
                 </ul>
             </div>
         </div>
     </nav>
 
-    <div class="container">
+    <main class="page-shell">
+        <div class="container">
+            <div class="row g-4">
+<?php if ($showSidebar): ?>
+                <div class="col-lg-3 order-lg-1 sidebar-col">
+                    <?php include __DIR__.'/partials/sidebar.php'; ?>
+                </div>
+                <div class="col-lg-9 order-lg-2 content-col">
+<?php else: ?>
+                <div class="col-12 content-col content-col-narrow">
+<?php endif; ?>
 <?php
 }
 
@@ -111,15 +134,44 @@ function render_footer() {
     if (!empty($GLOBALS['pluginManager']) && method_exists($GLOBALS['pluginManager'], 'runHook')) {
         $GLOBALS['pluginManager']->runHook('footer_before_render');
     }
+    $siteName = $GLOBALS['config']['site_name'] ?? 'bulletinbored';
 ?>
-    </div><!-- /.container -->
+                </div><!-- /.content-col -->
+            </div><!-- /.row -->
+        </div><!-- /.container -->
+    </main>
 
-    <footer class="footer">
-        <div class="container text-center">
-            <p class="mb-0 small">
-                <i class="fas fa-comments me-1"></i><?= $GLOBALS['config']['site_name'] ?? 'bulletinbored' ?> &mdash;
-                Powered by PHP & Bootstrap 5
-            </p>
+    <footer class="site-footer">
+        <div class="container">
+            <div class="row g-4">
+                <div class="col-md-5">
+                    <h6 class="footer-title"><?= escape($siteName) ?></h6>
+                    <p class="footer-text mb-0"><?= t('footer_tagline') ?></p>
+                </div>
+                <div class="col-6 col-md-3">
+                    <h6 class="footer-title"><?= t('quick_links') ?></h6>
+                    <ul class="footer-list">
+                        <li><a href="<?= url('home') ?>"><?= t('all_discussions') ?></a></li>
+                        <li><a href="<?= url('search') ?>"><?= t('search') ?></a></li>
+                        <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
+                            <li><a href="<?= url('new_thread') ?>"><?= t('new_thread') ?></a></li>
+                        <?php else: ?>
+                            <li><a href="<?= url('register') ?>"><?= t('register') ?></a></li>
+                        <?php endif; ?>
+                    </ul>
+                </div>
+                <div class="col-6 col-md-4">
+                    <h6 class="footer-title"><?= t('categories') ?></h6>
+                    <ul class="footer-list">
+                        <?php foreach (array_slice(sidebar_categories(), 0, 5) as $fcat): ?>
+                            <li><a href="<?= url('category', ['id' => $fcat['id'], 'slug' => slugify($fcat['name'] ?? '')]) ?>"><?= escape($fcat['name']) ?></a></li>
+                        <?php endforeach; ?>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                &copy; <?= date('Y') ?> <?= escape($siteName) ?> &mdash; <?= t('footer_powered') ?>
+            </div>
         </div>
     </footer>
 

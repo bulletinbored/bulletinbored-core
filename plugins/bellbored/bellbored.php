@@ -50,9 +50,10 @@ function bellbored_init() {
         }
 
         $watchersStmt = $pdo->prepare("
-            SELECT user_id, email, username
-            FROM thread_watchers
-            WHERE thread_id = ? AND user_id <> ?
+            SELECT w.user_id, u.email, u.username
+            FROM thread_watchers w
+            JOIN users u ON w.user_id = u.id
+            WHERE w.thread_id = ? AND w.user_id <> ?
         ");
         $watchersStmt->execute([$threadId, $thread['user_id']]);
         $watchers = $watchersStmt->fetchAll();
@@ -84,9 +85,10 @@ function bellbored_init() {
         }
 
         $watchersStmt = $pdo->prepare("
-            SELECT user_id, email, username
-            FROM thread_watchers
-            WHERE thread_id = ? AND user_id <> ?
+            SELECT w.user_id, u.email, u.username
+            FROM thread_watchers w
+            JOIN users u ON w.user_id = u.id
+            WHERE w.thread_id = ? AND w.user_id <> ?
         ");
         $watchersStmt->execute([$threadId, $post['post_user_id']]);
         $watchers = $watchersStmt->fetchAll();

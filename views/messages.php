@@ -1,7 +1,7 @@
 <?php include __DIR__.'/header.php'; render_header('Messages'); ?>
     <nav aria-label="breadcrumb">
         <ol class="breadcrumb">
-            <li class="breadcrumb-item"><a href="<?= url('home') ?>"><?= t('home') ?></a></li>
+            <li class="breadcrumb-item"><a href="<?= url('home') ?>"><?= t('all_discussions') ?></a></li>
             <?php if (!empty($messages ?? null)): ?>
                 <li class="breadcrumb-item"><a href="<?= url('messages') ?>"><?= t('messages') ?></a></li>
                 <li class="breadcrumb-item active"><?= escape($otherUsername ?? 'Conversation') ?></li>
@@ -11,7 +11,7 @@
         </ol>
     </nav>
 
-    <h4 class="mb-3"><i class="fas fa-envelope me-2"></i><?= t('messages') ?></h4>
+    <h1 class="page-title mb-3"><i class="fas fa-envelope me-2"></i><?= t('messages') ?></h1>
 
     <?php if (!empty($messages ?? null)): ?>
         <?php if (!empty($otherUsername ?? '')): ?>
@@ -40,7 +40,7 @@
                 <div class="input-group">
                     <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                     <input type="text" name="content" class="form-control" placeholder="Type a message..." required autocomplete="off">
-                    <button type="submit" class="btn btn-forum"><i class="fas fa-paper-plane me-1"></i>Send</button>
+                    <button type="submit" class="btn btn-brand"><i class="fas fa-paper-plane me-1"></i>Send</button>
                 </div>
             </div>
         </form>
@@ -65,14 +65,14 @@
             <?php endforeach; ?>
 </div>
                      <div class="mt-3">
-                         <button class="btn btn-forum btn-sm" onclick="if(window.textmebored && window.textmebored.newConversation){window.textmebored.newConversation();}"><i class="fas fa-envelope me-1"></i>New message</button>
+                         <button class="btn btn-brand btn-sm" onclick="if(window.textmebored && window.textmebored.newConversation){window.textmebored.newConversation();}"><i class="fas fa-envelope me-1"></i>New message</button>
                      </div>
                  <?php else: ?>
         <div class="card">
             <div class="card-body text-center py-5 text-muted">
                 <i class="fas fa-inbox fa-2x mb-3"></i>
                 <p class="mb-0">No messages yet. Click "New message" to start a conversation.</p>
-                <button class="btn btn-forum btn-sm mt-3" onclick="if(window.textmebored && window.textmebored.newConversation){window.textmebored.newConversation();}"><i class="fas fa-envelope me-1"></i>New message</button>
+                <button class="btn btn-brand btn-sm mt-3" onclick="if(window.textmebored && window.textmebored.newConversation){window.textmebored.newConversation();}"><i class="fas fa-envelope me-1"></i>New message</button>
             </div>
         </div>
     <?php endif; ?>

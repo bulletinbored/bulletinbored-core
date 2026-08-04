@@ -1,12 +1,12 @@
 <?php include __DIR__.'/header.php'; render_header('Notifications'); ?>
     <nav aria-label="breadcrumb">
         <ol class="breadcrumb">
-            <li class="breadcrumb-item"><a href="<?= url('home') ?>"><?= t('home') ?></a></li>
+            <li class="breadcrumb-item"><a href="<?= url('home') ?>"><?= t('all_discussions') ?></a></li>
             <li class="breadcrumb-item active"><?= t('notifications') ?></li>
         </ol>
     </nav>
 
-    <h4 class="mb-3"><i class="fas fa-bell me-2"></i><?= t('notifications') ?></h4>
+    <h1 class="page-title mb-3"><i class="fas fa-bell me-2"></i><?= t('notifications') ?></h1>
 
     <?php if (!empty($notifications ?? [])): ?>
         <form method="POST" action="<?= url('notifications') ?>" class="text-end mb-3">

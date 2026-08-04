@@ -69,7 +69,7 @@ function url($action, $params = []) {
             unset($query['user']);
             return $base . '/u/' . urlencode($user) . (!empty($query) ? '?' . http_build_query($query) : '');
         case 'home':
-            return $base . '/';
+            return $base . '/' . (!empty($query) ? '?' . http_build_query($query) : '');
         case 'login':
             return $base . '/login' . (!empty($query) ? '?' . http_build_query($query) : '');
         case 'register':
@@ -453,6 +453,21 @@ try {
     }
 } catch (PDOException $e) {}
 
+// Thread view counter (works on both drivers, ignored when already present)
+try {
+    $threadCols = [];
+    if (($config['db_driver'] ?? 'sqlite') === 'mysql') {
+        foreach ($pdo->query("SHOW COLUMNS FROM threads") as $c) {
+            $threadCols[] = $c['Field'];
+        }
+    } else {
+        $threadCols = $pdo->query("PRAGMA table_info(threads)")->fetchAll(PDO::FETCH_COLUMN, 1);
+    }
+    if (!in_array('views', $threadCols, true)) {
+        $pdo->exec("ALTER TABLE threads ADD COLUMN views INTEGER DEFAULT 0");
+    }
+} catch (PDOException $e) {}
+
 // Helper functions
 function escape($s) { return htmlspecialchars($s, ENT_QUOTES, 'UTF-8'); }
 
@@ -510,6 +525,237 @@ function validate_input($data) {
     $data = stripslashes($data);
     $data = htmlspecialchars($data, ENT_QUOTES, 'UTF-8');
     return $data;
+}
+
+/* ------------------------------------------------------------------
+ * Presentation helpers used by the frontend views
+ * ------------------------------------------------------------------ */
+
+// Human readable "3 days ago" style timestamps.
+function time_ago($datetime) {
+    if (empty($datetime)) return '';
+    $ts = is_numeric($datetime) ? (int)$datetime : strtotime($datetime);
+    if (!$ts) return escape((string)$datetime);
+
+    $diff = time() - $ts;
+    if ($diff < 0) $diff = 0;
+
+    if ($diff < 60)      return t('time_now');
+    if ($diff < 3600)    { $n = (int)floor($diff / 60);       return t($n === 1 ? 'time_minute' : 'time_minutes', ['n' => $n]); }
+    if ($diff < 86400)   { $n = (int)floor($diff / 3600);     return t($n === 1 ? 'time_hour'   : 'time_hours',   ['n' => $n]); }
+    if ($diff < 2592000) { $n = (int)floor($diff / 86400);    return t($n === 1 ? 'time_day'    : 'time_days',    ['n' => $n]); }
+    if ($diff < 31536000){ $n = (int)floor($diff / 2592000);  return t($n === 1 ? 'time_month'  : 'time_months',  ['n' => $n]); }
+    $n = (int)floor($diff / 31536000);
+    return t($n === 1 ? 'time_year' : 'time_years', ['n' => $n]);
+}
+
+// 1200 => 1.2K, 1500000 => 1.5M
+function compact_number($n) {
+    $n = (int)$n;
+    if ($n < 1000) return (string)$n;
+    if ($n < 1000000) return rtrim(rtrim(number_format($n / 1000, 1, '.', ''), '0'), '.').'K';
+    return rtrim(rtrim(number_format($n / 1000000, 1, '.', ''), '0'), '.').'M';
+}
+
+// Plain text preview of a post, HTML/markdown stripped.
+function excerpt($text, $length = 110) {
+    $text = html_entity_decode((string)$text, ENT_QUOTES, 'UTF-8');
+    $text = preg_replace('#<(script|style)\b[^>]*>.*?</\1>#is', ' ', $text);
+    $text = strip_tags($text);
+    $text = preg_replace('/!?\[([^\]]*)\]\([^\)]*\)/', '$1', $text);   // md links/images
+    $text = preg_replace('/[#>*_`~]+/', ' ', $text);                   // md decorations
+    $text = preg_replace('/^\s*[-+]\s+/m', '', $text);                 // md list bullets
+    $text = trim(preg_replace('/\s+/u', ' ', $text));
+    if (function_exists('mb_strlen') && mb_strlen($text, 'UTF-8') > $length) {
+        return mb_substr($text, 0, $length, 'UTF-8').'…';
+    }
+    if (!function_exists('mb_strlen') && strlen($text) > $length) {
+        return substr($text, 0, $length).'…';
+    }
+    return $text;
+}
+
+// Initial letter used by the fallback avatar.
+function avatar_initial($name) {
+    $name = trim((string)$name);
+    if ($name === '') return '?';
+    $first = function_exists('mb_substr') ? mb_substr($name, 0, 1, 'UTF-8') : substr($name, 0, 1);
+    return function_exists('mb_strtoupper') ? mb_strtoupper($first, 'UTF-8') : strtoupper($first);
+}
+
+// Stable pastel-ish colour derived from the username.
+function avatar_color($name) {
+    $palette = ['#4c6ef5', '#7048e8', '#e8590c', '#2b8a3e', '#c2255c', '#1098ad', '#5f3dc4', '#b08900'];
+    return $palette[abs(crc32((string)$name)) % count($palette)];
+}
+
+// Renders the avatar of a user (uploaded image or coloured initial).
+function render_avatar($username, $avatar = '', $size = 44, $class = '') {
+    $classes = trim('avatar '.$class);
+    if (!empty($avatar)) {
+        return '<img src="'.base_url().'/uploads/avatars/'.escape($avatar).'" alt="'.escape($username).'" '
+             . 'class="'.escape($classes).'" style="width:'.(int)$size.'px;height:'.(int)$size.'px">';
+    }
+    return '<span class="'.escape($classes).' avatar-initial" style="width:'.(int)$size.'px;height:'.(int)$size.'px;'
+         . 'background-color:'.avatar_color($username).';font-size:'.round($size * 0.42).'px" aria-hidden="true">'
+         . escape(avatar_initial($username)).'</span>';
+}
+
+// Categories with their discussion counters, used by the sidebar.
+function sidebar_categories() {
+    global $pdo;
+    static $cache = null;
+    if ($cache !== null) return $cache;
+    try {
+        $cache = $pdo->query("
+            SELECT c.*,
+                   (SELECT COUNT(*) FROM threads t
+                     WHERE t.category_id = c.id
+                       AND t.status IN ('visible','sticky','locked')) AS thread_count
+            FROM categories c
+            ORDER BY c.position, c.name
+        ")->fetchAll();
+    } catch (PDOException $e) {
+        $cache = [];
+    }
+    return $cache;
+}
+
+// Aggregated board counters shown in the sidebar statistics block.
+function forum_statistics() {
+    global $pdo;
+    static $cache = null;
+    if ($cache !== null) return $cache;
+
+    $stats = [
+        'threads' => 0, 'posts' => 0, 'members' => 0,
+        'categories' => 0, 'contributors' => 0, 'newest_member' => null,
+    ];
+    try {
+        $stats['threads']    = (int)$pdo->query("SELECT COUNT(*) FROM threads WHERE status IN ('visible','sticky','locked')")->fetchColumn();
+        $stats['posts']      = (int)$pdo->query("SELECT COUNT(*) FROM posts WHERE status = 'visible'")->fetchColumn();
+        $stats['members']    = (int)$pdo->query("SELECT COUNT(*) FROM users")->fetchColumn();
+        $stats['categories'] = (int)$pdo->query("SELECT COUNT(*) FROM categories")->fetchColumn();
+        $stats['contributors'] = (int)$pdo->query("
+            SELECT COUNT(*) FROM (
+                SELECT user_id FROM threads WHERE status IN ('visible','sticky','locked')
+                UNION
+                SELECT user_id FROM posts WHERE status = 'visible'
+            ) AS c
+        ")->fetchColumn();
+        $stats['newest_member'] = $pdo->query("SELECT username, avatar FROM users ORDER BY id DESC LIMIT 1")->fetch() ?: null;
+    } catch (PDOException $e) {}
+
+    $cache = $stats;
+    return $cache;
+}
+
+// Sorting options offered on every discussion listing.
+function thread_sort_options() {
+    return [
+        'latest'  => 'sort_latest',
+        'replies' => 'sort_replies',
+        'views'   => 'sort_views',
+        'newest'  => 'sort_newest',
+        'oldest'  => 'sort_oldest',
+    ];
+}
+
+/**
+ * Single entry point for every discussion listing (home, category, search,
+ * profile). Returns the threads enriched with reply counters and last
+ * activity, plus the pagination metadata.
+ */
+function fetch_threads(array $opts = []) {
+    global $pdo;
+
+    $page    = max(1, (int)($opts['page'] ?? 1));
+    $perPage = max(1, (int)($opts['per_page'] ?? 15));
+    $offset  = ($page - 1) * $perPage;
+
+    $where  = ["t.status IN ('visible','sticky','locked')"];
+    $params = [];
+
+    if (!empty($opts['category_id'])) {
+        $where[]  = 't.category_id = ?';
+        $params[] = (int)$opts['category_id'];
+    }
+    if (!empty($opts['user_id'])) {
+        $where[]  = 't.user_id = ?';
+        $params[] = (int)$opts['user_id'];
+    }
+    if (isset($opts['search']) && $opts['search'] !== '') {
+        $where[] = '(t.title LIKE ? OR t.content LIKE ? OR c.name LIKE ? OR u.username LIKE ?)';
+        $like    = '%'.$opts['search'].'%';
+        array_push($params, $like, $like, $like, $like);
+    }
+    $whereSql = 'WHERE '.implode(' AND ', $where);
+
+    $sort   = $opts['sort'] ?? 'latest';
+    $orders = [
+        'latest'  => "sticky_first DESC, last_activity DESC",
+        'replies' => "sticky_first DESC, reply_count DESC, last_activity DESC",
+        'views'   => "sticky_first DESC, view_count DESC, last_activity DESC",
+        'newest'  => "sticky_first DESC, t.created_at DESC, t.id DESC",
+        'oldest'  => "sticky_first DESC, t.created_at ASC, t.id ASC",
+    ];
+    $orderSql = $orders[$sort] ?? $orders['latest'];
+
+    $joins = "
+        FROM threads t
+        LEFT JOIN users u ON t.user_id = u.id
+        LEFT JOIN categories c ON t.category_id = c.id
+    ";
+
+    $total = 0;
+    try {
+        $countStmt = $pdo->prepare("SELECT COUNT(*) $joins $whereSql");
+        $countStmt->execute($params);
+        $total = (int)$countStmt->fetchColumn();
+    } catch (PDOException $e) {}
+
+    $sql = "
+        SELECT t.*,
+               u.username AS author,
+               u.avatar   AS author_avatar,
+               c.name     AS category_name,
+               COALESCE(t.views, 0) AS view_count,
+               CASE WHEN t.status = 'sticky' THEN 1 ELSE 0 END AS sticky_first,
+               (SELECT COUNT(*) FROM posts p
+                 WHERE p.thread_id = t.id AND p.status = 'visible') AS reply_count,
+               lp.id         AS last_post_id,
+               lp.content    AS last_post_content,
+               lp.created_at AS last_post_at,
+               lu.username   AS last_author,
+               lu.avatar     AS last_author_avatar,
+               COALESCE(lp.created_at, t.created_at) AS last_activity
+        $joins
+        LEFT JOIN posts lp ON lp.id = (
+            SELECT p2.id FROM posts p2
+             WHERE p2.thread_id = t.id AND p2.status = 'visible'
+             ORDER BY p2.created_at DESC, p2.id DESC LIMIT 1
+        )
+        LEFT JOIN users lu ON lp.user_id = lu.id
+        $whereSql
+        ORDER BY $orderSql
+        LIMIT ".(int)$perPage." OFFSET ".(int)$offset."
+    ";
+
+    $threads = [];
+    try {
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        $threads = $stmt->fetchAll();
+    } catch (PDOException $e) {}
+
+    return [
+        'threads'  => $threads,
+        'total'    => $total,
+        'page'     => $page,
+        'per_page' => $perPage,
+        'pages'    => max(1, (int)ceil($total / $perPage)),
+        'sort'     => isset($orders[$sort]) ? $sort : 'latest',
+    ];
 }
 
 // Email notification helper
@@ -669,25 +915,31 @@ if (is_logged_in() && (is_banned() || is_suspended())) {
 
 try {
     if ($action === 'home' || $action === '') {
-        // Home page - list threads with categories
-        $threads = $pdo->query("
-            SELECT t.*, u.username as author, c.name as category_name 
-            FROM threads t 
-            LEFT JOIN users u ON t.user_id = u.id 
-            LEFT JOIN categories c ON t.category_id = c.id 
-            WHERE t.status IN ('visible', 'sticky', 'locked') 
-            ORDER BY (t.status = 'sticky') DESC, t.created_at DESC 
-            LIMIT 20
-        ")->fetchAll();
-        
-        $categories = $pdo->query("SELECT * FROM categories ORDER BY position")->fetchAll();
+        // All discussions listing
+        $page = max(1, (int)($_GET['page'] ?? 1));
+        $sort = $_GET['sort'] ?? 'latest';
+
+        $listing     = fetch_threads(['page' => $page, 'sort' => $sort, 'per_page' => 15]);
+        $threads     = $listing['threads'];
+        $total       = $listing['total'];
+        $totalPages  = $listing['pages'];
+        $page        = $listing['page'];
+        $sort        = $listing['sort'];
+        $listContext = 'home';
+
+        $categories = sidebar_categories();
         include __DIR__.'/views/home.php';
     } 
     elseif ($action === 'thread' && isset($_GET['id'])) {
         // View single thread
         $threadId = (int)$_GET['id'];
         $stmt = $pdo->prepare("
-            SELECT t.*, u.username as author, u.avatar as author_avatar, c.name as category_name 
+            SELECT t.*, u.username as author, u.avatar as author_avatar, u.role as author_role,
+                   u.created_at as author_joined, u.id as author_id,
+                   c.name as category_name,
+                   COALESCE(t.views, 0) as view_count,
+                   (SELECT COUNT(*) FROM posts p WHERE p.thread_id = t.id AND p.status = 'visible') as reply_count,
+                   (SELECT COUNT(*) FROM posts p2 WHERE p2.user_id = t.user_id AND p2.status = 'visible') as author_posts
             FROM threads t 
             LEFT JOIN users u ON t.user_id = u.id 
             LEFT JOIN categories c ON t.category_id = c.id 
@@ -699,10 +951,21 @@ try {
         if (!$thread) {
             die('Thread not found');
         }
+
+        // Count one view per visitor session
+        $seenThreads = $_SESSION['viewed_threads'] ?? [];
+        if (!in_array($threadId, $seenThreads, true)) {
+            try {
+                $pdo->prepare("UPDATE threads SET views = COALESCE(views, 0) + 1 WHERE id = ?")->execute([$threadId]);
+                $thread['view_count'] = (int)$thread['view_count'] + 1;
+            } catch (PDOException $e) {}
+            $seenThreads[] = $threadId;
+            $_SESSION['viewed_threads'] = array_slice($seenThreads, -200);
+        }
         
         // Get posts for this thread with pagination
         $postPage = max(1, (int)($_GET['post_page'] ?? 1));
-        $perPage = 5;
+        $perPage = 15;
         $offset = ($postPage - 1) * $perPage;
         
         $totalStmt = $pdo->prepare("
@@ -715,14 +978,16 @@ try {
         $totalPages = max(1, (int)ceil($totalPosts / $perPage));
         
         $postsStmt = $pdo->prepare("
-            SELECT p.*, u.username as author, u.avatar as author_avatar 
+            SELECT p.*, u.username as author, u.avatar as author_avatar, u.role as author_role,
+                   u.created_at as author_joined,
+                   (SELECT COUNT(*) FROM posts p2 WHERE p2.user_id = p.user_id AND p2.status = 'visible') as author_posts
             FROM posts p 
             LEFT JOIN users u ON p.user_id = u.id 
             WHERE p.thread_id = ? AND p.status = 'visible' 
-            ORDER BY p.created_at ASC 
-            LIMIT ? OFFSET ?
+            ORDER BY p.created_at ASC, p.id ASC
+            LIMIT ".(int)$perPage." OFFSET ".(int)$offset."
         ");
-        $postsStmt->execute([$threadId, $perPage, $offset]);
+        $postsStmt->execute([$threadId]);
         $posts = $postsStmt->fetchAll();
         
         include __DIR__.'/views/thread.php';
@@ -1049,6 +1314,16 @@ try {
         ");
         $userThreadsStmt->execute([$profileUser['id']]);
         $userThreads = $userThreadsStmt->fetchAll();
+
+        $profileStats = ['threads' => 0, 'posts' => 0];
+        try {
+            $s = $pdo->prepare("SELECT COUNT(*) FROM threads WHERE user_id = ? AND status IN ('visible','sticky','locked')");
+            $s->execute([$profileUser['id']]);
+            $profileStats['threads'] = (int)$s->fetchColumn();
+            $s = $pdo->prepare("SELECT COUNT(*) FROM posts WHERE user_id = ? AND status = 'visible'");
+            $s->execute([$profileUser['id']]);
+            $profileStats['posts'] = (int)$s->fetchColumn();
+        } catch (PDOException $e) {}
         
         include __DIR__.'/views/profile.php';
     }
@@ -1161,54 +1436,20 @@ try {
         include __DIR__.'/views/edit_profile.php';
     }
     elseif ($action === 'search') {
-        // Search functionality
+        // Search functionality - rendered with the standard discussion listing
         $query = $_GET['q'] ?? '';
-        $page = max(1, (int)($_GET['page'] ?? 1));
-        $perPage = 10;
-        $offset = ($page - 1) * $perPage;
-        
-        if ($query !== '') {
-            $searchTerm = "%$query%";
-            $threadStmt = $pdo->prepare("
-                SELECT t.*, c.name as category_name, u.username as author 
-                FROM threads t 
-                LEFT JOIN categories c ON t.category_id = c.id 
-                LEFT JOIN users u ON t.user_id = u.id 
-                WHERE t.status IN ('visible', 'sticky', 'locked') 
-                AND (t.title LIKE ? OR t.content LIKE ? OR c.name LIKE ? OR u.username LIKE ?)
-                ORDER BY (t.status = 'sticky') DESC, t.created_at DESC
-                LIMIT ? OFFSET ?
-            ");
-            $threadStmt->execute([$searchTerm, $searchTerm, $searchTerm, $searchTerm, $perPage, $offset]);
-            $threads = $threadStmt->fetchAll();
-            
-            $totalStmt2 = $pdo->prepare("
-                SELECT COUNT(*) FROM threads t 
-                LEFT JOIN categories c ON t.category_id = c.id 
-                LEFT JOIN users u ON t.user_id = u.id 
-                WHERE t.status IN ('visible', 'sticky', 'locked') 
-                AND (t.title LIKE ? OR t.content LIKE ? OR c.name LIKE ? OR u.username LIKE ?)
-            ");
-            $totalStmt2->execute([$searchTerm, $searchTerm, $searchTerm, $searchTerm]);
-            $total = $totalStmt2->fetchColumn();
-        } else {
-            $threadStmt2 = $pdo->prepare("
-                SELECT t.*, c.name as category_name, u.username as author 
-                FROM threads t 
-                LEFT JOIN categories c ON t.category_id = c.id 
-                LEFT JOIN users u ON t.user_id = u.id 
-                WHERE t.status IN ('visible', 'sticky', 'locked') 
-                ORDER BY (t.status = 'sticky') DESC, t.created_at DESC
-                LIMIT ? OFFSET ?
-            ");
-            $threadStmt2->execute([$perPage, $offset]);
-            $threads = $threadStmt2->fetchAll();
-            
-            $total = $pdo->query("SELECT COUNT(*) FROM threads WHERE status IN ('visible', 'sticky', 'locked')")->fetchColumn();
-        }
-        
-        $totalPages = max(1, (int)ceil($total / $perPage));
-        $categories = $pdo->query("SELECT * FROM categories ORDER BY position")->fetchAll();
+        $page  = max(1, (int)($_GET['page'] ?? 1));
+        $sort  = $_GET['sort'] ?? 'latest';
+
+        $listing     = fetch_threads(['page' => $page, 'sort' => $sort, 'per_page' => 15, 'search' => $query]);
+        $threads     = $listing['threads'];
+        $total       = $listing['total'];
+        $totalPages  = $listing['pages'];
+        $page        = $listing['page'];
+        $sort        = $listing['sort'];
+        $listContext = 'search';
+
+        $categories = sidebar_categories();
         include __DIR__.'/views/home.php';
     }
     elseif ($action === 'category' && isset($_GET['id'])) {
@@ -1223,28 +1464,16 @@ try {
         }
         
         $page = max(1, (int)($_GET['page'] ?? 1));
-        $perPage = 10;
-        $offset = ($page - 1) * $perPage;
-        
-        $catThreadStmt = $pdo->prepare("
-            SELECT t.*, u.username as author 
-            FROM threads t 
-            LEFT JOIN users u ON t.user_id = u.id 
-            WHERE t.category_id = ? AND t.status IN ('visible', 'sticky', 'locked') 
-            ORDER BY (t.status = 'sticky') DESC, t.created_at DESC
-            LIMIT ? OFFSET ?
-        ");
-        $catThreadStmt->execute([$categoryId, $perPage, $offset]);
-        $threads = $catThreadStmt->fetchAll();
-        
-        $catTotalStmt = $pdo->prepare("
-            SELECT COUNT(*) FROM threads 
-            WHERE category_id = ? AND status IN ('visible', 'sticky', 'locked')
-        ");
-        $catTotalStmt->execute([$categoryId]);
-        $total = $catTotalStmt->fetchColumn();
-        
-        $totalPages = max(1, (int)ceil($total / $perPage));
+        $sort = $_GET['sort'] ?? 'latest';
+
+        $listing     = fetch_threads(['page' => $page, 'sort' => $sort, 'per_page' => 15, 'category_id' => $categoryId]);
+        $threads     = $listing['threads'];
+        $total       = $listing['total'];
+        $totalPages  = $listing['pages'];
+        $page        = $listing['page'];
+        $sort        = $listing['sort'];
+        $listContext = 'category';
+
         include __DIR__.'/views/category.php';
     }
     elseif ($action === 'admin') {

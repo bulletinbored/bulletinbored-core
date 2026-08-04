@@ -38,7 +38,7 @@
                     </select>
                 </div>
 
-                <button type="submit" class="btn btn-forum"><i class="fas fa-save me-1"></i>Save Changes</button>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i>Save Changes</button>
                 <a href="<?= url('admin_users') ?>" class="btn btn-secondary">Cancel</a>
             </form>
         </div>

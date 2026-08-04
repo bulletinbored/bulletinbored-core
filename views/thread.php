@@ -1,212 +1,255 @@
-<?php include __DIR__.'/header.php'; render_header(escape($thread['title'] ?? 'Thread')); ?>
+<?php
+$threadId    = (int)($thread['id'] ?? 0);
+$threadUrl   = url('thread', ['id' => $threadId, 'slug' => slugify($thread['title'] ?? '')]);
+$replyCount  = (int)($thread['reply_count'] ?? 0);
+$viewCount   = (int)($thread['view_count'] ?? 0);
+$postPage    = (int)($postPage ?? 1);
+$perPage     = (int)($perPage ?? 15);
+$totalPages  = (int)($totalPages ?? 1);
+$isLogged    = function_exists('is_logged_in') && is_logged_in();
+$canModerate = $isLogged && in_array($_SESSION['user_role'] ?? 'user', ['admin', 'moderator'], true);
+$isLocked    = ($thread['status'] ?? '') === 'locked';
+
+$isWatching = false;
+if ($isLogged) {
+    try {
+        $watchStmt = $pdo->prepare("SELECT COUNT(*) FROM thread_watchers WHERE thread_id = ? AND user_id = ?");
+        $watchStmt->execute([$threadId, $_SESSION['user_id']]);
+        $isWatching = $watchStmt->fetchColumn() > 0;
+    } catch (PDOException $e) {}
+}
+
+// Attachments of the opening post
+$threadUploads = [];
+try {
+    $uploadsStmt = $pdo->prepare("SELECT * FROM uploads WHERE thread_id = ? AND post_id IS NULL ORDER BY created_at ASC");
+    $uploadsStmt->execute([$threadId]);
+    $threadUploads = $uploadsStmt->fetchAll();
+} catch (PDOException $e) {}
+
+// Compact recap shown at the top of the sidebar
+$sidebarInfo = [
+    t('posts')       => compact_number($replyCount + 1),
+    t('views')       => compact_number($viewCount),
+    t('started')     => time_ago($thread['created_at'] ?? ''),
+];
+if ($replyCount > 0 && !empty($posts)) {
+    $sidebarInfo[t('last_reply')] = time_ago(end($posts)['created_at'] ?? '');
+    reset($posts);
+}
+
+/** Renders one moderation button as a self contained form. */
+function mod_button($threadId, $do, $icon, $label, $variant = 'ghost', $confirm = '') {
+    $onsubmit = $confirm !== '' ? ' onsubmit="return confirm(\''.escape($confirm).'\')"' : '';
+    echo '<form method="POST" action="'.url('frontend_moderate').'" class="d-inline"'.$onsubmit.'>'
+       . '<input type="hidden" name="csrf_token" value="'.generate_csrf_token().'">'
+       . '<input type="hidden" name="do" value="'.escape($do).'">'
+       . '<input type="hidden" name="id" value="'.(int)$threadId.'">'
+       . '<button class="btn btn-'.escape($variant).' btn-sm" title="'.escape($label).'">'
+       . '<i class="fas '.escape($icon).'"></i><span class="d-none d-xl-inline ms-1">'.escape($label).'</span>'
+       . '</button></form>';
+}
+
+/** Renders a post block (opening post or reply). */
+function render_post($data, $number, $threadId, $threadUrl, $opts = []) {
+    $isOp     = !empty($opts['is_op']);
+    $anchor   = $isOp ? 'post-1' : 'post-'.(int)($data['id'] ?? 0);
+    $author   = $data['author'] ?? '';
+    $role     = $data['author_role'] ?? 'user';
+    $canEdit  = function_exists('is_logged_in') && is_logged_in()
+                && (($_SESSION['user_id'] ?? 0) == ($data['user_id'] ?? -1) || (function_exists('is_admin') && is_admin()));
+    ?>
+    <article class="post <?= $isOp ? 'post-op' : '' ?>" id="<?= escape($anchor) ?>">
+        <div class="post-side">
+            <a href="<?= url('profile', ['user' => $author]) ?>" class="post-side-avatar">
+                <?= render_avatar($author, $data['author_avatar'] ?? '', 56) ?>
+            </a>
+            <a href="<?= url('profile', ['user' => $author]) ?>" class="post-author"><?= escape($author ?: '—') ?></a>
+            <?php if ($role === 'admin'): ?>
+                <span class="role-badge role-admin"><?= t('role_admin') ?></span>
+            <?php elseif ($role === 'moderator'): ?>
+                <span class="role-badge role-mod"><?= t('role_moderator') ?></span>
+            <?php endif; ?>
+            <span class="post-side-meta"><?= t('posts') ?> <?= compact_number($data['author_posts'] ?? 0) ?></span>
+        </div>
+
+        <div class="post-main">
+            <div class="post-head">
+                <span class="post-number">#<?= (int)$number ?></span>
+                <span class="dot">·</span>
+                <time datetime="<?= escape($data['created_at'] ?? '') ?>" title="<?= escape($data['created_at'] ?? '') ?>">
+                    <?= t('published') ?> <?= time_ago($data['created_at'] ?? '') ?>
+                </time>
+                <div class="post-actions">
+                    <a class="post-action" href="<?= $threadUrl ?>#<?= escape($anchor) ?>" title="<?= t('permalink') ?>"><i class="fas fa-link"></i></a>
+                    <?php if ($canEdit && !$isOp): ?>
+                        <a class="post-action" href="<?= url('edit_post', ['id' => $data['id']]) ?>" title="<?= t('edit') ?>"><i class="fas fa-pen"></i></a>
+                        <form method="POST" action="<?= url('delete_post', ['id' => $data['id']]) ?>" class="d-inline"
+                              onsubmit="return confirm('<?= t('delete_confirm') ?>')">
+                            <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                            <button type="submit" class="post-action post-action-danger" title="<?= t('delete') ?>"><i class="fas fa-trash"></i></button>
+                        </form>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <div class="post-body markdown-body"><?= marked_parse($data['content'] ?? '') ?></div>
+
+            <?php if (!empty($opts['uploads'])): ?>
+                <div class="post-attachments">
+                    <h6><i class="fas fa-paperclip me-1"></i><?= t('attachments') ?></h6>
+                    <?php foreach ($opts['uploads'] as $upload): ?>
+                        <a href="<?= base_url() ?>/uploads/<?= escape($upload['filename']) ?>" class="attachment" download>
+                            <i class="fas fa-file"></i><?= escape($upload['original_name']) ?>
+                            <span><?= round($upload['size'] / 1024, 1) ?> KB</span>
+                        </a>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+        </div>
+    </article>
+    <?php
+}
+
+include __DIR__.'/header.php';
+render_header($thread['title'] ?? 'Thread', ['info' => $sidebarInfo]);
+?>
     <nav aria-label="breadcrumb">
         <ol class="breadcrumb">
-            <li class="breadcrumb-item"><a href="<?= url('home') ?>">Home</a></li>
-            <li class="breadcrumb-item"><a href="<?= url('category', ['id' => $thread['category_id'] ?? 1]) ?>"><?= escape($thread['category_name'] ?? 'General') ?></a></li>
+            <li class="breadcrumb-item"><a href="<?= url('home') ?>"><?= t('all_discussions') ?></a></li>
+            <li class="breadcrumb-item">
+                <a href="<?= url('category', ['id' => $thread['category_id'] ?? 0, 'slug' => slugify($thread['category_name'] ?? '')]) ?>">
+                    <?= escape($thread['category_name'] ?? 'General') ?>
+                </a>
+            </li>
             <li class="breadcrumb-item active"><?= escape($thread['title'] ?? '') ?></li>
         </ol>
     </nav>
 
-    <?php
-    $isWatching = false;
-    if (function_exists('is_logged_in') && is_logged_in()) {
-        $watchStmt = $pdo->prepare("SELECT COUNT(*) FROM thread_watchers WHERE thread_id = ? AND user_id = ?");
-        $watchStmt->execute([$thread['id'] ?? 0, $_SESSION['user_id']]);
-        $isWatching = $watchStmt->fetchColumn() > 0;
-    }
-    $threadDate = $thread['created_at'] ?? '';
-    $threadFormattedDate = $threadDate ? date('M j, Y', strtotime($threadDate)) : '';
-    ?>
-    <div class="card thread-opening">
-        <div class="d-flex p-3 align-items-start">
-            <div class="thread-avatar me-3 flex-shrink-0">
-                <?php if (!empty($thread['author_avatar'] ?? '')): ?>
-                    <img src="<?= base_url() ?>/uploads/avatars/<?= escape($thread['author_avatar']) ?>" alt="Avatar" class="avatar-img">
-                <?php else: ?>
-                    <div class="avatar-circle"><?= strtoupper(escape($thread['author'][0] ?? 'U')) ?></div>
+    <header class="discussion-head">
+        <div class="discussion-head-top">
+            <a class="pill-cat" href="<?= url('category', ['id' => $thread['category_id'] ?? 0, 'slug' => slugify($thread['category_name'] ?? '')]) ?>">
+                <?= escape($thread['category_name'] ?? 'General') ?>
+            </a>
+            <?php if (($thread['status'] ?? '') === 'sticky'): ?>
+                <span class="pill pill-sticky"><i class="fas fa-thumbtack"></i><?= t('sticky') ?></span>
+            <?php endif; ?>
+            <?php if ($isLocked): ?>
+                <span class="pill pill-locked"><i class="fas fa-lock"></i><?= t('locked') ?></span>
+            <?php endif; ?>
+            <?php if (($thread['status'] ?? '') === 'hidden'): ?>
+                <span class="pill pill-hidden"><i class="fas fa-eye-slash"></i><?= t('hidden') ?></span>
+            <?php endif; ?>
+        </div>
+
+        <h1 class="discussion-heading"><?= escape($thread['title'] ?? '') ?></h1>
+
+        <div class="discussion-head-meta">
+            <span><?= t('started_by') ?> <a href="<?= url('profile', ['user' => $thread['author'] ?? '']) ?>"><?= escape($thread['author'] ?? '—') ?></a></span>
+            <span class="dot">·</span>
+            <span><?= time_ago($thread['created_at'] ?? '') ?></span>
+            <span class="dot">·</span>
+            <span><i class="fas fa-comment-dots me-1"></i><?= compact_number($replyCount) ?> <span class="count-label"><?= t('replies') ?></span></span>
+            <span class="dot">·</span>
+            <span><i class="fas fa-eye me-1"></i><?= compact_number($viewCount) ?> <span class="count-label"><?= t('views') ?></span></span>
+
+            <div class="discussion-head-actions">
+                <?php if ($isLogged): ?>
+                    <a class="btn btn-outline-soft btn-sm"
+                       href="<?= $isWatching ? url('unwatch', ['thread_id' => $threadId]) : url('watch', ['thread_id' => $threadId]) ?>">
+                        <i class="fas <?= $isWatching ? 'fa-bell-slash' : 'fa-bell' ?> me-1"></i><?= $isWatching ? t('unwatch') : t('watch') ?>
+                    </a>
                 <?php endif; ?>
             </div>
-            <div class="flex-grow-1 min-w-0">
-                <div class="d-flex justify-content-start mb-2">
-                    <small class="text-muted thread-meta">
-                        <i class="fas fa-user me-1"></i><a href="<?= url('profile', ['id' => $thread['author_id'] ?? 0]) ?>" class="text-decoration-none"><?= escape($thread['author']) ?></a> &middot;
-                        <i class="fas fa-clock me-1"></i><?= $threadFormattedDate ?> &middot;
-                        <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
-                            <a href="<?= $isWatching ? url('unwatch', ['thread_id' => $thread['id']]) : url('watch', ['thread_id' => $thread['id']]) ?>" class="text-decoration-none"><i class="fas fa-bell"></i></a>
-                        <?php endif; ?>
-                    </small>
-                    <?php if (function_exists('is_admin') && is_admin()): ?>
-                    <div class="ms-auto">
-                        <div class="btn-group btn-group-sm">
-                            <?php if ($thread['status'] === 'pending'): ?>
-                                <form method="POST" action="<?= url('frontend_moderate') ?>" class="d-inline">
-                                    <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
-                                    <input type="hidden" name="do" value="approve">
-                                    <input type="hidden" name="id" value="<?= $thread['id'] ?>">
-                                    <button class="btn btn-success btn-sm" title="Approve"><i class="fas fa-check"></i></button>
-                                </form>
-                            <?php endif; ?>
-                            <?php if ($thread['status'] === 'locked'): ?>
-                                <form method="POST" action="<?= url('frontend_moderate') ?>" class="d-inline">
-                                    <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
-                                    <input type="hidden" name="do" value="unlock">
-                                    <input type="hidden" name="id" value="<?= $thread['id'] ?>">
-                                    <button class="btn btn-outline-warning btn-sm" title="Unlock"><i class="fas fa-unlock"></i></button>
-                                </form>
-                            <?php else: ?>
-                                <form method="POST" action="<?= url('frontend_moderate') ?>" class="d-inline">
-                                    <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
-                                    <input type="hidden" name="do" value="lock">
-                                    <input type="hidden" name="id" value="<?= $thread['id'] ?>">
-                                    <button class="btn btn-outline-warning btn-sm" title="Lock"><i class="fas fa-lock"></i></button>
-                                </form>
-                            <?php endif; ?>
-                            <?php if ($thread['status'] === 'sticky'): ?>
-                                <form method="POST" action="<?= url('frontend_moderate') ?>" class="d-inline">
-                                    <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
-                                    <input type="hidden" name="do" value="unsticky">
-                                    <input type="hidden" name="id" value="<?= $thread['id'] ?>">
-                                    <button class="btn btn-outline-info btn-sm" title="Unsticky"><i class="fas fa-thumbtack"></i></button>
-                                </form>
-                            <?php else: ?>
-                                <form method="POST" action="<?= url('frontend_moderate') ?>" class="d-inline">
-                                    <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
-                                    <input type="hidden" name="do" value="sticky">
-                                    <input type="hidden" name="id" value="<?= $thread['id'] ?>">
-                                    <button class="btn btn-outline-info btn-sm" title="Sticky"><i class="fas fa-thumbtack"></i></button>
-                                </form>
-                            <?php endif; ?>
-                            <?php if ($thread['status'] === 'hidden'): ?>
-                                <form method="POST" action="<?= url('frontend_moderate') ?>" class="d-inline">
-                                    <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
-                                    <input type="hidden" name="do" value="approve">
-                                    <input type="hidden" name="id" value="<?= $thread['id'] ?>">
-                                    <button class="btn btn-outline-success btn-sm" title="Restore"><i class="fas fa-eye"></i></button>
-                                </form>
-                            <?php else: ?>
-                                <form method="POST" action="<?= url('frontend_moderate') ?>" class="d-inline" onsubmit="return confirm('Hide this thread?')">
-                                    <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
-                                    <input type="hidden" name="do" value="hide">
-                                    <input type="hidden" name="id" value="<?= $thread['id'] ?>">
-                                    <button class="btn btn-outline-dark btn-sm" title="Hide"><i class="fas fa-eye-slash"></i></button>
-                                </form>
-                            <?php endif; ?>
-                            <form method="POST" action="<?= url('frontend_moderate') ?>" class="d-inline" onsubmit="return confirm('Delete this thread?')">
-                                <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
-                                <input type="hidden" name="do" value="delete">
-                                <input type="hidden" name="id" value="<?= $thread['id'] ?>">
-                                <button class="btn btn-outline-danger btn-sm" title="Delete"><i class="fas fa-trash"></i></button>
-                            </form>
-                        </div>
-                    </div>
-                    <?php endif; ?>
-                </div>
-<h1 class="h4 thread-title mb-3"><?= escape($thread['title'] ?? '') ?></h1>
-                 <div class="mb-2">
-                     <?php if ($thread['status'] === 'sticky'): ?>
-                         <span class="badge bg-info me-1"><i class="fas fa-thumbtack me-1"></i>Sticky</span>
-                     <?php endif; ?>
-                     <?php if ($thread['status'] === 'locked'): ?>
-                         <span class="badge bg-warning me-1"><i class="fas fa-lock me-1"></i>Locked</span>
-                     <?php endif; ?>
-                     <?php if ($thread['status'] === 'hidden'): ?>
-                         <span class="badge bg-dark me-1"><i class="fas fa-eye-slash me-1"></i>Hidden</span>
-                     <?php endif; ?>
-                 </div>
-                 <div class="thread-content">
-                    <?= marked_parse($thread['content'] ?? '') ?>
-                    <?php
-                    $uploadsStmt = $pdo->prepare("SELECT * FROM uploads WHERE thread_id = ? AND post_id IS NULL ORDER BY created_at ASC");
-                    $uploadsStmt->execute([$_GET['id'] ?? 0]);
-                    $uploads = $uploadsStmt->fetchAll();
-                    if (!empty($uploads)): ?>
-                        <hr>
-                        <h6><i class="fas fa-paperclip me-1"></i><?= t('attachments') ?></h6>
-                        <?php foreach ($uploads as $upload): ?>
-                            <a href="<?= base_url() ?>/uploads/<?= $upload['filename'] ?>" class="btn btn-outline-secondary btn-sm me-1 mb-1" download>
-                                <i class="fas fa-file me-1"></i><?= escape($upload['original_name']) ?>
-                                <span class="badge bg-secondary ms-1"><?= round($upload['size'] / 1024, 1) ?> KB</span>
-                            </a>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
-                </div>
+        </div>
+
+        <?php if ($canModerate): ?>
+            <div class="mod-bar">
+                <span class="mod-bar-label"><i class="fas fa-shield-halved me-1"></i><?= t('moderation') ?></span>
+                <?php
+                if (($thread['status'] ?? '') === 'pending') {
+                    mod_button($threadId, 'approve', 'fa-check', t('approve_thread'), 'outline-soft');
+                }
+                if ($isLocked) {
+                    mod_button($threadId, 'unlock', 'fa-unlock', t('unlock_thread'), 'outline-soft');
+                } else {
+                    mod_button($threadId, 'lock', 'fa-lock', t('lock_thread'), 'outline-soft');
+                }
+                if (($thread['status'] ?? '') === 'sticky') {
+                    mod_button($threadId, 'unsticky', 'fa-thumbtack', t('unsticky_thread'), 'outline-soft');
+                } else {
+                    mod_button($threadId, 'sticky', 'fa-thumbtack', t('sticky_thread'), 'outline-soft');
+                }
+                if (($thread['status'] ?? '') === 'hidden') {
+                    mod_button($threadId, 'approve', 'fa-eye', t('approve_thread'), 'outline-soft');
+                } else {
+                    mod_button($threadId, 'hide', 'fa-eye-slash', t('hide_thread'), 'outline-soft', t('hide_confirm'));
+                }
+                mod_button($threadId, 'delete', 'fa-trash', t('delete'), 'outline-danger', t('delete_thread_confirm'));
+                ?>
             </div>
-        </div>
-        <div class="card-footer text-muted small">
-            <i class="fas fa-folder me-1"></i>Category: <?= escape($thread['category_name'] ?? 'General') ?>
-        </div>
+        <?php endif; ?>
+    </header>
+
+    <div class="post-stream">
+        <?php if ($postPage === 1): ?>
+            <?php render_post($thread, 1, $threadId, $threadUrl, ['is_op' => true, 'uploads' => $threadUploads]); ?>
+        <?php else: ?>
+            <a class="stream-jump" href="<?= url('thread', ['id' => $threadId, 'slug' => slugify($thread['title'] ?? '')]) ?>">
+                <i class="fas fa-arrow-up me-2"></i><?= t('back_to_first_post') ?>
+            </a>
+        <?php endif; ?>
+
+        <?php if (empty($posts ?? [])): ?>
+            <div class="empty-state empty-state-sm">
+                <i class="fas fa-comments"></i>
+                <p><?= t('no_replies') ?></p>
+            </div>
+        <?php else: ?>
+            <?php foreach ($posts as $index => $post): ?>
+                <?php render_post($post, ($postPage - 1) * $perPage + $index + 2, $threadId, $threadUrl); ?>
+            <?php endforeach; ?>
+        <?php endif; ?>
     </div>
 
-    <h5 class="mb-3"><i class="fas fa-reply me-2"></i><?= t('reply') ?></h5>
-
-    <?php if (empty($posts ?? [])): ?>
-        <div class="card"><div class="card-body text-center py-4 text-muted"><?= t('no_replies') ?></div></div>
-    <?php else: ?>
-        <?php foreach ($posts as $post): 
-            $postDate = $post['created_at'] ?? '';
-            $postFormattedDate = $postDate ? date('M j, Y', strtotime($postDate)) : '';
-        ?>
-            <div class="card post-reply">
-                <div class="d-flex p-3 align-items-start">
-                    <div class="thread-avatar me-3 flex-shrink-0">
-                        <?php if (!empty($post['author_avatar'] ?? '')): ?>
-                            <img src="<?= base_url() ?>/uploads/avatars/<?= escape($post['author_avatar']) ?>" alt="Avatar" class="avatar-img small">
-                        <?php else: ?>
-                            <div class="avatar-circle small"><?= strtoupper(escape($post['author'][0] ?? 'U')) ?></div>
-                        <?php endif; ?>
-                    </div>
-                    <div class="flex-grow-1 min-w-0">
-                        <div class="d-flex justify-content-start mb-1">
-                            <small class="text-muted thread-meta">
-                                <i class="fas fa-user me-1"></i><a href="<?= url('profile', ['user' => escape($post['author'])]) ?>" class="fw-bold text-decoration-none"><?= escape($post['author']) ?></a> &middot;
-                                <i class="fas fa-clock me-1"></i><?= $postFormattedDate ?>
-                                <?php if (function_exists('is_logged_in') && is_logged_in() && ($_SESSION['user_id'] == $post['user_id'] || is_admin())): ?>
-                                    &middot; <a href="<?= url('edit_post', ['id' => $post['id']]) ?>" class="text-decoration-none"><i class="fas fa-edit"></i></a>
-                                    <form method="POST" action="<?= url('delete_post', ['id' => $post['id']]) ?>" style="display:inline" onsubmit="return confirm('<?= t('delete_confirm') ?>')">
-                                        <button type="submit" class="btn btn-link text-danger p-0 ms-1" style="font-size:inherit"><i class="fas fa-trash"></i></button>
-                                    </form>
-                                <?php endif; ?>
-                            </small>
-                        </div>
-                        <div class="post-content"><?= marked_parse($post['content'] ?? '') ?></div>
-                    </div>
-                </div>
-            </div>
-        <?php endforeach; ?>
+    <?php if ($totalPages > 1): ?>
+        <nav class="pager" aria-label="<?= t('pagination') ?>">
+            <ul class="pagination justify-content-center">
+                <?php for ($i = 1; $i <= $totalPages; $i++): ?>
+                    <li class="page-item <?= $i === $postPage ? 'active' : '' ?>">
+                        <a class="page-link" href="<?= url('thread', ['id' => $threadId, 'slug' => slugify($thread['title'] ?? ''), 'post_page' => $i]) ?>"><?= $i ?></a>
+                    </li>
+                <?php endfor; ?>
+            </ul>
+        </nav>
     <?php endif; ?>
 
-    <?php if (($totalPages ?? 1) > 1): ?>
-        <nav><ul class="pagination justify-content-center">
-            <?php for ($i = 1; $i <= $totalPages; $i++): ?>
-                <li class="page-item <?= ($i === ($postPage ?? 1)) ? 'active' : '' ?>">
-                    <a class="page-link" href="<?= url('thread', ['id' => $thread['id'], 'slug' => slugify($thread['title'] ?? ''), 'post_page' => $i]) ?>"><?= $i ?></a>
-                </li>
-            <?php endfor; ?>
-        </ul></nav>
-    <?php endif; ?>
-
-    <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
-        <?php if ($thread['status'] === 'locked' && !is_admin()): ?>
-        <div class="card">
-            <div class="card-body text-center py-4">
-                <i class="fas fa-lock fa-2x text-muted mb-3"></i>
-                <p class="text-muted mb-0"><?= t('thread_locked') ?></p>
+    <?php if ($isLogged): ?>
+        <?php if ($isLocked && !$canModerate): ?>
+            <div class="reply-box reply-box-locked">
+                <i class="fas fa-lock"></i>
+                <p class="mb-0"><?= t('thread_locked') ?></p>
             </div>
-        </div>
         <?php else: ?>
-        <div class="card">
-            <div class="card-header"><i class="fas fa-reply me-2"></i><?= t('reply') ?></div>
-            <div class="card-body">
+            <section class="reply-box" id="reply">
+                <h2 class="reply-title"><i class="fas fa-reply me-2"></i><?= t('reply') ?></h2>
                 <form method="POST" action="<?= url('reply') ?>">
                     <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
-                    <input type="hidden" name="thread_id" value="<?= $thread['id'] ?? '' ?>">
-                    <div class="mb-3"><textarea name="content" class="form-control" rows="4" required></textarea></div>
-                    <button type="submit" class="btn btn-forum"><i class="fas fa-paper-plane me-1"></i><?= t('submit_reply') ?></button>
+                    <input type="hidden" name="thread_id" value="<?= $threadId ?>">
+                    <div class="mb-3">
+                        <textarea id="editbored-content" name="content" class="form-control" rows="6"
+                                  placeholder="<?= t('reply_placeholder') ?>" required></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-brand"><i class="fas fa-paper-plane me-2"></i><?= t('submit_reply') ?></button>
                 </form>
-            </div>
-        </div>
+            </section>
         <?php endif; ?>
     <?php else: ?>
-        <div class="alert alert-info"><i class="fas fa-info-circle me-2"></i><a href="<?= url('login') ?>">Login</a> <?= t('login_required') ?>.</div>
+        <section class="reply-box reply-box-cta">
+            <h2 class="reply-title"><?= t('join_conversation') ?></h2>
+            <p class="mb-3"><?= t('join_conversation_text') ?></p>
+            <a href="<?= url('register') ?>" class="btn btn-brand"><?= t('register') ?></a>
+            <a href="<?= url('login') ?>" class="btn btn-outline-soft"><?= t('login') ?></a>
+        </section>
     <?php endif; ?>
 <?php render_footer(); ?>
