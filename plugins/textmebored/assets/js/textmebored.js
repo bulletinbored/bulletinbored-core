@@ -336,27 +336,52 @@ function newConversation() {
         if (!content) return;
 
         var username = usernameInput.value.trim();
-        var xhr = new XMLHttpRequest();
-        xhr.open('POST', window.textmebored.apiUrl + '/resolve_user', true);
-        xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-        xhr.setRequestHeader('Accept', 'application/json');
-        xhr.onreadystatechange = function () {
-            if (xhr.readyState === 4 && xhr.status === 200) {
+        if (!username) {
+            alert('Please enter a recipient');
+            return;
+        }
+
+        var resolveXhr = new XMLHttpRequest();
+        resolveXhr.open('POST', window.textmebored.apiUrl + '/resolve_user', true);
+        resolveXhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+        resolveXhr.setRequestHeader('Accept', 'application/json');
+        resolveXhr.onreadystatechange = function () {
+            if (resolveXhr.readyState === 4 && resolveXhr.status === 200) {
                 try {
-                    var data = JSON.parse(xhr.responseText);
-                    if (data.success) {
-                        modal.remove();
-                        openConversation(data.user_id, username);
-                    } else {
-                        alert(data.error || 'User not found');
+                    var rdata = JSON.parse(resolveXhr.responseText);
+                    if (!rdata.success) {
+                        alert(rdata.error || 'User not found');
+                        return;
                     }
+                    var recipientId = rdata.user_id;
+
+                    var sendXhr = new XMLHttpRequest();
+                    sendXhr.open('POST', window.textmebored.apiUrl, true);
+                    sendXhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+                    sendXhr.setRequestHeader('Accept', 'application/json');
+                    sendXhr.onreadystatechange = function () {
+                        if (sendXhr.readyState === 4 && sendXhr.status === 200) {
+                            try {
+                                var sdata = JSON.parse(sendXhr.responseText);
+                                if (sdata.success) {
+                                    modal.remove();
+                                    openConversation(recipientId, username);
+                                } else {
+                                    alert(sdata.error || 'Failed to send message');
+                                }
+                            } catch (err) {
+                                alert('Error sending message');
+                            }
+                        }
+                    };
+                    sendXhr.send('action=send&recipient_id=' + encodeURIComponent(recipientId) + '&content=' + encodeURIComponent(content) + '&csrf_token=' + encodeURIComponent(window.textmebored.csrfToken || ''));
                 } catch (err) {
                     alert('Error resolving user');
                 }
             }
         };
-        xhr.send('username=' + encodeURIComponent(username) + '&csrf_token=' + encodeURIComponent(window.textmebored.csrfToken || ''));
-        });
+        resolveXhr.send('action=resolve_user&username=' + encodeURIComponent(username) + '&csrf_token=' + encodeURIComponent(window.textmebored.csrfToken || ''));
+    });
     }
 
     function openConversation(userId, username) {
