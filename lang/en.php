@@ -162,6 +162,11 @@ return [
     'new_password' => 'New password',
     'confirm_password' => 'Confirm password',
     'password_min' => 'Minimum 6 characters.',
+    'verify_email' => 'Verify Email',
+    'verify_email_success' => 'Your email has been verified successfully! You can now login.',
+    'verify_email_invalid' => 'Invalid or expired verification link.',
+    'register_check_email' => 'Please check your email to confirm your account.',
+    'email_not_verified' => 'Please verify your email before logging in.',
 
     // --- relative time ---
     'time_now' => 'just now',

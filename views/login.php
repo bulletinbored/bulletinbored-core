@@ -4,6 +4,10 @@
             <h1 class="auth-title"><?= t('login') ?></h1>
             <p class="auth-subtitle"><?= t('login_subtitle') ?></p>
 
+            <?php if (isset($_GET['registered'])): ?>
+                <div class="alert alert-success"><i class="fas fa-check-circle me-2"></i><?= t('register_check_email') ?></div>
+            <?php endif; ?>
+
             <?php if (isset($error)): ?>
                 <div class="alert alert-danger"><i class="fas fa-exclamation-circle me-2"></i><?= escape(t($error)) ?></div>
             <?php endif; ?>

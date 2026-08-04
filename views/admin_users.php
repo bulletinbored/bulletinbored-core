@@ -10,6 +10,54 @@ $users = $pdo->query("SELECT * FROM users ORDER BY id ASC")->fetchAll();
     </div>
 
     <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h5 class="card-title mb-0"><i class="fas fa-user-plus me-2"></i>Create User</h5>
+        </div>
+        <div class="card-body">
+            <form method="POST" action="<?= url('admin_create_user') ?>" class="row g-3">
+                <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">Username</label>
+                    <input type="text" name="username" class="form-control" required>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">Email</label>
+                    <input type="email" name="email" class="form-control">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold">Password</label>
+                    <input type="password" name="password" class="form-control" required>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold">Role</label>
+                    <select name="role" class="form-select">
+                        <option value="user">User</option>
+                        <option value="moderator">Moderator</option>
+                        <option value="admin">Admin</option>
+                    </select>
+                </div>
+                <div class="col-md-1">
+                    <label class="form-label small fw-bold">Status</label>
+                    <select name="status" class="form-select">
+                        <option value="active">Active</option>
+                        <option value="suspended">Suspended</option>
+                        <option value="banned">Banned</option>
+                    </select>
+                </div>
+                <div class="col-md-1 d-flex align-items-end">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="email_verified" id="email_verified" checked>
+                        <label class="form-check-label small" for="email_verified">Verified</label>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-plus me-1"></i>Add User</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card shadow mb-4">
         <div class="card-body">
             <div class="table-responsive">
                 <table class="table table-hover">

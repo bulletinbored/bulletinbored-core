@@ -80,6 +80,8 @@ function url($action, $params = []) {
             return $base . '/forgot-password' . (!empty($query) ? '?' . http_build_query($query) : '');
         case 'reset_password':
             return $base . '/reset-password' . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'verify_email':
+            return $base . '/verify-email' . (!empty($query) ? '?' . http_build_query($query) : '');
         case 'new_thread':
             return $base . '/new-thread' . (!empty($query) ? '?' . http_build_query($query) : '');
         case 'edit_profile':
@@ -114,8 +116,10 @@ function url($action, $params = []) {
             return $base . '/admin/categories' . (!empty($query) ? '?' . http_build_query($query) : '');
 case 'admin_users':
              return $base . '/admin/users' . (!empty($query) ? '?' . http_build_query($query) : '');
-         case 'admin_user_edit':
-             return $base . '/admin/users/' . ($params['id'] ?? 0) . '/edit' . (!empty($query) ? '?' . http_build_query($query) : '');
+          case 'admin_user_edit':
+              return $base . '/admin/users/' . ($params['id'] ?? 0) . '/edit' . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'admin_create_user':
+            return $base . '/admin/create-user' . (!empty($query) ? '?' . http_build_query($query) : '');
         case 'admin_settings':
             return $base . '/admin/settings' . (!empty($query) ? '?' . http_build_query($query) : '');
         case 'admin_langs':
@@ -185,7 +189,7 @@ if ($dbDriver === 'mysql') {
     
     // MySQL tables
     $tables = [
-        "users" => "id INT AUTO_INCREMENT PRIMARY KEY, username VARCHAR(255) UNIQUE NOT NULL, password VARCHAR(255) NOT NULL, email VARCHAR(255), role VARCHAR(50) DEFAULT 'user', avatar VARCHAR(255), status VARCHAR(50) DEFAULT 'active', created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
+        "users" => "id INT AUTO_INCREMENT PRIMARY KEY, username VARCHAR(255) UNIQUE NOT NULL, password VARCHAR(255) NOT NULL, email VARCHAR(255), role VARCHAR(50) DEFAULT 'user', avatar VARCHAR(255), status VARCHAR(50) DEFAULT 'active', email_verified INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
         "categories" => "id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255) NOT NULL, description TEXT, position INT DEFAULT 0",
         "threads" => "id INT AUTO_INCREMENT PRIMARY KEY, category_id INT, user_id INT, title TEXT, content TEXT, status VARCHAR(50) DEFAULT 'visible', created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP",
         "posts" => "id INT AUTO_INCREMENT PRIMARY KEY, thread_id INT, user_id INT, content TEXT, status VARCHAR(50) DEFAULT 'visible', created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
@@ -193,7 +197,8 @@ if ($dbDriver === 'mysql') {
         "thread_watchers" => "id INT AUTO_INCREMENT PRIMARY KEY, thread_id INT NOT NULL, user_id INT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE KEY unique_watch (thread_id, user_id)",
         "notifications" => "id INT AUTO_INCREMENT PRIMARY KEY, user_id INT NOT NULL, type VARCHAR(50) DEFAULT 'info', title TEXT NOT NULL, message TEXT, link TEXT, read INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
         "private_messages" => "id INT AUTO_INCREMENT PRIMARY KEY, sender_id INT NOT NULL, recipient_id INT NOT NULL, subject TEXT DEFAULT '', content TEXT NOT NULL, read INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
-        "roles" => "id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(50) NOT NULL UNIQUE, permissions TEXT DEFAULT '[]', created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+        "roles" => "id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(50) NOT NULL UNIQUE, permissions TEXT DEFAULT '[]', created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
+        "email_verifications" => "id INT AUTO_INCREMENT PRIMARY KEY, user_id INT NOT NULL, token TEXT NOT NULL, expires_at DATETIME NOT NULL, used INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
     ];
     
     foreach ($tables as $name => $schema) {
@@ -235,6 +240,7 @@ CREATE TABLE users (
                  role TEXT DEFAULT 'user',
                  avatar TEXT,
                  status TEXT DEFAULT 'active',
+                 email_verified INTEGER DEFAULT 0,
                  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
              );
             CREATE TABLE categories (
@@ -344,6 +350,10 @@ CREATE TABLE users (
             if (!in_array('avatar', $cols)) {
                 $pdo->exec("ALTER TABLE users ADD COLUMN avatar TEXT");
             }
+            if (!in_array('email_verified', $cols)) {
+                $pdo->exec("ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 0");
+            }
+            $pdo->exec("UPDATE users SET email_verified = 1");
         } catch (PDOException $e) {}
         
         // Safe column addition for posts table
@@ -356,6 +366,20 @@ CREATE TABLE users (
         try {
             $pdo->exec("
                 CREATE TABLE IF NOT EXISTS password_resets (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    token TEXT NOT NULL,
+                    expires_at DATETIME NOT NULL,
+                    used INTEGER DEFAULT 0,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            ");
+        } catch (PDOException $e) {}
+        
+        // Create email_verifications table if not exists
+        try {
+            $pdo->exec("
+                CREATE TABLE IF NOT EXISTS email_verifications (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id INTEGER NOT NULL,
                     token TEXT NOT NULL,
@@ -861,6 +885,11 @@ if (!isset($_GET['action'])) {
         $_GET['action'] = 'admin_categories';
     } elseif (preg_match('#^admin/users$#', $reqPath)) {
         $_GET['action'] = 'admin_users';
+    } elseif (preg_match('#^admin/users/([0-9]+)/edit$#', $reqPath, $m)) {
+        $_GET['action'] = 'admin_user_edit';
+        $_GET['id'] = (int)$m[1];
+    } elseif (preg_match('#^admin/create-user$#', $reqPath)) {
+        $_GET['action'] = 'admin_create_user';
     } elseif (preg_match('#^admin/settings$#', $reqPath)) {
         $_GET['action'] = 'admin_settings';
     } elseif (preg_match('#^admin/langs$#', $reqPath)) {
@@ -894,6 +923,8 @@ if (!isset($_GET['action'])) {
         $_GET['action'] = 'forgot_password';
     } elseif (preg_match('#^reset-password$#', $reqPath)) {
         $_GET['action'] = 'reset_password';
+    } elseif (preg_match('#^verify-email$#', $reqPath)) {
+        $_GET['action'] = 'verify_email';
     } elseif (preg_match('#^new-thread$#', $reqPath)) {
         $_GET['action'] = 'new_thread';
     } elseif (preg_match('#^editbored-upload$#', $reqPath)) {
@@ -1225,6 +1256,8 @@ try {
                     $error = 'user_banned';
                 } elseif ($user['status'] === 'suspended' && !empty($user['suspension_time']) && time() < $user['suspension_time']) {
                     $error = 'user_suspended';
+                } elseif (empty($user['email_verified'])) {
+                    $error = 'email_not_verified';
                 } else {
                     $_SESSION['user_id'] = $user['id'];
                     $_SESSION['user_role'] = $user['role'];
@@ -1270,21 +1303,29 @@ try {
             
             $email = validate_input($_POST['email'] ?? '');
             
-            $pdo->prepare("INSERT INTO users (username, password, email, role) VALUES (?, ?, ?, 'user')")
+            $pdo->prepare("INSERT INTO users (username, password, email, role, email_verified) VALUES (?, ?, ?, 'user', 0)")
                 ->execute([$username, password_hash($password, PASSWORD_DEFAULT), $email]);
             
-            $pluginManager->runHook('user_registered', $pdo->lastInsertId(), $username);
+            $userId = $pdo->lastInsertId();
+            $pluginManager->runHook('user_registered', $userId, $username);
             
-            // Send welcome email
             if (!empty($email)) {
-                $subject = 'Welcome to '.($config['site_name'] ?? 'bulletinbored');
+                $token = bin2hex(random_bytes(32));
+                $expires = date('Y-m-d H:i:s', strtotime('+24 hours'));
+                $pdo->prepare("INSERT INTO email_verifications (user_id, token, expires_at) VALUES (?, ?, ?)")
+                    ->execute([$userId, password_hash($token, PASSWORD_DEFAULT), $expires]);
+                
+                $verifyLink = url('verify_email', ['token' => $token]);
+                $subject = 'Confirm your email';
                 $body = '<p>Hello '.escape($username).',</p>
-                        <p>Welcome to '.($config['site_name'] ?? 'bulletinbored').'!</p>
-                        <p>Your account has been successfully created. You can now login and start participating in discussions.</p>';
+                        <p>Thank you for registering! Please click the button below to confirm your email address:</p>
+                        <p style="text-align:center;"><a class="btn" href="'.$verifyLink.'">Verify Email</a></p>
+                        <p>Or copy this link: <br><code>'.$verifyLink.'</code></p>
+                        <p>This link expires in 24 hours.</p>';
                 send_email($email, $subject, $body);
             }
             
-            redirect(url('login'));
+            redirect(url('login', ['registered' => 1]));
         }
         include __DIR__.'/views/register.php';
     }
@@ -1292,6 +1333,38 @@ try {
         // Handle logout
         session_destroy();
         redirect(url('home'));
+    }
+    elseif ($action === 'verify_email') {
+        $token = $_GET['token'] ?? '';
+        
+        if (empty($token)) {
+            $error = 'verify_email_invalid';
+            include __DIR__.'/views/verify_email.php';
+            exit;
+        }
+        
+        $tokensStmt = $pdo->prepare("SELECT * FROM email_verifications WHERE used = 0 AND expires_at > datetime('now') ORDER BY created_at DESC");
+        $tokensStmt->execute();
+        $validToken = null;
+        foreach ($tokensStmt->fetchAll() as $row) {
+            if (password_verify($token, $row['token'])) {
+                $validToken = $row;
+                break;
+            }
+        }
+        
+        if (!$validToken) {
+            $error = 'verify_email_invalid';
+            include __DIR__.'/views/verify_email.php';
+            exit;
+        }
+        
+        $pdo->prepare("UPDATE users SET email_verified = 1 WHERE id = ?")->execute([$validToken['user_id']]);
+        $pdo->prepare("UPDATE email_verifications SET used = 1 WHERE id = ?")->execute([$validToken['id']]);
+        
+        $success = 'verify_email_success';
+        include __DIR__.'/views/verify_email.php';
+        exit;
     }
     elseif ($action === 'profile' && isset($_GET['user'])) {
         // View user profile
@@ -1816,39 +1889,89 @@ elseif ($action === 'admin_users') {
              die('Admin required');
          }
          include __DIR__.'/views/admin_users.php';
-     }
-     elseif ($action === 'admin_user_edit' && isset($_GET['id'])) {
-         // Edit user page
-         if (!is_admin()) {
-             die('Admin required');
-         }
-         $editUserId = (int)($_GET['id'] ?? 0);
-         if ($editUserId <= 0) {
-             redirect(url('admin_users'));
-         }
-         $editUser = $pdo->prepare("SELECT * FROM users WHERE id = ?");
-         $editUser->execute([$editUserId]);
-         $editUser = $editUser->fetch();
-         if (!$editUser) {
-             redirect(url('admin_users'));
-         }
-         if ($method === 'POST') {
-             if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
-                 die('CSRF token invalid');
-             }
-             $newUsername = trim($_POST['username'] ?? '');
-             $newEmail = trim($_POST['email'] ?? '');
-             $newRole = $_POST['role'] ?? 'user';
-             $newStatus = $_POST['status'] ?? 'active';
-             if ($newUsername !== '') {
-                 $pdo->prepare("UPDATE users SET username = ?, email = ?, role = ?, status = ? WHERE id = ?")
-                     ->execute([$newUsername, $newEmail, $newRole, $newStatus, $editUserId]);
-             }
-             redirect(url('admin_user_edit', ['id' => $editUserId]));
-         }
-         include __DIR__.'/views/admin_user_edit.php';
-     }
-     elseif ($action === 'admin_settings') {
+      }
+      elseif ($action === 'admin_user_edit' && isset($_GET['id'])) {
+          // Edit user page
+          if (!is_admin()) {
+              die('Admin required');
+          }
+          $editUserId = (int)($_GET['id'] ?? 0);
+          if ($editUserId <= 0) {
+              redirect(url('admin_users'));
+          }
+          $editUser = $pdo->prepare("SELECT * FROM users WHERE id = ?");
+          $editUser->execute([$editUserId]);
+          $editUser = $editUser->fetch();
+          if (!$editUser) {
+              redirect(url('admin_users'));
+          }
+          if ($method === 'POST') {
+              if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+                  die('CSRF token invalid');
+              }
+              $newUsername = trim($_POST['username'] ?? '');
+              $newEmail = trim($_POST['email'] ?? '');
+              $newRole = $_POST['role'] ?? 'user';
+              $newStatus = $_POST['status'] ?? 'active';
+              if ($newUsername !== '') {
+                  $pdo->prepare("UPDATE users SET username = ?, email = ?, role = ?, status = ? WHERE id = ?")
+                      ->execute([$newUsername, $newEmail, $newRole, $newStatus, $editUserId]);
+              }
+              redirect(url('admin_user_edit', ['id' => $editUserId]));
+          }
+          include __DIR__.'/views/admin_user_edit.php';
+      }
+      elseif ($action === 'admin_create_user' && $method === 'POST' && is_admin()) {
+          if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+              die('CSRF token invalid');
+          }
+          
+          $username = validate_input($_POST['username'] ?? '');
+          $password = $_POST['password'] ?? '';
+          $email = validate_input($_POST['email'] ?? '');
+          $role = $_POST['role'] ?? 'user';
+          $status = $_POST['status'] ?? 'active';
+          $emailVerified = isset($_POST['email_verified']) ? 1 : 0;
+          
+          if ($username === '' || $password === '') {
+              die('Username and password are required');
+          }
+          
+          $existsStmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE username = ?");
+          $existsStmt->execute([$username]);
+          $exists = $existsStmt->fetchColumn();
+          if ($exists > 0) {
+              die('Username already taken');
+          }
+          
+          if ($email === '') {
+              $emailVerified = 1;
+          }
+          
+          $pdo->prepare("INSERT INTO users (username, password, email, role, status, email_verified) VALUES (?, ?, ?, ?, ?, ?)")
+              ->execute([$username, password_hash($password, PASSWORD_DEFAULT), $email, $role, $status, $emailVerified]);
+          
+          $userId = $pdo->lastInsertId();
+          
+          if (!empty($email) && empty($emailVerified)) {
+              $token = bin2hex(random_bytes(32));
+              $expires = date('Y-m-d H:i:s', strtotime('+24 hours'));
+              $pdo->prepare("INSERT INTO email_verifications (user_id, token, expires_at) VALUES (?, ?, ?)")
+                  ->execute([$userId, password_hash($token, PASSWORD_DEFAULT), $expires]);
+              
+              $verifyLink = url('verify_email', ['token' => $token]);
+              $subject = 'Confirm your email';
+              $body = '<p>Hello '.escape($username).',</p>
+                      <p>Your account has been created. Please click the button below to confirm your email address:</p>
+                      <p style="text-align:center;"><a class="btn" href="'.$verifyLink.'">Verify Email</a></p>
+                      <p>Or copy this link: <br><code>'.$verifyLink.'</code></p>
+                      <p>This link expires in 24 hours.</p>';
+              send_email($email, $subject, $body);
+          }
+          
+          redirect(url('admin_users'));
+      }
+      elseif ($action === 'admin_settings') {
         // Show settings page
         if (!is_admin()) {
             die('Admin required');

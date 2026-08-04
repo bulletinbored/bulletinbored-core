@@ -1,7 +1,7 @@
 # TODO
 
 [X] Aggiustare i nomi editbored e freshbored (tutto minuscolo)
-[ ] Creare un installer minimale e moderno
+[ ] Creare un installer minimale e moderno: 2 pagine (stile Wordpress), prima pagina database, seconda nome sito, username, password e email amministratore
 [X] Creare nella dashboard una scheda per amministrare i permessi e i ruoli
 [X] Azioni di moderazione in frontend
 [X] Add locked/sticky/hidden status indicators in thread previews
@@ -12,7 +12,8 @@
 [X] Centro notifiche (tramite plugin)
 [X] Eliminare ?action= dagli URL
 [X] Rivedere completamente layout homepage
-[ ] Licensa BSD zero clause e spiegazione nel readme
-[ ] Rivedere CLA
+[x] Licensa BSD zero clause e spiegazione nel readme
+[x] Rivedere CLA
 [X] Pagina settings: aggiungere voci stile Wordpress. 
-[ ] Verificare che sia richiesta conferma email dopo registrazione
+[X] Verificare che sia richiesta conferma email dopo registrazione
+[X] In admin/users dovrebbe essere possibile creare un utente
