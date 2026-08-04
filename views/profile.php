@@ -27,23 +27,44 @@
                     <?php endif; ?>
                     <?php if (function_exists('is_admin') && is_admin() && $_SESSION['user_id'] != ($profileUser['id'] ?? 0)): ?>
                         <hr>
+                        <?php
+                        $pStatus = $profileUser['status'] ?? 'active';
+                        $pSusp = (int)($profileUser['suspension_time'] ?? 0);
+                        $pNow = time();
+                        $isBanned = ($pStatus === 'banned');
+                        $isSuspended = ($pStatus === 'suspended' && $pSusp > $pNow);
+                        ?>
+                        <?php if ($isBanned): ?>
+                            <p class="mb-2"><span class="badge bg-danger"><i class="fas fa-ban me-1"></i>Banned</span></p>
+                        <?php elseif ($isSuspended): ?>
+                            <?php
+                            $remaining = $pSusp - $pNow;
+                            $days = ceil($remaining / 86400);
+                            ?>
+                            <p class="mb-2"><span class="badge bg-warning text-dark"><i class="fas fa-clock me-1"></i>Suspended for <?= $days ?> day<?= $days == 1 ? '' : 's' ?></span></p>
+                        <?php else: ?>
+                            <p class="mb-2"><span class="badge bg-success"><i class="fas fa-check me-1"></i>Active</span></p>
+                        <?php endif; ?>
                         <div class="d-grid gap-2">
-                            <form method="POST" action="<?= url('ban_user', ['id' => $profileUser['id']]) ?>" class="d-inline" onsubmit="return confirm('Ban this user?')">
-                                <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
-                                <input type="hidden" name="redirect" value="/u/<?= urlencode($profileUser['username']) ?>">
-                                <button class="btn btn-warning btn-sm w-100"><i class="fas fa-ban me-1"></i>Ban User</button>
-                            </form>
-                            <form method="POST" action="<?= url('suspend_user', ['id' => $profileUser['id']]) ?>" class="d-inline" onsubmit="var d=prompt('Days to suspend:');if(d){this.querySelector('input[name=days]').value=d;this.submit();}return false;">
-                                <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
-                                <input type="hidden" name="days" value="7">
-                                <input type="hidden" name="redirect" value="/u/<?= urlencode($profileUser['username']) ?>">
-                                <button class="btn btn-info btn-sm w-100"><i class="fas fa-clock me-1"></i>Suspend User</button>
-                            </form>
-                            <form method="POST" action="<?= url('unban_user', ['id' => $profileUser['id']]) ?>" class="d-inline mt-2" onsubmit="return confirm('Unban this user?')">
-                                <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
-                                <input type="hidden" name="redirect" value="/u/<?= urlencode($profileUser['username']) ?>">
-                                <button class="btn btn-success btn-sm w-100"><i class="fas fa-unlock me-1"></i>Unban User</button>
-                            </form>
+                            <?php if ($isBanned || $isSuspended): ?>
+                                <form method="POST" action="<?= url('unban_user', ['id' => $profileUser['id']]) ?>" class="d-inline" onsubmit="return confirm('Unban this user?')">
+                                    <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                                    <input type="hidden" name="redirect" value="/u/<?= urlencode($profileUser['username']) ?>">
+                                    <button class="btn btn-success btn-sm w-100"><i class="fas fa-unlock me-1"></i>Unban User</button>
+                                </form>
+                            <?php else: ?>
+                                <form method="POST" action="<?= url('ban_user', ['id' => $profileUser['id']]) ?>" class="d-inline" onsubmit="return confirm('Ban this user?')">
+                                    <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                                    <input type="hidden" name="redirect" value="/u/<?= urlencode($profileUser['username']) ?>">
+                                    <button class="btn btn-warning btn-sm w-100"><i class="fas fa-ban me-1"></i>Ban User</button>
+                                </form>
+                                <form method="POST" action="<?= url('suspend_user', ['id' => $profileUser['id']]) ?>" class="d-inline" onsubmit="var d=prompt('Days to suspend:');if(d){this.querySelector('input[name=days]').value=d;this.submit();}return false;">
+                                    <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                                    <input type="hidden" name="days" value="7">
+                                    <input type="hidden" name="redirect" value="/u/<?= urlencode($profileUser['username']) ?>">
+                                    <button class="btn btn-info btn-sm w-100"><i class="fas fa-clock me-1"></i>Suspend User</button>
+                                </form>
+                            <?php endif; ?>
                         </div>
                     <?php endif; ?>
                 </div>

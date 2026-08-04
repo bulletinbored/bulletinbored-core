@@ -10,5 +10,5 @@
 [ ] Predisposizione per localizzazione plugin-temi
 [X] Messaggi privati (tramite plugin)
 [X] Centro notifiche (tramite plugin)
-[ ] Aggiustare ricerca (non funziona)
 [X] Eliminare ?action= dagli URL
+[ ] Rivedere completamente layout homepage
