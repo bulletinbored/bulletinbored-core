@@ -4,6 +4,11 @@ Minimal, extensible forum software with zero dependencies. Upload files and run 
 
 Current version: **0.1.0**
 
+## Repository
+
+- Core: https://github.com/bulletinbored/bulletinbored-core
+- Plugins/Themes catalog: https://github.com/bulletinbored/bulletinbored-core/blob/master/data/catalog.json
+
 ## Installation
 
 1. Upload all files to a PHP-enabled web server (PHP 8.x, PDO/SQLite or PDO/MySQL extension)

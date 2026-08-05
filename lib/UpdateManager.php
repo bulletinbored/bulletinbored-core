@@ -126,6 +126,23 @@ class UpdateManager
             return null;
         }
 
+        if ($type === 'core' && preg_match('#github\.com/([^/]+)/([^/]+)$#i', $this->updateServer, $m)) {
+            $apiUrl = 'https://api.github.com/repos/' . rawurlencode($m[1]) . '/' . rawurlencode($m[2]) . '/releases/latest';
+            $json = @file_get_contents($apiUrl, false, stream_context_create([
+                'http' => [
+                    'timeout' => 10,
+                    'user_agent' => 'bulletinbored-update-checker/1.0',
+                ]
+            ]));
+            if ($json) {
+                $release = json_decode($json, true);
+                if (is_array($release) && !empty($release['tag_name'])) {
+                    return ltrim($release['tag_name'], 'v');
+                }
+            }
+            return null;
+        }
+
         $url = $this->updateServer . '/versions.json';
         $context = stream_context_create([
             'http' => [
