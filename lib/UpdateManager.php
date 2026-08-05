@@ -308,17 +308,32 @@ class UpdateManager
                     $targetPath = $extractTo . $item;
                     if (is_dir($srcPath)) {
                         if (!is_dir($targetPath)) {
-                            rename($srcPath, $targetPath);
+                            if (!rename($srcPath, $targetPath)) {
+                                $this->deleteRecursive($src);
+                                return false;
+                            }
                         } else {
                             $this->copyRecursive($srcPath, $targetPath);
-                            @rmdir($srcPath);
+                            if (!@rmdir($srcPath)) {
+                                $this->deleteRecursive($src);
+                                return false;
+                            }
                         }
                     } elseif (is_file($srcPath)) {
                         if (!file_exists($targetPath)) {
-                            rename($srcPath, $targetPath);
+                            if (!rename($srcPath, $targetPath)) {
+                                $this->deleteRecursive($src);
+                                return false;
+                            }
                         } else {
-                            copy($srcPath, $targetPath);
-                            @unlink($srcPath);
+                            if (!copy($srcPath, $targetPath)) {
+                                $this->deleteRecursive($src);
+                                return false;
+                            }
+                            if (!@unlink($srcPath)) {
+                                $this->deleteRecursive($src);
+                                return false;
+                            }
                         }
                     }
                 }
@@ -404,17 +419,37 @@ class UpdateManager
                     $targetPath = $extractTo . $item;
                     if (is_dir($srcPath)) {
                         if (!is_dir($targetPath)) {
-                            rename($srcPath, $targetPath);
+                            if (!rename($srcPath, $targetPath)) {
+                                $this->deleteRecursive($src);
+                                $this->deleteRecursive($tmpExtract);
+                                return false;
+                            }
                         } else {
                             $this->copyRecursive($srcPath, $targetPath);
-                            @rmdir($srcPath);
+                            if (!@rmdir($srcPath)) {
+                                $this->deleteRecursive($src);
+                                $this->deleteRecursive($tmpExtract);
+                                return false;
+                            }
                         }
                     } elseif (is_file($srcPath)) {
                         if (!file_exists($targetPath)) {
-                            rename($srcPath, $targetPath);
+                            if (!rename($srcPath, $targetPath)) {
+                                $this->deleteRecursive($src);
+                                $this->deleteRecursive($tmpExtract);
+                                return false;
+                            }
                         } else {
-                            copy($srcPath, $targetPath);
-                            @unlink($srcPath);
+                            if (!copy($srcPath, $targetPath)) {
+                                $this->deleteRecursive($src);
+                                $this->deleteRecursive($tmpExtract);
+                                return false;
+                            }
+                            if (!@unlink($srcPath)) {
+                                $this->deleteRecursive($src);
+                                $this->deleteRecursive($tmpExtract);
+                                return false;
+                            }
                         }
                     }
                 }
@@ -431,17 +466,32 @@ class UpdateManager
                     $targetPath = $extractTo . $item;
                     if (is_dir($srcPath)) {
                         if (!is_dir($targetPath)) {
-                            rename($srcPath, $targetPath);
+                            if (!rename($srcPath, $targetPath)) {
+                                $this->deleteRecursive($tmpExtract);
+                                return false;
+                            }
                         } else {
                             $this->copyRecursive($srcPath, $targetPath);
-                            @rmdir($srcPath);
+                            if (!@rmdir($srcPath)) {
+                                $this->deleteRecursive($tmpExtract);
+                                return false;
+                            }
                         }
                     } elseif (is_file($srcPath)) {
                         if (!file_exists($targetPath)) {
-                            rename($srcPath, $targetPath);
+                            if (!rename($srcPath, $targetPath)) {
+                                $this->deleteRecursive($tmpExtract);
+                                return false;
+                            }
                         } else {
-                            copy($srcPath, $targetPath);
-                            @unlink($srcPath);
+                            if (!copy($srcPath, $targetPath)) {
+                                $this->deleteRecursive($tmpExtract);
+                                return false;
+                            }
+                            if (!@unlink($srcPath)) {
+                                $this->deleteRecursive($tmpExtract);
+                                return false;
+                            }
                         }
                     }
                 }
