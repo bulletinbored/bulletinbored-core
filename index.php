@@ -2367,7 +2367,9 @@ elseif ($action === 'admin_users') {
 
                 if ($type === 'core' && !empty($_POST['core_tag'])) {
                     $tag = ltrim($_POST['core_tag'], 'v');
-                    if ($updateManager->applyCoreUpdate($tag)) {
+                    if (version_compare($tag, $config['version'] ?? '1.0.0', '<=')) {
+                        $updateError = 'No newer version available';
+                    } elseif ($updateManager->applyCoreUpdate($tag)) {
                         $updateSuccess = 'Core updated to v' . escape($tag);
                     } else {
                         $updateError = 'Failed to update core';
@@ -2375,7 +2377,17 @@ elseif ($action === 'admin_users') {
                 } elseif (($type === 'plugins' || $type === 'themes') && !empty($_POST['ext_tag'])) {
                     $tag = ltrim($_POST['ext_tag'], 'v');
                     $extName = $name ?? '';
-                    if ($updateManager->applyExtensionUpdate($type === 'plugins' ? 'plugin' : 'theme', $extName, $tag)) {
+                    $installedVersion = '1.0.0';
+                    if ($type === 'plugins' && $pluginManager) {
+                        $plugin = $pluginManager->get($extName);
+                        $installedVersion = $plugin['version'] ?? '1.0.0';
+                    } elseif ($type === 'themes' && $themeManager) {
+                        $theme = $themeManager->get($extName);
+                        $installedVersion = $theme['version'] ?? '1.0.0';
+                    }
+                    if (version_compare($tag, $installedVersion, '<=')) {
+                        $updateError = 'No newer version available';
+                    } elseif ($updateManager->applyExtensionUpdate($type === 'plugins' ? 'plugin' : 'theme', $extName, $tag)) {
                         $updateSuccess = 'Extension updated to v' . escape($tag);
                     } else {
                         $updateError = 'Failed to update extension';
