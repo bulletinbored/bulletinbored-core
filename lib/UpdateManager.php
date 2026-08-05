@@ -254,13 +254,17 @@ class UpdateManager
                         rename($item, $target);
                     } else {
                         foreach (glob($item . '/*') as $sub) {
-                            rename($sub, $target . '/' . basename($sub));
+                            copy($sub, $target . '/' . basename($sub));
+                            @unlink($sub);
                         }
                         @rmdir($item);
                     }
                 } else {
                     if (!file_exists($target)) {
                         rename($item, $target);
+                    } else {
+                        copy($item, $target);
+                        @unlink($item);
                     }
                 }
             }
@@ -268,6 +272,10 @@ class UpdateManager
         }
 
         $this->setVersion('core', 'core', $tag);
+        $versionFile = __DIR__ . '/../VERSION';
+        if (is_writable($versionFile)) {
+            file_put_contents($versionFile, $tag);
+        }
         return true;
     }
 
@@ -333,13 +341,17 @@ class UpdateManager
                         rename($item, $target);
                     } else {
                         foreach (glob($item . '/*') as $sub) {
-                            rename($sub, $target . '/' . basename($sub));
+                            copy($sub, $target . '/' . basename($sub));
+                            @unlink($sub);
                         }
                         @rmdir($item);
                     }
                 } else {
                     if (!file_exists($target)) {
                         rename($item, $target);
+                    } else {
+                        copy($item, $target);
+                        @unlink($item);
                     }
                 }
             }
@@ -353,13 +365,17 @@ class UpdateManager
                         rename($item, $target);
                     } else {
                         foreach (glob($item . '/*') as $sub) {
-                            rename($sub, $target . '/' . basename($sub));
+                            copy($sub, $target . '/' . basename($sub));
+                            @unlink($sub);
                         }
                         @rmdir($item);
                     }
                 } else {
                     if (!file_exists($target)) {
                         rename($item, $target);
+                    } else {
+                        copy($item, $target);
+                        @unlink($item);
                     }
                 }
             }

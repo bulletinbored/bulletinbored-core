@@ -2,8 +2,6 @@
 
 Minimal, extensible forum software with zero dependencies. Upload files and run — no Composer, no Docker, no deployment needed.
 
-Current version: **0.1.0**
-
 ## Repository
 
 - Core: https://github.com/bulletinbored/bulletinbored-core
