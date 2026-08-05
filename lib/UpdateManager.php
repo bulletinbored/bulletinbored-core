@@ -5,12 +5,56 @@ class UpdateManager
     private string $manifestPath;
     private array $manifest = [];
     private ?string $updateServer = null;
+    private int $cacheTTL = 3600;
 
     public function __construct(string $manifestPath, ?string $updateServer = null)
     {
         $this->manifestPath = $manifestPath;
         $this->updateServer = $updateServer;
         $this->loadManifest();
+    }
+
+    private function cachePath(): string
+    {
+        return dirname($this->manifestPath) . '/update-cache.json';
+    }
+
+    private function loadCache(): array
+    {
+        $path = $this->cachePath();
+        if (!file_exists($path)) {
+            return [];
+        }
+
+        $data = json_decode(file_get_contents($path), true);
+        return is_array($data) ? $data : [];
+    }
+
+    private function saveCache(array $cache): void
+    {
+        file_put_contents($this->cachePath(), json_encode($cache, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+    }
+
+    private function getCachedVersion(string $type, ?string $name = null): ?string
+    {
+        $cache = $this->loadCache();
+        $key = $type . ':' . ($name ?? 'core');
+        if (isset($cache[$key]['version'], $cache[$key]['timestamp']) && (time() - (int)$cache[$key]['timestamp'] < $this->cacheTTL)) {
+            return $cache[$key]['version'];
+        }
+
+        return null;
+    }
+
+    private function setCachedVersion(string $type, ?string $name, string $version): void
+    {
+        $cache = $this->loadCache();
+        $key = $type . ':' . ($name ?? 'core');
+        $cache[$key] = [
+            'version' => $version,
+            'timestamp' => time(),
+        ];
+        $this->saveCache($cache);
     }
 
     private function loadManifest(): void
@@ -132,6 +176,11 @@ class UpdateManager
 
     private function fetchRemoteVersion(string $type, ?string $name = null, ?string $repoUrl = null): ?string
     {
+        $cached = $this->getCachedVersion($type, $name);
+        if ($cached !== null) {
+            return $cached;
+        }
+
         if (empty($this->updateServer)) {
             return null;
         }
@@ -140,7 +189,8 @@ class UpdateManager
             $repoUrl = 'https://github.com/' . $m[1] . '/' . $m[2];
         }
 
-        if ($repoUrl && preg_match('#github\.com/([^/]+)/([^/]+)$#i', $repoUrl, $m)) {
+        $version = null;
+        if ($repoUrl && preg_match('#(?:https?://)?github\.com/([^/]+)/([^/]+)(?:/|$)#i', $repoUrl, $m)) {
             $apiUrl = 'https://api.github.com/repos/' . rawurlencode($m[1]) . '/' . rawurlencode($m[2]) . '/releases/latest';
             $json = @file_get_contents($apiUrl, false, stream_context_create([
                 'http' => [
@@ -151,40 +201,41 @@ class UpdateManager
             if ($json) {
                 $release = json_decode($json, true);
                 if (is_array($release) && !empty($release['tag_name'])) {
-                    return ltrim($release['tag_name'], 'v');
+                    $version = ltrim($release['tag_name'], 'v');
                 }
             }
-            return null;
         }
 
-        $url = $this->updateServer . '/versions.json';
-        $context = stream_context_create([
-            'http' => [
-                'timeout' => 10,
-                'user_agent' => 'bulletinbored-update-checker/1.0',
-            ]
-        ]);
+        if ($version === null) {
+            $url = $this->updateServer . '/versions.json';
+            $context = stream_context_create([
+                'http' => [
+                    'timeout' => 10,
+                    'user_agent' => 'bulletinbored-update-checker/1.0',
+                ]
+            ]);
 
-        $json = @file_get_contents($url, false, $context);
-        if ($json === false) {
-            return null;
+            $json = @file_get_contents($url, false, $context);
+            if ($json !== false) {
+                $data = json_decode($json, true);
+                if (is_array($data)) {
+                    if ($type === 'core') {
+                        $version = $data['core']['version'] ?? null;
+                    } else {
+                        $section = $data[$type . 's'] ?? $data[$type] ?? [];
+                        if (is_array($section)) {
+                            $version = $section[$name]['version'] ?? null;
+                        }
+                    }
+                }
+            }
         }
 
-        $data = json_decode($json, true);
-        if (!is_array($data)) {
-            return null;
+        if ($version !== null) {
+            $this->setCachedVersion($type, $name, $version);
         }
 
-        if ($type === 'core') {
-            return $data['core']['version'] ?? null;
-        }
-
-        $section = $data[$type . 's'] ?? $data[$type] ?? [];
-        if (is_array($section)) {
-            return $section[$name]['version'] ?? null;
-        }
-
-        return null;
+        return $version;
     }
 
     public function applyUpdate(string $type, string $name, string $zipPath): bool
@@ -214,6 +265,7 @@ class UpdateManager
         }
 
         $this->setVersion($type, $name, $version);
+        $this->clearCache();
         return true;
     }
 
@@ -279,6 +331,7 @@ class UpdateManager
         if (is_writable($versionFile)) {
             file_put_contents($versionFile, $tag);
         }
+        $this->clearCache();
         return true;
     }
 
@@ -392,6 +445,7 @@ class UpdateManager
         }
 
         $this->setVersion($type . 's', $name, $tag);
+        $this->clearCache();
         return true;
     }
 
@@ -438,6 +492,11 @@ class UpdateManager
             }
         }
         @rmdir($dir);
+    }
+
+    private function clearCache(): void
+    {
+        @unlink($this->cachePath());
     }
 
     public function getLockedExtensions(): array
