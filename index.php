@@ -2352,7 +2352,9 @@ elseif ($action === 'admin_users') {
             if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
                 $updateError = 'Invalid CSRF token';
             } else {
-                $updateResults = $updateManager->checkAll($config['version'] ?? '1.0.0', $pluginManager, $themeManager);
+                $catalogPath = __DIR__.'/data/catalog.json';
+                $catalog = file_exists($catalogPath) ? json_decode(file_get_contents($catalogPath), true) : [];
+                $updateResults = $updateManager->checkAll($config['version'] ?? '1.0.0', $pluginManager, $themeManager, $catalog);
             }
         }
 
@@ -2369,6 +2371,14 @@ elseif ($action === 'admin_users') {
                         $updateSuccess = 'Core updated to v' . escape($tag);
                     } else {
                         $updateError = 'Failed to update core';
+                    }
+                } elseif (($type === 'plugins' || $type === 'themes') && !empty($_POST['ext_tag'])) {
+                    $tag = ltrim($_POST['ext_tag'], 'v');
+                    $extName = $name ?? '';
+                    if ($updateManager->applyExtensionUpdate($type === 'plugins' ? 'plugin' : 'theme', $extName, $tag)) {
+                        $updateSuccess = 'Extension updated to v' . escape($tag);
+                    } else {
+                        $updateError = 'Failed to update extension';
                     }
                 } elseif (!empty($_FILES['update_package']['tmp_name'])) {
                     $tmpPath = $_FILES['update_package']['tmp_name'];

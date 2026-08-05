@@ -136,7 +136,7 @@ class UpdateManager
             return null;
         }
 
-        if (!$repoUrl && preg_match('#github\.com/([^/]+)/([^/]+)$#i', $this->updateServer, $m)) {
+        if (!$repoUrl && preg_match('#(?:https?://)?github\.com/([^/]+)/([^/]+)(?:/|$)#i', $this->updateServer, $m)) {
             $repoUrl = 'https://github.com/' . $m[1] . '/' . $m[2];
         }
 
@@ -151,7 +151,7 @@ class UpdateManager
             if ($json) {
                 $release = json_decode($json, true);
                 if (is_array($release) && !empty($release['tag_name'])) {
-                    return $release['tag_name'];
+                    return ltrim($release['tag_name'], 'v');
                 }
             }
             return null;
