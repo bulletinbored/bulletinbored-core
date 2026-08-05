@@ -1,2 +1,5 @@
 config.php
 data/database.sqlite
+
+/lang/*.php
+!/lang/en.php
