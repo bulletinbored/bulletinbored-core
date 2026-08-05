@@ -7,5 +7,41 @@
     "description": "WYSIWYG Markdown editor with mentions and image upload",
     "version": "1.0.0",
     "official": true
+  },
+  {
+    "name": "bellbored",
+    "type": "plugin",
+    "repo": "https://github.com/bulletinbored/bellbored-plugin",
+    "author": "mlzog",
+    "description": "Notification center for the forum",
+    "version": "1.0.0",
+    "official": true
+  },
+  {
+    "name": "hellobored",
+    "type": "plugin",
+    "repo": "https://github.com/bulletinbored/hellobored-plugin",
+    "author": "mlzog",
+    "description": "Plugin example — displays a random quote on every page.",
+    "version": "1.0.0",
+    "official": true
+  },
+  {
+    "name": "textmebored",
+    "type": "plugin",
+    "repo": "https://github.com/bulletinbored/textmebored-plugin",
+    "author": "mlzog",
+    "description": "Private messaging and chat system",
+    "version": "1.0.0",
+    "official": true
+  },
+  {
+    "name": "freshbored",
+    "type": "theme",
+    "repo": "https://github.com/bulletinbored/freshbored-theme",
+    "author": "mlzog",
+    "description": "Default frontend theme for bulletinbored. Bootstrap 5 based, sidebar driven discussion layout.",
+    "version": "1.0.0",
+    "official": true
   }
 ]
