@@ -2363,7 +2363,14 @@ elseif ($action === 'admin_users') {
                 $type = $_POST['type'] ?? '';
                 $name = $_POST['name'] ?? '';
 
-                if (!empty($_FILES['update_package']['tmp_name'])) {
+                if ($type === 'core' && !empty($_POST['core_tag'])) {
+                    $tag = ltrim($_POST['core_tag'], 'v');
+                    if ($updateManager->applyCoreUpdate($tag)) {
+                        $updateSuccess = 'Core updated to v' . escape($tag);
+                    } else {
+                        $updateError = 'Failed to update core';
+                    }
+                } elseif (!empty($_FILES['update_package']['tmp_name'])) {
                     $tmpPath = $_FILES['update_package']['tmp_name'];
                     $result = $updateManager->applyUpdate($type, $name, $tmpPath);
                     if ($result) {

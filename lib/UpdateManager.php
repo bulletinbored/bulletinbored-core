@@ -203,6 +203,60 @@ class UpdateManager
         return true;
     }
 
+    public function applyCoreUpdate(string $tag): bool
+    {
+        $zipUrl = 'https://github.com/bulletinbored/bulletinbored-core/archive/refs/tags/v' . rawurlencode($tag) . '.zip';
+        $tmpZip = tempnam(sys_get_temp_dir(), 'bbcore') . '.zip';
+        $data = @file_get_contents($zipUrl, false, stream_context_create([
+            'http' => [
+                'timeout' => 30,
+                'user_agent' => 'bulletinbored-update-checker/1.0',
+            ]
+        ]));
+        if ($data === false) {
+            return false;
+        }
+        file_put_contents($tmpZip, $data);
+
+        $zip = new ZipArchive();
+        if ($zip->open($tmpZip) !== true) {
+            @unlink($tmpZip);
+            return false;
+        }
+
+        $extractTo = __DIR__ . '/../';
+        $zip->extractTo($extractTo);
+        $zip->close();
+        @unlink($tmpZip);
+
+        $topFolder = glob($extractTo . 'bulletinbored-core-*', GLOB_ONLYDIR);
+        if (!empty($topFolder)) {
+            $src = $topFolder[0];
+            foreach (glob($src . '/*') as $item) {
+                $basename = basename($item);
+                $target = $extractTo . $basename;
+                if (is_dir($item)) {
+                    if (!is_dir($target)) {
+                        rename($item, $target);
+                    } else {
+                        foreach (glob($item . '/*') as $sub) {
+                            rename($sub, $target . '/' . basename($sub));
+                        }
+                        @rmdir($item);
+                    }
+                } else {
+                    if (!file_exists($target)) {
+                        rename($item, $target);
+                    }
+                }
+            }
+            @rmdir($src);
+        }
+
+        $this->setVersion('core', 'core', $tag);
+        return true;
+    }
+
     public function getLockedExtensions(): array
     {
         return ['php', 'css', 'js', 'json', 'sql', 'html', 'md', 'txt', 'ico', 'gif', 'png', 'jpg', 'jpeg', 'svg', 'webp', 'woff', 'woff2', 'ttf', 'eot'];
