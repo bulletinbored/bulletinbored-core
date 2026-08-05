@@ -1992,8 +1992,9 @@ elseif ($action === 'admin_users') {
             die('Admin required');
         }
 
-        $langError = '';
-        $langSuccess = '';
+        $langSuccess = $_SESSION['lang_success'] ?? '';
+        $langError = $_SESSION['lang_error'] ?? '';
+        unset($_SESSION['lang_success'], $_SESSION['lang_error']);
         if ($method === 'POST' && isset($_POST['csrf_token'])) {
             if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
                 $langError = 'Invalid CSRF token';
@@ -2001,7 +2002,11 @@ elseif ($action === 'admin_users') {
                 if (isset($_POST['save_lang_settings'])) {
                     $defaultLang = trim($_POST['default_lang'] ?? $config['default_lang'] ?? 'en');
                     $config['default_lang'] = $defaultLang;
-                    unset($config['available_langs']);
+                    $installedLangs = [];
+                    foreach (glob(__DIR__.'/lang/*.php') as $file) {
+                        $installedLangs[] = basename($file, '.php');
+                    }
+                    $config['available_langs'] = array_values(array_unique($installedLangs));
                     $configContent = "<?php\n";
                     foreach ($config as $key => $value) {
                         if (is_string($value)) {
@@ -2011,7 +2016,8 @@ elseif ($action === 'admin_users') {
                         }
                     }
                     file_put_contents(__DIR__.'/config.php', $configContent);
-                    $langSuccess = 'Language settings saved';
+                    $_SESSION['lang_success'] = 'Language settings saved';
+                    redirect(url('admin_langs'));
                 } elseif (isset($_POST['upload_lang']) && !empty($_FILES['lang_file']['tmp_name'])) {
                     $langCode = preg_replace('/[^a-z_]/', '', strtolower($_POST['lang_code'] ?? ''));
                     if ($langCode === '') {
@@ -2021,9 +2027,31 @@ elseif ($action === 'admin_users') {
                         if (file_exists($dest)) {
                             $langError = 'Language file already exists: '.escape($langCode);
                         } elseif (move_uploaded_file($_FILES['lang_file']['tmp_name'], $dest)) {
-                            $langSuccess = 'Language file uploaded: '.escape($langCode);
+                            $_SESSION['lang_success'] = 'Language file uploaded: '.escape($langCode);
+                            redirect(url('admin_langs'));
                         } else {
                             $langError = 'Failed to upload language file';
+                        }
+                    }
+                } elseif (isset($_POST['install_github_lang'])) {
+                    $langCode = preg_replace('/[^a-z_]/', '', strtolower($_POST['lang_code'] ?? ''));
+                    $downloadUrl = $_POST['download_url'] ?? '';
+                    if ($langCode === '' || $downloadUrl === '') {
+                        $langError = 'Invalid language code or download URL';
+                    } else {
+                        $dest = __DIR__.'/lang/'.$langCode.'.php';
+                        if (file_exists($dest)) {
+                            $langError = 'Language file already exists: '.escape($langCode);
+                        } else {
+                            $content = @file_get_contents($downloadUrl);
+                            if ($content === false) {
+                                $langError = 'Failed to download language file from GitHub';
+                            } elseif (file_put_contents($dest, $content) === false) {
+                                $langError = 'Failed to save language file';
+                            } else {
+                                $_SESSION['lang_success'] = 'Language file installed: '.escape($langCode);
+                                redirect(url('admin_langs'));
+                            }
                         }
                     }
                 } elseif (isset($_POST['delete_lang'])) {
@@ -2034,7 +2062,8 @@ elseif ($action === 'admin_users') {
                         $langError = 'Cannot delete the default language';
                     } elseif (file_exists($dest)) {
                         @unlink($dest);
-                        $langSuccess = 'Language file deleted: '.escape($langCode);
+                        $_SESSION['lang_success'] = 'Language file deleted: '.escape($langCode);
+                        redirect(url('admin_langs'));
                     } else {
                         $langError = 'Language file not found';
                     }

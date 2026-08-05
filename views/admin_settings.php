@@ -1,7 +1,7 @@
-<?php include __DIR__.'/admin_header.php'; render_admin_header('Settings'); ?>
+<?php include __DIR__.'/admin_header.php'; render_admin_header(t('settings')); ?>
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-4">
-    <h2>Site Settings</h2>
+    <h2><?= t('site_settings') ?></h2>
     </div>
 
     <form method="POST">
@@ -12,7 +12,7 @@
             <!-- Site Name -->
             <div class="col-md-6">
                 <div class="mb-3">
-                    <label class="form-label">Site Name</label>
+                    <label class="form-label"><?= t('site_name') ?></label>
                     <input type="text" name="site_name" class="form-control" value="<?= escape($config['site_name'] ?? 'bulletinbored') ?>" required>
                 </div>
             </div>
@@ -20,7 +20,7 @@
             <!-- Site Tagline -->
             <div class="col-md-6">
                 <div class="mb-3">
-                    <label class="form-label">Site Tagline</label>
+                    <label class="form-label"><?= t('site_tagline') ?></label>
                     <input type="text" name="site_tagline" class="form-control" value="<?= escape($config['site_tagline'] ?? '') ?>">
                 </div>
             </div>
@@ -28,16 +28,16 @@
             <!-- Site Icon -->
             <div class="col-md-6">
                 <div class="mb-3">
-                    <label class="form-label">Site Icon</label>
+                    <label class="form-label"><?= t('site_icon') ?></label>
                     <input type="text" name="site_icon" class="form-control" value="<?= escape($config['site_icon'] ?? '') ?>">
-                    <div class="form-text">Path or URL to the site icon image.</div>
+                    <div class="form-text"><?= t('site_icon_hint') ?></div>
                 </div>
             </div>
             
             <!-- Timezone -->
             <div class="col-md-6">
                 <div class="mb-3">
-                    <label class="form-label">Timezone</label>
+                    <label class="form-label"><?= t('timezone') ?></label>
                     <select name="timezone" class="form-select">
                         <option value="UTC" <?= ($config['timezone'] ?? 'UTC') === 'UTC' ? 'selected' : '' ?>>UTC</option>
                         <option value="Europe/Rome" <?= ($config['timezone'] ?? '') === 'Europe/Rome' ? 'selected' : '' ?>>Europe/Rome</option>
@@ -58,7 +58,7 @@
             <!-- Date Format -->
             <div class="col-md-6">
                 <div class="mb-3">
-                    <label class="form-label">Date Format</label>
+                    <label class="form-label"><?= t('date_format') ?></label>
                     <select name="date_format" class="form-select">
                         <option value="Y-m-d" <?= ($config['date_format'] ?? 'Y-m-d') === 'Y-m-d' ? 'selected' : '' ?>>YYYY-MM-DD</option>
                         <option value="d/m/Y" <?= ($config['date_format'] ?? '') === 'd/m/Y' ? 'selected' : '' ?>>DD/MM/YYYY</option>
@@ -71,7 +71,7 @@
             <!-- Time Format -->
             <div class="col-md-6">
                 <div class="mb-3">
-                    <label class="form-label">Time Format</label>
+                    <label class="form-label"><?= t('time_format') ?></label>
                     <select name="time_format" class="form-select">
                         <option value="H:i" <?= ($config['time_format'] ?? 'H:i') === 'H:i' ? 'selected' : '' ?>>24-hour (HH:MM)</option>
                         <option value="h:i A" <?= ($config['time_format'] ?? '') === 'h:i A' ? 'selected' : '' ?>>12-hour (hh:MM AM/PM)</option>
@@ -84,7 +84,7 @@
                 <div class="mb-3">
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" name="allow_registration" id="allowRegistration" <?= !empty($config['allow_registration']) ? 'checked' : '' ?>>
-                        <label class="form-check-label" for="allowRegistration">Allow Registration</label>
+                        <label class="form-check-label" for="allowRegistration"><?= t('allow_registration') ?></label>
                     </div>
                 </div>
             </div>
@@ -94,14 +94,14 @@
                 <div class="mb-3">
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" name="maintenance_mode" id="maintenanceMode" <?= !empty($config['maintenance_mode']) ? 'checked' : '' ?>>
-                        <label class="form-check-label" for="maintenanceMode">Maintenance Mode</label>
+                        <label class="form-check-label" for="maintenanceMode"><?= t('maintenance_mode') ?></label>
                     </div>
                 </div>
             </div>
         </div>
         
         <div class="mt-4">
-            <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i>Save Settings</button>
+            <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i><?= t('save_settings') ?></button>
         </div>
     </form>
 </div>

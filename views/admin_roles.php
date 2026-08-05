@@ -2,41 +2,41 @@
 global $pdo;
 $roles = $pdo->query("SELECT * FROM roles ORDER BY id ASC")->fetchAll();
 $allPermissions = [
-    'can_approve_threads' => 'Approve threads',
-    'can_delete_threads' => 'Delete threads',
-    'can_delete_posts' => 'Delete posts',
-    'can_lock_threads' => 'Lock threads',
-    'can_sticky_threads' => 'Sticky threads',
-    'can_edit_posts' => 'Edit posts',
-    'can_edit_threads' => 'Edit threads',
-    'can_ban_users' => 'Ban users',
-    'can_manage_roles' => 'Manage roles',
-    'can_create_threads' => 'Create threads',
-    'can_create_posts' => 'Create posts',
-    'can_edit_own_posts' => 'Edit own posts',
-    'can_delete_own_posts' => 'Delete own posts',
+    'can_approve_threads' => t('can_approve_threads'),
+    'can_delete_threads' => t('can_delete_threads'),
+    'can_delete_posts' => t('can_delete_posts'),
+    'can_lock_threads' => t('can_lock_threads'),
+    'can_sticky_threads' => t('can_sticky_threads'),
+    'can_edit_posts' => t('can_edit_posts'),
+    'can_edit_threads' => t('can_edit_threads'),
+    'can_ban_users' => t('can_ban_users'),
+    'can_manage_roles' => t('can_manage_roles'),
+    'can_create_threads' => t('can_create_threads'),
+    'can_create_posts' => t('can_create_posts'),
+    'can_edit_own_posts' => t('can_edit_own_posts'),
+    'can_delete_own_posts' => t('can_delete_own_posts'),
 ];
 ?>
-<?php include __DIR__.'/admin_header.php'; render_admin_header('Roles & Permissions'); ?>
+<?php include __DIR__.'/admin_header.php'; render_admin_header(t('roles_permissions')); ?>
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-4">
-    <h2>Roles & Permissions</h2>
+    <h2><?= t('roles_permissions') ?></h2>
     </div>
 
     <div class="row g-4">
         <div class="col-lg-8">
             <div class="card shadow mb-4">
                 <div class="card-header py-3">
-                    <h5 class="card-title mb-0"><i class="fas fa-shield-halved me-2"></i>Roles</h5>
+                    <h5 class="card-title mb-0"><i class="fas fa-shield-halved me-2"></i><?= t('roles') ?></h5>
                 </div>
                 <div class="card-body">
                     <div class="table-responsive">
                         <table class="table table-hover">
                             <thead>
                                 <tr>
-                                    <th>Role</th>
-                                    <th>Permissions</th>
-                                    <th class="text-end">Actions</th>
+                                    <th><?= t('role') ?></th>
+                                    <th><?= t('permissions') ?></th>
+                                    <th class="text-end"><?= t('actions') ?></th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -52,10 +52,10 @@ $allPermissions = [
                                     <td>
                                         <div class="d-flex flex-wrap gap-1">
                                             <?php foreach ($perms as $perm): ?>
-                                                <span class="badge bg-light text-dark" style="font-size:0.7rem"><?= escape(str_replace('can_', '', $perm)) ?></span>
+                                                <span class="badge bg-light text-dark" style="font-size:0.7rem"><?= t($perm) ?></span>
                                             <?php endforeach; ?>
                                             <?php if (empty($perms)): ?>
-                                                <span class="text-muted small">No permissions</span>
+                                                <span class="text-muted small"><?= t('no_permissions') ?></span>
                                             <?php endif; ?>
                                         </div>
                                     </td>
@@ -65,7 +65,7 @@ $allPermissions = [
                                                 <i class="fas fa-edit"></i>
                                             </button>
                                             <?php if ($role['name'] !== 'admin'): ?>
-                                            <form method="POST" action="<?= url('admin_roles_action') ?>" onsubmit="return confirm('Delete this role?')">
+                                            <form method="POST" action="<?= url('admin_roles_action') ?>" onsubmit="return confirm('<?= t('delete_confirm') ?>')">
                                                 <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                                                 <input type="hidden" name="do" value="delete">
                                                 <input type="hidden" name="role_id" value="<?= $role['id'] ?>">
@@ -82,7 +82,7 @@ $allPermissions = [
                                             <input type="hidden" name="do" value="update">
                                             <input type="hidden" name="role_id" value="<?= $role['id'] ?>">
                                             <div class="col-12">
-                                                <label class="form-label small fw-bold">Permissions for <?= escape(ucfirst($role['name'])) ?></label>
+                                                <label class="form-label small fw-bold"><?= t('permissions_for') ?> <?= escape(ucfirst($role['name'])) ?></label>
                                             </div>
                                             <div class="col-md-6">
                                                 <?php foreach ($allPermissions as $permKey => $permLabel): ?>
@@ -93,8 +93,8 @@ $allPermissions = [
                                                 <?php endforeach; ?>
                                             </div>
                                             <div class="col-12">
-                                                <button type="submit" class="btn btn-sm btn-primary"><i class="fas fa-save me-1"></i>Save Permissions</button>
-                                                <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('edit-form-<?= $role['id'] ?>').classList.add('d-none')">Cancel</button>
+                                                <button type="submit" class="btn btn-sm btn-primary"><i class="fas fa-save me-1"></i><?= t('save_permissions') ?></button>
+                                                <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('edit-form-<?= $role['id'] ?>').classList.add('d-none')"><?= t('cancel') ?></button>
                                             </div>
                                         </form>
                                     </td>
@@ -110,18 +110,18 @@ $allPermissions = [
         <div class="col-lg-4">
             <div class="card shadow mb-4">
                 <div class="card-header py-3">
-                    <h5 class="card-title mb-0"><i class="fas fa-plus-circle me-2"></i>Create Role</h5>
+                    <h5 class="card-title mb-0"><i class="fas fa-plus-circle me-2"></i><?= t('create_role') ?></h5>
                 </div>
                 <div class="card-body">
                     <form method="POST" action="<?= url('admin_roles_action') ?>">
                         <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                         <input type="hidden" name="do" value="create">
                         <div class="mb-3">
-                            <label class="form-label">Role Name</label>
-                            <input type="text" name="role_name" class="form-control" required placeholder="e.g. editor">
+                            <label class="form-label"><?= t('role_name') ?></label>
+                            <input type="text" name="role_name" class="form-control" required placeholder="<?= t('role_edit_placeholder') ?>">
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Permissions</label>
+                            <label class="form-label"><?= t('permissions') ?></label>
                             <div class="form-check">
                                 <?php foreach ($allPermissions as $permKey => $permLabel): ?>
                                     <div class="form-check">
@@ -131,7 +131,7 @@ $allPermissions = [
                                 <?php endforeach; ?>
                             </div>
                         </div>
-                        <button type="submit" class="btn btn-primary w-100"><i class="fas fa-plus me-1"></i>Create Role</button>
+                                                <button type="submit" class="btn btn-primary w-100"><i class="fas fa-plus me-1"></i><?= t('create_role') ?></button>
                     </form>
                 </div>
             </div>
