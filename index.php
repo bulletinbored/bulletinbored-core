@@ -138,6 +138,8 @@ case 'admin_users':
             return $base . '/admin/langs' . (!empty($query) ? '?' . http_build_query($query) : '');
         case 'admin_plugins':
             return $base . '/admin/plugins' . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'admin_catalog':
+            return $base . '/admin/catalog' . (!empty($query) ? '?' . http_build_query($query) : '');
         case 'admin_themes':
             return $base . '/admin/themes' . (!empty($query) ? '?' . http_build_query($query) : '');
 case 'admin_updates':
@@ -805,10 +807,10 @@ function send_email($to, $subject, $body) {
     $htmlBody = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
         body { font-family: Arial, sans-serif; background: #f8f9fc; padding: 20px; }
         .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        .header { background: linear-gradient(135deg, #4e73df, #224abe); color: white; padding: 20px; text-align: center; }
+        .header { background: linear-gradient(135deg, #550296, #3d046f); color: white; padding: 20px; text-align: center; }
         .content { padding: 30px; }
         .footer { background: #f8f9fc; padding: 15px; text-align: center; font-size: 12px; color: #666; }
-        .btn { display: inline-block; padding: 10px 20px; background: #4e73df; color: white; text-decoration: none; border-radius: 5px; }
+        .btn { display: inline-block; padding: 10px 20px; background: #550296; color: white; text-decoration: none; border-radius: 5px; }
     </style></head><body>
     <div class="container">
         <div class="header"><h2>'.escape($config['site_name'] ?? 'bulletinbored').'</h2></div>
@@ -906,6 +908,8 @@ if (!isset($_GET['action'])) {
         $_GET['action'] = 'admin_settings';
     } elseif (preg_match('#^admin/langs$#', $reqPath)) {
         $_GET['action'] = 'admin_langs';
+    } elseif (preg_match('#^admin/catalog$#', $reqPath)) {
+        $_GET['action'] = 'admin_catalog';
     } elseif (preg_match('#^admin/plugins$#', $reqPath)) {
         $_GET['action'] = 'admin_plugins';
     } elseif (preg_match('#^admin/themes$#', $reqPath)) {
@@ -2099,6 +2103,20 @@ elseif ($action === 'admin_users') {
                     } else {
                         $adminPluginError = $result['message'];
                     }
+                } elseif (isset($_POST['install_from_catalog'])) {
+                    $repo = $_POST['repo'] ?? '';
+                    $tag = $_POST['tag'] ?? null;
+                    $name = strtolower($_POST['plugin_name'] ?? '');
+                    if ($repo === '' || $name === '') {
+                        $adminPluginError = 'Invalid catalog item';
+                    } else {
+                        $result = $pluginManager->installFromRepo($repo, $tag, $name);
+                        if ($result['success']) {
+                            $adminPluginSuccess = 'Installed from catalog';
+                        } else {
+                            $adminPluginError = $result['message'];
+                        }
+                    }
                 } elseif (isset($_POST['delete_plugin'])) {
                     $pluginName = $_POST['plugin_name'] ?? '';
                     $result = $pluginManager->delete($pluginName);
@@ -2149,6 +2167,20 @@ elseif ($action === 'admin_users') {
                     } else {
                         $adminThemeError = $result['message'];
                     }
+                } elseif (isset($_POST['install_from_catalog'])) {
+                    $repo = $_POST['repo'] ?? '';
+                    $tag = $_POST['tag'] ?? null;
+                    $name = strtolower($_POST['theme_name'] ?? '');
+                    if ($repo === '' || $name === '') {
+                        $adminThemeError = 'Invalid catalog item';
+                    } else {
+                        $result = $themeManager->installFromRepo($repo, $tag, $name);
+                        if ($result['success']) {
+                            $adminThemeSuccess = 'Installed from catalog';
+                        } else {
+                            $adminThemeError = $result['message'];
+                        }
+                    }
                 } elseif (isset($_POST['activate_theme'])) {
                     $themeName = $_POST['theme_name'] ?? '';
                     if ($themeManager->activate($themeName)) {
@@ -2170,6 +2202,80 @@ elseif ($action === 'admin_users') {
 
         $allThemes = $themeManager->getAll();
         include __DIR__.'/views/admin_themes.php';
+    }
+    elseif ($action === 'admin_catalog') {
+        if (!is_admin()) {
+            die('Admin required');
+        }
+
+        $adminCatalogError = '';
+        $adminCatalogSuccess = '';
+        if ($method === 'POST' && isset($_POST['csrf_token'])) {
+            if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+                $adminCatalogError = 'Invalid CSRF token';
+            } elseif (isset($_POST['install_from_catalog'])) {
+                $name = strtolower(trim($_POST['name'] ?? ''));
+                $type = strtolower(trim($_POST['type'] ?? ''));
+                $repo = trim($_POST['repo'] ?? '');
+                $tag = $_POST['tag'] ?? null;
+                if ($repo === '' || $name === '' || !in_array($type, ['plugin', 'theme'])) {
+                    $adminCatalogError = 'Invalid request';
+                } else {
+                    if ($type === 'plugin') {
+                        $pluginManager = new PluginManager(__DIR__.'/plugins', __DIR__.'/data/plugins.json');
+                        $result = $pluginManager->installFromRepo($repo, $tag, $name);
+                    } else {
+                        $themeManager = new ThemeManager(__DIR__.'/themes', __DIR__.'/data/themes.json', 'freshbored');
+                        $result = $themeManager->installFromRepo($repo, $tag, $name);
+                    }
+                    if ($result['success']) {
+                        $installedPath = __DIR__.'/data/installed.json';
+                        $installed = file_exists($installedPath) ? json_decode(file_get_contents($installedPath), true) : ['plugins'=>[], 'themes'=>[]];
+                        if (!isset($installed[$type.'s'])) {
+                            $installed[$type.'s'] = [];
+                        }
+                        $installed[$type.'s'][$name] = [
+                            'name' => $name,
+                            'repo' => $repo,
+                            'version' => $result['manifest']['version'] ?? '1.0.0',
+                            'installed_at' => date('c')
+                        ];
+                        file_put_contents($installedPath, json_encode($installed, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+                        $adminCatalogSuccess = 'Installed successfully';
+                    } else {
+                        $adminCatalogError = $result['message'];
+                    }
+                }
+            }
+        }
+
+        $catalog = json_decode(file_get_contents(__DIR__.'/data/catalog.json'), true) ?: [];
+        $installed = json_decode(file_get_contents(__DIR__.'/data/installed.json'), true) ?: ['plugins'=>[], 'themes'=>[]];
+        $search = strtolower(trim($_GET['q'] ?? ''));
+        if ($search !== '') {
+            $catalog = array_filter($catalog, function($item) use ($search) {
+                return str_contains(strtolower($item['name'] ?? ''), $search) || str_contains(strtolower($item['description'] ?? ''), $search);
+            });
+        }
+
+        foreach ($catalog as $item) {
+            $name = strtolower($item['name'] ?? '');
+            $type = strtolower($item['type'] ?? '');
+            $baseDir = $type === 'plugin' ? __DIR__.'/plugins' : __DIR__.'/themes';
+            if (is_dir($baseDir.'/'.$name) && !isset($installed[$type.'s'][$name])) {
+                $manifestPath = $baseDir.'/'.$name.'/manifest.json';
+                $manifest = file_exists($manifestPath) ? json_decode(file_get_contents($manifestPath), true) : [];
+                $installed[$type.'s'][$name] = [
+                    'name' => $name,
+                    'repo' => $item['repo'] ?? '',
+                    'version' => $manifest['version'] ?? '1.0.0',
+                    'installed_at' => date('c')
+                ];
+            }
+        }
+        file_put_contents(__DIR__.'/data/installed.json', json_encode($installed, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+
+        include __DIR__.'/views/admin_catalog.php';
     }
     elseif ($action === 'admin_updates') {
         // Update management

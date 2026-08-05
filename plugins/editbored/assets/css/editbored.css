@@ -202,7 +202,7 @@
 }
 .editbored-progress-bar {
     height: 100%;
-    background: #4e73df;
+    background: #550296;
     width: 0%;
     transition: width 0.2s;
 }

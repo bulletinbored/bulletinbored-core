@@ -238,4 +238,88 @@ class ThemeManager
         }
         @rmdir($dir);
     }
+
+    public function installFromRepo(string $repoUrl, ?string $tag = null, ?string $expectedName = null): array
+    {
+        $dest = rtrim($this->themesDir, '/') . '/';
+        $repo = trim($repoUrl, '/');
+        $repoName = basename(str_replace(['\\', '.git'], ['', ''], $repo));
+        $targetDir = $dest . ($expectedName ?: $repoName);
+
+        if (is_dir($targetDir) && is_dir($targetDir . '/.git')) {
+            exec('git -C ' . escapeshellarg($targetDir) . ' fetch --tags 2>&1', $fetchOut, $fetchCode);
+            if ($tag) {
+                exec('git -C ' . escapeshellarg($targetDir) . ' checkout -q ' . escapeshellarg($tag) . ' 2>&1', $out, $code);
+                exec('git -C ' . escapeshellarg($targetDir) . ' pull --ff-only 2>&1', $out, $code);
+            } else {
+                exec('git -C ' . escapeshellarg($targetDir) . ' pull --ff-only 2>&1', $out, $code);
+            }
+        } else {
+            if (is_dir($targetDir)) {
+                $this->deleteDir($targetDir);
+            }
+            $cmd = 'git clone --depth 1';
+            if ($tag) {
+                $cmd .= ' --branch ' . escapeshellarg($tag);
+            }
+            $cmd .= ' ' . escapeshellarg($repoUrl) . ' ' . escapeshellarg($targetDir) . ' 2>&1';
+            exec($cmd, $out, $code);
+            if ($code !== 0) {
+                return ['success' => false, 'message' => 'Git clone failed: ' . implode("\n", $out)];
+            }
+        }
+
+        if (is_dir($targetDir)) {
+            $topFolders = [];
+            foreach (glob($targetDir . '/*') as $item) {
+                $base = basename($item);
+                if ($base !== '' && !str_contains($base, '.')) {
+                    $topFolders[$base] = true;
+                }
+            }
+            if (count($topFolders) === 1) {
+                $folderName = array_keys($topFolders)[0];
+                $src = $targetDir . '/' . $folderName;
+                foreach (glob($src . '/*') as $item) {
+                    $basename = basename($item);
+                    $target = $targetDir . '/' . $basename;
+                    if (is_dir($item)) {
+                        if (!is_dir($target)) {
+                            rename($item, $target);
+                        } else {
+                            foreach (glob($item . '/*') as $sub) {
+                                $subBase = basename($sub);
+                                rename($sub, $target . '/' . $subBase);
+                            }
+                            @rmdir($item);
+                        }
+                    } else {
+                        if (!file_exists($target)) {
+                            rename($item, $target);
+                        }
+                    }
+                }
+                @rmdir($src);
+            }
+        }
+
+        $this->themes = [];
+        $this->discover();
+
+        $name = $expectedName ?: $repoName;
+        if (!isset($this->themes[$name])) {
+            foreach ($this->themes as $themeName => $theme) {
+                if ($theme['dir'] === $targetDir) {
+                    $name = $themeName;
+                    break;
+                }
+            }
+        }
+
+        if (!isset($this->themes[$name])) {
+            return ['success' => false, 'message' => 'Installed package is not a valid theme'];
+        }
+
+        return ['success' => true, 'message' => 'Theme installed from repo', 'manifest' => $this->themes[$name]];
+    }
 }

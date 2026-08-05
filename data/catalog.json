@@ -1,0 +1,11 @@
+[
+  {
+    "name": "editbored",
+    "type": "plugin",
+    "repo": "https://github.com/bulletinbored/editbored-plugin",
+    "author": "mlzog",
+    "description": "WYSIWYG Markdown editor with mentions and image upload",
+    "version": "1.0.0",
+    "official": true
+  }
+]

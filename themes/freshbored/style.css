@@ -4,9 +4,9 @@
    ===================================================================== */
 
 :root {
-    --fb-brand:        #3d5afe;
-    --fb-brand-dark:   #2f46d1;
-    --fb-brand-soft:   #eef1ff;
+    --fb-brand:        #550296;
+    --fb-brand-dark:   #3d046f;
+    --fb-brand-soft:   #f3e5f5;
     --fb-bg:           #f6f7f9;
     --fb-surface:      #ffffff;
     --fb-border:       #e6e8ec;
@@ -64,7 +64,7 @@ hr { border-color: var(--fb-border); opacity: 1; }
 }
 .btn-outline-soft:hover {
     background-color: var(--fb-brand-soft);
-    border-color: #c7d0ff;
+    border-color: #d4b3e8;
     color: var(--fb-brand-dark);
 }
 
@@ -180,9 +180,9 @@ hr { border-color: var(--fb-border); opacity: 1; }
     outline: none;
 }
 .topbar-search input:focus {
-    border-color: #c7d0ff;
+    border-color: #d4b3e8;
     background: var(--fb-surface);
-    box-shadow: 0 0 0 3px rgba(61, 90, 254, .1);
+    box-shadow: 0 0 0 3px rgba(85, 2, 150, .1);
 }
 
 /* ---------- sidebar ---------- */
@@ -554,7 +554,7 @@ hr { border-color: var(--fb-border); opacity: 1; }
     font-size: .85rem;
     color: var(--fb-muted);
 }
-.stream-jump:hover { color: var(--fb-brand); border-color: #c7d0ff; }
+.stream-jump:hover { color: var(--fb-brand); border-color: #d4b3e8; }
 
 .post {
     display: flex;
@@ -564,7 +564,7 @@ hr { border-color: var(--fb-border); opacity: 1; }
     box-shadow: var(--fb-shadow);
     overflow: hidden;
 }
-.post-op { border-color: #d9e0ff; }
+.post-op { border-color: #d4b3e8; }
 
 .post-side {
     flex: 0 0 148px;
@@ -673,7 +673,7 @@ hr { border-color: var(--fb-border); opacity: 1; }
     color: var(--fb-text);
     background: var(--fb-surface);
 }
-.attachment:hover { border-color: #c7d0ff; background: var(--fb-brand-soft); }
+.attachment:hover { border-color: #d4b3e8; background: var(--fb-brand-soft); }
 .attachment span { color: var(--fb-muted-soft); font-size: .72rem; }
 
 /* ---------- reply box ---------- */
@@ -722,8 +722,8 @@ hr { border-color: var(--fb-border); opacity: 1; }
     padding: .5rem .75rem;
 }
 .form-control:focus, .form-select:focus {
-    border-color: #c7d0ff;
-    box-shadow: 0 0 0 3px rgba(61, 90, 254, .1);
+    border-color: #d4b3e8;
+    box-shadow: 0 0 0 3px rgba(85, 2, 150, .1);
 }
 .form-text { font-size: .78rem; color: var(--fb-muted-soft); }
 

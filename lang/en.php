@@ -356,6 +356,16 @@ return [
     'unknown' => 'Unknown',
     'approve' => 'Approve',
 
+    // --- admin catalog ---
+    'catalog' => 'Catalog',
+    'browse_catalog' => 'Browse Catalog',
+    'search_catalog' => 'Search catalog...',
+    'available_items' => 'Available items',
+    'no_items_in_catalog' => 'No items in catalog.',
+    'not_installed' => 'Not installed',
+    'official' => 'Official',
+    'type' => 'Type',
+
     // --- admin updates ---
     'update_manager' => 'Update Manager',
     'check_for_updates' => 'Check for Updates',

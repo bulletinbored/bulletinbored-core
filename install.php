@@ -107,8 +107,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
     <style>
         :root {
-            --fb-brand: #3d5afe;
-            --fb-brand-dark: #2f46d1;
+            --fb-brand: #550296;
+            --fb-brand-dark: #3d046f;
             --fb-brand-soft: #eef1ff;
             --fb-bg: #f6f7f9;
             --fb-surface: #ffffff;
