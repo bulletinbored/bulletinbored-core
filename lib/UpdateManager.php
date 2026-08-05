@@ -81,7 +81,8 @@ class UpdateManager
     public function checkAll(
         string $coreVersion,
         PluginManager $pluginManager,
-        ThemeManager $themeManager
+        ThemeManager $themeManager,
+        ?array $catalog = null
     ): array {
         $results = [
             'core' => ['installed' => $coreVersion, 'remote' => null, 'update_available' => false, 'update_url' => null],
@@ -93,26 +94,35 @@ class UpdateManager
         }
         $this->recordCheck('core', 'core', $results['core']['remote']);
 
+        $catalog = $catalog ?? [];
+        $catalogMap = [];
+        foreach ($catalog as $item) {
+            $key = strtolower($item['name'] ?? '');
+            $catalogMap[$key] = $item['repo'] ?? null;
+        }
+
         foreach ($pluginManager->getAll() as $key => $plugin) {
-            $remote = $this->fetchRemoteVersion('plugin', $key);
+            $repoUrl = $catalogMap[$key] ?? null;
+            $remote = $this->fetchRemoteVersion('plugin', $key, $repoUrl);
             $updateAvailable = $remote && version_compare($remote, $plugin['version'], '>');
             $results['plugins'][$key] = [
                 'installed' => $plugin['version'],
                 'remote' => $remote,
                 'update_available' => $updateAvailable,
-                'update_url' => $updateAvailable ? ($this->updateServer . '/plugin/' . rawurlencode($key) . '.zip') : null,
+                'update_url' => $updateAvailable ? $repoUrl : null,
             ];
             $this->recordCheck('plugins', $key, $remote);
         }
 
         foreach ($themeManager->getAll() as $key => $theme) {
-            $remote = $this->fetchRemoteVersion('theme', $key);
+            $repoUrl = $catalogMap[$key] ?? null;
+            $remote = $this->fetchRemoteVersion('theme', $key, $repoUrl);
             $updateAvailable = $remote && version_compare($remote, ($theme['version'] ?? '1.0.0'), '>');
             $results['themes'][$key] = [
                 'installed' => $theme['version'] ?? '1.0.0',
                 'remote' => $remote,
                 'update_available' => $updateAvailable,
-                'update_url' => $updateAvailable ? ($this->updateServer . '/theme/' . rawurlencode($key) . '.zip') : null,
+                'update_url' => $updateAvailable ? $repoUrl : null,
             ];
             $this->recordCheck('themes', $key, $remote);
         }
@@ -120,13 +130,13 @@ class UpdateManager
         return $results;
     }
 
-    private function fetchRemoteVersion(string $type, ?string $name = null): ?string
+    private function fetchRemoteVersion(string $type, ?string $name = null, ?string $repoUrl = null): ?string
     {
         if (empty($this->updateServer)) {
             return null;
         }
 
-        if ($type === 'core' && preg_match('#github\.com/([^/]+)/([^/]+)$#i', $this->updateServer, $m)) {
+        if ($repoUrl && preg_match('#github\.com/([^/]+)/([^/]+)$#i', $repoUrl, $m)) {
             $apiUrl = 'https://api.github.com/repos/' . rawurlencode($m[1]) . '/' . rawurlencode($m[2]) . '/releases/latest';
             $json = @file_get_contents($apiUrl, false, stream_context_create([
                 'http' => [
@@ -254,6 +264,105 @@ class UpdateManager
         }
 
         $this->setVersion('core', 'core', $tag);
+        return true;
+    }
+
+    public function applyExtensionUpdate(string $type, string $name, string $tag, ?string $repoUrl = null): bool
+    {
+        if (!$repoUrl) {
+            $catalogPath = __DIR__ . '/../data/catalog.json';
+            if (file_exists($catalogPath)) {
+                $catalog = json_decode(file_get_contents($catalogPath), true);
+                $key = strtolower($name);
+                foreach ($catalog as $item) {
+                    if (strtolower($item['name'] ?? '') === $key && strtolower($item['type'] ?? '') === $type) {
+                        $repoUrl = $item['repo'] ?? null;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (!$repoUrl || !preg_match('#github\.com/([^/]+)/([^/]+)$#i', $repoUrl, $m)) {
+            return false;
+        }
+
+        $zipUrl = 'https://github.com/' . rawurlencode($m[1]) . '/' . rawurlencode($m[2]) . '/archive/refs/tags/v' . rawurlencode($tag) . '.zip';
+        $tmpZip = tempnam(sys_get_temp_dir(), 'bbext') . '.zip';
+        $data = @file_get_contents($zipUrl, false, stream_context_create([
+            'http' => [
+                'timeout' => 30,
+                'user_agent' => 'bulletinbored-update-checker/1.0',
+            ]
+        ]));
+        if ($data === false) {
+            return false;
+        }
+        file_put_contents($tmpZip, $data);
+
+        $zip = new ZipArchive();
+        if ($zip->open($tmpZip) !== true) {
+            @unlink($tmpZip);
+            return false;
+        }
+
+        if ($type === 'plugin') {
+            $extractTo = rtrim(__DIR__ . '/../plugins', '/') . '/';
+        } else {
+            $extractTo = rtrim(__DIR__ . '/../themes', '/') . '/';
+        }
+
+        $tmpExtract = $extractTo . '_update_' . uniqid() . '/';
+        mkdir($tmpExtract, 0755, true);
+        $zip->extractTo($tmpExtract);
+        $zip->close();
+        @unlink($tmpZip);
+
+        $topFolders = glob($tmpExtract . '*', GLOB_ONLYDIR);
+        if (count($topFolders) === 1) {
+            $src = $topFolders[0];
+            foreach (glob($src . '/*') as $item) {
+                $basename = basename($item);
+                $target = $extractTo . $basename;
+                if (is_dir($item)) {
+                    if (!is_dir($target)) {
+                        rename($item, $target);
+                    } else {
+                        foreach (glob($item . '/*') as $sub) {
+                            rename($sub, $target . '/' . basename($sub));
+                        }
+                        @rmdir($item);
+                    }
+                } else {
+                    if (!file_exists($target)) {
+                        rename($item, $target);
+                    }
+                }
+            }
+            @rmdir($src);
+        } else {
+            foreach (glob($tmpExtract . '*') as $item) {
+                $basename = basename($item);
+                $target = $extractTo . $basename;
+                if (is_dir($item)) {
+                    if (!is_dir($target)) {
+                        rename($item, $target);
+                    } else {
+                        foreach (glob($item . '/*') as $sub) {
+                            rename($sub, $target . '/' . basename($sub));
+                        }
+                        @rmdir($item);
+                    }
+                } else {
+                    if (!file_exists($target)) {
+                        rename($item, $target);
+                    }
+                }
+            }
+        }
+        @rmdir($tmpExtract);
+
+        $this->setVersion($type . 's', $name, $tag);
         return true;
     }
 
