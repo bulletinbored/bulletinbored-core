@@ -4,7 +4,7 @@ Create plugins as single PHP files in `plugins/` or as subdirectories with a `ma
 
 ## Plugin Conventions
 
-- **File-based plugin**: a single PHP file in `plugins/` (e.g., `plugins/analytics.php`)
+ - **File-based plugin**: a single PHP file in `plugins/`
 - **Folder-based plugin**: a subdirectory in `plugins/` with a `manifest.json` and a bootstrap PHP file (e.g., `plugins/editbored/`)
 - Folder-based plugins are required when the plugin needs extra assets (CSS, JS, images, lang files)
 
@@ -14,10 +14,10 @@ File-based plugins expose metadata via PHPDoc comments in the bootstrap file:
 
 ```php
 /**
- * Plugin Name: Analytics
+ * Plugin Name: MyPlugin
  * Version: 1.0.0
- * Author: mlzog
- * Description: Logs page visits
+ * Author: Developer
+ * Description: Example plugin
  */
 ```
 
@@ -52,7 +52,7 @@ Plugins register callbacks via `$pluginManager->addHook('event', $callback)`.
 ### Example
 
 ```php
-function analytics_init() {
+function myplugin_init() {
     global $pluginManager;
     $pluginManager->addHook('after_post', function($threadId, $postId) {
         // react to new posts
@@ -125,20 +125,19 @@ function myplugin_init() {
 
 ```
 plugins/
-├── analytics.php               # File-based plugin
-└── editbored/                  # Folder-based plugin
-    ├── manifest.json           # Required: metadata
-    ├── editbored.php           # Required: bootstrap with editbored_init()
-    ├── assets/
-    │   ├── css/
-    │   │   └── editbored.css   # Editor styles
-    │   └── js/
-    │       ├── editbored.js    # Editor logic
-    │       └── mentions.js     # Mentions autocomplete
-    ├── upload.php              # Optional: custom endpoint
-    ├── lang/
-    │   └── en.php              # Optional: translations
-    └── vendor/                 # Optional: third-party assets
+├── hellobored/                 # Example folder-based plugin
+│   ├── manifest.json           # Required: metadata
+│   ├── hellobored.php          # Required: bootstrap with hellobored_init()
+│   ├── assets/
+│   │   ├── css/
+│   │   │   └── hellobored.css  # Example styles
+│   │   └── js/
+│   │       └── hellobored.js   # Example logic
+│   ├── upload.php              # Optional: custom endpoint
+│   ├── lang/
+│   │   └── en.php              # Optional: translations
+│   └── vendor/                 # Optional: third-party assets
+└── someplugin.php              # Example file-based plugin
 ```
 
 ## Shipping as ZIP

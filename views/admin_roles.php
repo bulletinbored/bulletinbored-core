@@ -20,8 +20,7 @@ $allPermissions = [
 <?php include __DIR__.'/admin_header.php'; render_admin_header('Roles & Permissions'); ?>
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2>Roles & Permissions</h2>
-        <a href="<?= url('admin') ?>" class="btn btn-secondary"><i class="fas fa-arrow-left me-1"></i>Back to Dashboard</a>
+    <h2>Roles & Permissions</h2>
     </div>
 
     <div class="row g-4">
@@ -61,17 +60,19 @@ $allPermissions = [
                                         </div>
                                     </td>
                                     <td class="text-end">
-                                        <button class="btn btn-sm btn-outline-primary" onclick="document.getElementById('edit-form-<?= $role['id'] ?>).classList.toggle('d-none')">
-                                            <i class="fas fa-edit"></i>
-                                        </button>
-                                        <?php if ($role['name'] !== 'admin'): ?>
-                                        <form method="POST" action="<?= url('admin_roles_action') ?>" class="d-inline" onsubmit="return confirm('Delete this role?')">
-                                            <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
-                                            <input type="hidden" name="do" value="delete">
-                                            <input type="hidden" name="role_id" value="<?= $role['id'] ?>">
-                                            <button class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
-                                        </form>
-                                        <?php endif; ?>
+                                        <div class="d-inline-flex gap-2">
+                                            <button class="btn btn-sm btn-outline-primary" onclick="document.getElementById('edit-form-<?= $role['id'] ?>).classList.toggle('d-none')">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            <?php if ($role['name'] !== 'admin'): ?>
+                                            <form method="POST" action="<?= url('admin_roles_action') ?>" onsubmit="return confirm('Delete this role?')">
+                                                <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                                                <input type="hidden" name="do" value="delete">
+                                                <input type="hidden" name="role_id" value="<?= $role['id'] ?>">
+                                                <button class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
+                                            </form>
+                                            <?php endif; ?>
+                                        </div>
                                     </td>
                                 </tr>
                                 <tr id="edit-form-<?= $role['id'] ?>" class="d-none">

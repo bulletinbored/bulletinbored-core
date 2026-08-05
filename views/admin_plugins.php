@@ -1,8 +1,7 @@
 <?php include __DIR__.'/admin_header.php'; render_admin_header('Plugins'); ?>
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2>Plugin Manager</h2>
-        <a href="<?= url('admin') ?>" class="btn btn-secondary"><i class="fas fa-arrow-left me-1"></i>Back to Dashboard</a>
+    <h2>Plugin Manager</h2>
     </div>
 
     <?php if ($adminPluginSuccess): ?>
@@ -65,20 +64,28 @@
                                                 <?php endif; ?>
                                             </td>
                                             <td>
-                                                <form method="POST" class="d-inline">
-                                                    <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
-                                                    <input type="hidden" name="plugin_name" value="<?= escape($plugin['name']) ?>">
-                                                    <?php if ($plugin['enabled']): ?>
-                                                        <button type="submit" name="action" value="disable" class="btn btn-sm btn-warning">Disable</button>
-                                                    <?php else: ?>
-                                                        <button type="submit" name="action" value="enable" class="btn btn-sm btn-success">Enable</button>
-                                                    <?php endif; ?>
-                                                </form>
-                                                <form method="POST" class="d-inline" onsubmit="return confirm('Delete plugin <?= escape($plugin['name']) ?>?');">
-                                                    <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
-                                                    <input type="hidden" name="plugin_name" value="<?= escape($plugin['name']) ?>">
-                                                    <button type="submit" name="delete_plugin" value="1" class="btn btn-sm btn-danger">Delete</button>
-                                                </form>
+                                                <div class="d-inline-flex gap-2">
+                                                    <form method="POST" onsubmit="return confirm('<?= $plugin['enabled'] ? 'Disable' : 'Enable' ?> plugin <?= escape($plugin['name']) ?>?')">
+                                                        <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                                                        <input type="hidden" name="plugin_name" value="<?= escape($plugin['name']) ?>">
+                                                        <?php if ($plugin['enabled']): ?>
+                                                            <button type="submit" name="action" value="disable" class="btn btn-sm btn-outline-warning" title="Disable">
+                                                                <i class="fas fa-toggle-on"></i>
+                                                            </button>
+                                                        <?php else: ?>
+                                                            <button type="submit" name="action" value="enable" class="btn btn-sm btn-outline-success" title="Enable">
+                                                                <i class="fas fa-toggle-off"></i>
+                                                            </button>
+                                                        <?php endif; ?>
+                                                    </form>
+                                                    <form method="POST" onsubmit="return confirm('Delete plugin <?= escape($plugin['name']) ?>?');">
+                                                        <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                                                        <input type="hidden" name="plugin_name" value="<?= escape($plugin['name']) ?>">
+                                                        <button type="submit" name="delete_plugin" value="1" class="btn btn-sm btn-outline-danger" title="Delete">
+                                                            <i class="fas fa-trash"></i>
+                                                        </button>
+                                                    </form>
+                                                </div>
                                             </td>
                                         </tr>
                                     <?php endforeach; ?>

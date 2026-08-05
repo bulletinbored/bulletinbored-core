@@ -1,8 +1,7 @@
 <?php include __DIR__.'/admin_header.php'; render_admin_header('Themes'); ?>
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2>Theme Manager</h2>
-        <a href="<?= url('admin') ?>" class="btn btn-secondary"><i class="fas fa-arrow-left me-1"></i>Back to Dashboard</a>
+    <h2>Theme Manager</h2>
     </div>
 
     <?php if ($adminThemeSuccess): ?>

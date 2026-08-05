@@ -4,18 +4,18 @@
 
 The Plugin Manager lists all discovered plugins, shows their metadata (name, version, author, description), and allows enabling/disabling them from the admin panel.
 
-- Plugins are single PHP files in `plugins/` (e.g., `plugins/analytics.php`)
+- Plugins are PHP files or folders in `plugins/`
 - Metadata is parsed from the file header:
   ```php
-  /**
-   * Plugin Name: Analytics
-   * Version: 1.0.0
-   * Author: Developer
-   * Description: Logs page visits
-   */
-  function analytics_init() {
-      // your code
-  }
+   /**
+    * Plugin Name: MyPlugin
+    * Version: 1.0.0
+    * Author: Developer
+    * Description: Example plugin
+    */
+   function myplugin_init() {
+       // your code
+   }
   ```
 - Plugin state is stored in `data/plugins.json`
 - Install plugins directly from the dashboard by uploading a ZIP file containing one or more PHP plugin files
@@ -26,7 +26,7 @@ The Plugin Manager lists all discovered plugins, shows their metadata (name, ver
 Plugins can register callbacks that run when the core fires specific events:
 
 ```php
-function analytics_init() {
+function myplugin_init() {
     global $pluginManager;
     $pluginManager->addHook('after_post', function($threadId, $postId) {
         // react to new posts
@@ -79,7 +79,7 @@ The Update Manager tracks installed versions of the core, plugins, and themes, a
   {
       "core": {"version": "1.1.0"},
       "plugins": {
-          "analytics": {"version": "1.2.0", "url": "https://example.com/plugins/analytics.zip"}
+          "hellobored": {"version": "1.0.0", "url": "https://example.com/plugins/hellobored.zip"}
       },
       "themes": {
           "default": {"version": "1.1.0", "url": "https://example.com/themes/default.zip"}

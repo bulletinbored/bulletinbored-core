@@ -1,9 +1,26 @@
 {
     "active": "freshbored",
-    "analytics": {
-        "enabled": true
+    "hellobored": {
+        "name": "hellobored",
+        "version": "1.0.0",
+        "author": "mlzog",
+        "description": "Plugin example — displays a random quote on every page.",
+        "file": "C:\\xampp\\htdocs\\forum-nuovo\/plugins\/hellobored\/hellobored.php",
+        "folder": "hellobored",
+        "type": "folder",
+        "enabled": false
     },
     "editbored": {
+        "enabled": true
+    },
+    "bellbored": {
+        "name": "bellbored",
+        "version": "1.0.0",
+        "author": "mlzog",
+        "description": "Notification center for the forum",
+        "file": "C:\\xampp\\htdocs\\forum-nuovo\/plugins\/bellbored\/bellbored.php",
+        "folder": "bellbored",
+        "type": "folder",
         "enabled": true
     }
 }

@@ -89,4 +89,4 @@ Plugins are PHP files in `plugins/` that define an `{name}_init()` function:
 - `$pluginManager->runHook('event', ...$args)` — fire a hook
 - Plugins are auto-loaded on every request
 
-Example plugin in `plugins/analytics.php` demonstrates the pattern.
+Example plugin in `plugins/hellobored/hellobored.php` demonstrates the pattern.

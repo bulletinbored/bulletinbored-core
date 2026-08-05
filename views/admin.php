@@ -4,16 +4,16 @@ $totalUsers = $pdo->query("SELECT COUNT(*) FROM users")->fetchColumn();
 $totalThreads = $pdo->query("SELECT COUNT(*) FROM threads")->fetchColumn();
 $totalPosts = $pdo->query("SELECT COUNT(*) FROM posts")->fetchColumn();
 $pendingCount = $pdo->query("SELECT COUNT(*) FROM threads WHERE status = 'pending'")->fetchColumn();
+$totalCategories = $pdo->query("SELECT COUNT(*) FROM categories")->fetchColumn();
 ?>
 <?php include __DIR__.'/admin_header.php'; render_admin_header('Dashboard'); ?>
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2>Admin Dashboard</h2>
-        <a href="<?= url('home') ?>" class="btn btn-secondary"><i class="fas fa-arrow-left me-1"></i>Back to Forum</a>
+    <h2>Admin Dashboard</h2>
     </div>
 
     <div class="row g-4">
-        <div class="col-xl-3 col-md-6">
+        <div class="col-xl-4 col-md-6">
             <div class="card border-left-primary shadow h-100">
                 <div class="card-body">
                     <div class="row no-gutters align-items-center">
@@ -29,7 +29,7 @@ $pendingCount = $pdo->query("SELECT COUNT(*) FROM threads WHERE status = 'pendin
             </div>
         </div>
 
-        <div class="col-xl-3 col-md-6">
+        <div class="col-xl-4 col-md-6">
             <div class="card border-left-success shadow h-100">
                 <div class="card-body">
                     <div class="row no-gutters align-items-center">
@@ -45,7 +45,7 @@ $pendingCount = $pdo->query("SELECT COUNT(*) FROM threads WHERE status = 'pendin
             </div>
         </div>
 
-        <div class="col-xl-3 col-md-6">
+        <div class="col-xl-4 col-md-6">
             <div class="card border-left-info shadow h-100">
                 <div class="card-body">
                     <div class="row no-gutters align-items-center">
@@ -60,8 +60,10 @@ $pendingCount = $pdo->query("SELECT COUNT(*) FROM threads WHERE status = 'pendin
                 </div>
             </div>
         </div>
+    </div>
 
-        <div class="col-xl-3 col-md-6">
+    <div class="row g-4 mt-2">
+        <div class="col-xl-4 col-md-6">
             <div class="card border-left-warning shadow h-100">
                 <div class="card-body">
                     <div class="row no-gutters align-items-center">
@@ -76,10 +78,8 @@ $pendingCount = $pdo->query("SELECT COUNT(*) FROM threads WHERE status = 'pendin
                 </div>
             </div>
         </div>
-    </div>
 
-    <div class="row g-4 mt-2">
-        <div class="col-xl-3 col-md-6">
+        <div class="col-xl-4 col-md-6">
             <div class="card border-left-secondary shadow h-100">
                 <div class="card-body">
                     <div class="row no-gutters align-items-center">
@@ -95,48 +95,16 @@ $pendingCount = $pdo->query("SELECT COUNT(*) FROM threads WHERE status = 'pendin
             </div>
         </div>
 
-        <div class="col-xl-3 col-md-6">
+        <div class="col-xl-4 col-md-6">
             <div class="card border-left-primary shadow h-100">
                 <div class="card-body">
                     <div class="row no-gutters align-items-center">
                         <div class="col me-2">
-                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Users</div>
-                            <div class="h5 mb-0 font-weight-bold text-gray-800"><?= $totalUsers ?></div>
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Categories</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800"><?= $totalCategories ?></div>
                         </div>
                         <div class="col-auto">
-                            <i class="fas fa-users fa-2x text-gray-300"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-xl-3 col-md-6">
-            <div class="card border-left-success shadow h-100">
-                <div class="card-body">
-                    <div class="row no-gutters align-items-center">
-                        <div class="col me-2">
-                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Threads</div>
-                            <div class="h5 mb-0 font-weight-bold text-gray-800"><?= $totalThreads ?></div>
-                        </div>
-                        <div class="col-auto">
-                            <i class="fas fa-comments fa-2x text-gray-300"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-xl-3 col-md-6">
-            <div class="card border-left-info shadow h-100">
-                <div class="card-body">
-                    <div class="row no-gutters align-items-center">
-                        <div class="col me-2">
-                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">Posts</div>
-                            <div class="h5 mb-0 font-weight-bold text-gray-800"><?= $totalPosts ?></div>
-                        </div>
-                        <div class="col-auto">
-                            <i class="fas fa-reply fa-2x text-gray-300"></i>
+                            <i class="fas fa-folder fa-2x text-gray-300"></i>
                         </div>
                     </div>
                 </div>

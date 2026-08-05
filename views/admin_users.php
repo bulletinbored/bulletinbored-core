@@ -5,8 +5,7 @@ $users = $pdo->query("SELECT * FROM users ORDER BY id ASC")->fetchAll();
 <?php include __DIR__.'/admin_header.php'; render_admin_header('Users'); ?>
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2>Users Management</h2>
-        <a href="<?= url('admin') ?>" class="btn btn-secondary"><i class="fas fa-arrow-left me-1"></i>Back to Dashboard</a>
+    <h2>Users Management</h2>
     </div>
 
     <div class="card shadow mb-4">

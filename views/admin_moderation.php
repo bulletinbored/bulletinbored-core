@@ -55,6 +55,5 @@ $pendingThreads = $pdo->query("
             </table>
         </div>
     <?php endif; ?>
-    <a href="<?= url('admin') ?>" class="btn btn-secondary mb-3">Back to Dashboard</a>
 </div>
 <?php include __DIR__.'/admin_footer.php'; ?>

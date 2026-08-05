@@ -180,11 +180,24 @@ body.admin-layout {
     transition: transform 0.2s;
 }
 
+.card:hover {
+    transform: translateY(-3px);
+}
+
 .card-header {
     background-color: #fff;
     border-bottom: 1px solid #e3e6f0;
     font-weight: 700;
     color: #4e73df;
+}
+
+/* Dashboard stat cards layout */
+.row.g-4 > [class*="col-"] {
+    display: flex;
+}
+
+.row.g-4 > [class*="col-"] .card {
+    width: 100%;
 }
 
 /* Left border cards */
@@ -263,6 +276,38 @@ body.admin-layout {
     height: 2.5rem;
     width: 2.5rem;
     border-radius: 50%;
+}
+
+/* CSS-only user dropdown via checkbox hack (no JS required) */
+.user-menu .dropdown-toggle {
+    cursor: pointer;
+    position: relative;
+    z-index: 1001;
+}
+
+.user-menu .dropdown-menu {
+    right: 0;
+    left: auto;
+    top: 100%;
+    max-width: min(100vw - 2rem, 18rem);
+    z-index: 1001;
+}
+
+/* Transparent full-screen backdrop that closes the menu on outside click */
+.user-menu-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    cursor: default;
+}
+
+.user-menu input[type="checkbox"]:checked ~ .user-menu-backdrop {
+    display: block;
+}
+
+.user-menu input[type="checkbox"]:checked ~ .dropdown-menu {
+    display: block;
 }
 
 .status-indicator {

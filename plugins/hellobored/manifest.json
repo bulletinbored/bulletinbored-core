@@ -1,0 +1,7 @@
+{
+    "name": "hellobored",
+    "version": "1.0.0",
+    "author": "mlzog",
+    "description": "Plugin example — displays a random quote on every page.",
+    "bootstrap": "hellobored.php"
+}

@@ -91,14 +91,14 @@ function render_admin_header($title = 'Admin Panel') {
                         <div class="topbar-divider d-none d-sm-block"></div>
 
                         <!-- Nav Item - User Information -->
-                        <li class="nav-item dropdown no-arrow">
-                            <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                        <li class="nav-item dropdown no-arrow user-menu">
+                            <input type="checkbox" id="userMenuToggle" class="d-none">
+                            <label for="userMenuToggle" class="user-menu-backdrop"></label>
+                            <label for="userMenuToggle" class="nav-link dropdown-toggle" tabindex="0" aria-haspopup="true">
                                 <span class="me-2 d-none d-lg-inline text-gray-600 small"><?= escape($_SESSION['username'] ?? '') ?></span>
                                 <i class="fas fa-user-circle fa-fw"></i>
-                            </a>
-                            <div class="dropdown-menu dropdown-menu-end shadow animated--fade-in" aria-labelledby="userDropdown">
-                                <a class="dropdown-item" href="<?= url('profile', ['user' => $_SESSION['username'] ?? '']) ?>"><i class="fas fa-user fa-sm fa-fw me-2 text-gray-400"></i>Profile</a>
-                                <div class="dropdown-divider"></div>
+                            </label>
+                            <div class="dropdown-menu dropdown-menu-end shadow" aria-labelledby="userMenuToggle">
                                 <a class="dropdown-item" href="<?= url('logout') ?>"><i class="fas fa-sign-out-alt fa-sm fa-fw me-2 text-gray-400"></i>Logout</a>
                             </div>
                         </li>
