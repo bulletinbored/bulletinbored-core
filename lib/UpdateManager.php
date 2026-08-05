@@ -246,29 +246,32 @@ class UpdateManager
         $topFolder = glob($extractTo . 'bulletinbored-core-*', GLOB_ONLYDIR);
         if (!empty($topFolder)) {
             $src = $topFolder[0];
-            foreach (glob($src . '/*') as $item) {
-                $basename = basename($item);
-                $target = $extractTo . $basename;
-                if (is_dir($item)) {
-                    if (!is_dir($target)) {
-                        rename($item, $target);
-                    } else {
-                        foreach (glob($item . '/*') as $sub) {
-                            copy($sub, $target . '/' . basename($sub));
-                            @unlink($sub);
-                        }
-                        @rmdir($item);
+            $items = @scandir($src);
+            if ($items !== false) {
+                foreach ($items as $item) {
+                    if ($item === '.' || $item === '..') {
+                        continue;
                     }
-                } else {
-                    if (!file_exists($target)) {
-                        rename($item, $target);
-                    } else {
-                        copy($item, $target);
-                        @unlink($item);
+                    $srcPath = $src . '/' . $item;
+                    $targetPath = $extractTo . $item;
+                    if (is_dir($srcPath)) {
+                        if (!is_dir($targetPath)) {
+                            rename($srcPath, $targetPath);
+                        } else {
+                            $this->copyRecursive($srcPath, $targetPath);
+                            @rmdir($srcPath);
+                        }
+                    } elseif (is_file($srcPath)) {
+                        if (!file_exists($targetPath)) {
+                            rename($srcPath, $targetPath);
+                        } else {
+                            copy($srcPath, $targetPath);
+                            @unlink($srcPath);
+                        }
                     }
                 }
             }
-            @rmdir($src);
+            $this->deleteRecursive($src);
         }
 
         $this->setVersion('core', 'core', $tag);
@@ -333,57 +336,108 @@ class UpdateManager
         $topFolders = glob($tmpExtract . '*', GLOB_ONLYDIR);
         if (count($topFolders) === 1) {
             $src = $topFolders[0];
-            foreach (glob($src . '/*') as $item) {
-                $basename = basename($item);
-                $target = $extractTo . $basename;
-                if (is_dir($item)) {
-                    if (!is_dir($target)) {
-                        rename($item, $target);
-                    } else {
-                        foreach (glob($item . '/*') as $sub) {
-                            copy($sub, $target . '/' . basename($sub));
-                            @unlink($sub);
-                        }
-                        @rmdir($item);
+            $items = @scandir($src);
+            if ($items !== false) {
+                foreach ($items as $item) {
+                    if ($item === '.' || $item === '..') {
+                        continue;
                     }
-                } else {
-                    if (!file_exists($target)) {
-                        rename($item, $target);
-                    } else {
-                        copy($item, $target);
-                        @unlink($item);
+                    $srcPath = $src . '/' . $item;
+                    $targetPath = $extractTo . $item;
+                    if (is_dir($srcPath)) {
+                        if (!is_dir($targetPath)) {
+                            rename($srcPath, $targetPath);
+                        } else {
+                            $this->copyRecursive($srcPath, $targetPath);
+                            @rmdir($srcPath);
+                        }
+                    } elseif (is_file($srcPath)) {
+                        if (!file_exists($targetPath)) {
+                            rename($srcPath, $targetPath);
+                        } else {
+                            copy($srcPath, $targetPath);
+                            @unlink($srcPath);
+                        }
                     }
                 }
             }
-            @rmdir($src);
+            $this->deleteRecursive($src);
         } else {
-            foreach (glob($tmpExtract . '*') as $item) {
-                $basename = basename($item);
-                $target = $extractTo . $basename;
-                if (is_dir($item)) {
-                    if (!is_dir($target)) {
-                        rename($item, $target);
-                    } else {
-                        foreach (glob($item . '/*') as $sub) {
-                            copy($sub, $target . '/' . basename($sub));
-                            @unlink($sub);
-                        }
-                        @rmdir($item);
+            $items = @scandir($tmpExtract);
+            if ($items !== false) {
+                foreach ($items as $item) {
+                    if ($item === '.' || $item === '..') {
+                        continue;
                     }
-                } else {
-                    if (!file_exists($target)) {
-                        rename($item, $target);
-                    } else {
-                        copy($item, $target);
-                        @unlink($item);
+                    $srcPath = $tmpExtract . '/' . $item;
+                    $targetPath = $extractTo . $item;
+                    if (is_dir($srcPath)) {
+                        if (!is_dir($targetPath)) {
+                            rename($srcPath, $targetPath);
+                        } else {
+                            $this->copyRecursive($srcPath, $targetPath);
+                            @rmdir($srcPath);
+                        }
+                    } elseif (is_file($srcPath)) {
+                        if (!file_exists($targetPath)) {
+                            rename($srcPath, $targetPath);
+                        } else {
+                            copy($srcPath, $targetPath);
+                            @unlink($srcPath);
+                        }
                     }
                 }
             }
+            $this->deleteRecursive($tmpExtract);
         }
-        @rmdir($tmpExtract);
 
         $this->setVersion($type . 's', $name, $tag);
         return true;
+    }
+
+    private function copyRecursive(string $src, string $dst): void
+    {
+        if (!is_dir($dst)) {
+            mkdir($dst, 0755, true);
+        }
+        $items = glob($src . '/*');
+        foreach ($items as $item) {
+            $basename = basename($item);
+            $target = $dst . '/' . $basename;
+            if (is_dir($item)) {
+                $this->copyRecursive($item, $target);
+            } elseif (is_file($item)) {
+                if (!file_exists($target)) {
+                    copy($item, $target);
+                } else {
+                    copy($item, $target);
+                }
+            }
+        }
+    }
+
+    private function deleteRecursive(string $dir): void
+    {
+        if (!is_dir($dir)) {
+            @unlink($dir);
+            return;
+        }
+        $items = @scandir($dir);
+        if ($items === false) {
+            return;
+        }
+        foreach ($items as $item) {
+            if ($item === '.' || $item === '..') {
+                continue;
+            }
+            $path = $dir . '/' . $item;
+            if (is_dir($path)) {
+                $this->deleteRecursive($path);
+            } else {
+                @unlink($path);
+            }
+        }
+        @rmdir($dir);
     }
 
     public function getLockedExtensions(): array

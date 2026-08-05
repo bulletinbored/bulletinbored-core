@@ -2382,6 +2382,11 @@ elseif ($action === 'admin_users') {
                     $updateError = 'No update package uploaded';
                 }
 
+                if ($updateSuccess) {
+                    header('Location: ' . url('admin_updates') . '?updated=1');
+                    exit;
+                }
+
                 $updateResults = $updateManager->checkAll($config['version'] ?? '1.0.0', $pluginManager, $themeManager);
             }
         }

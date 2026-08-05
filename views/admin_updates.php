@@ -6,6 +6,8 @@
 
     <?php if ($updateSuccess): ?>
         <div class="alert alert-success"><?= escape($updateSuccess) ?></div>
+    <?php elseif (isset($_GET['updated'])): ?>
+        <div class="alert alert-success">Update completed successfully</div>
     <?php endif; ?>
     <?php if ($updateError): ?>
         <div class="alert alert-danger"><?= escape($updateError) ?></div>
@@ -89,11 +91,11 @@
                                             <td>v<?= escape($updateStatus['core']['installed']) ?></td>
                                             <td>v<?= escape($updateStatus['core']['remote']) ?></td>
                                             <td>
-                                                <form method="POST" class="d-inline">
+                                                <form method="POST" enctype="multipart/form-data" class="d-inline">
                                                     <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                                                     <input type="hidden" name="type" value="core">
                                                     <input type="hidden" name="name" value="core">
-                                                    <input type="hidden" name="core_tag" value="<?= escape($updateStatus['core']['remote']) ?>">
+                                                    <input type="file" name="update_package" accept=".zip" required class="form-control form-control-sm d-inline-block" style="width: auto;">
                                                     <button type="submit" name="apply_update" value="1" class="btn btn-sm btn-success"><?= t('apply') ?></button>
                                                 </form>
                                             </td>

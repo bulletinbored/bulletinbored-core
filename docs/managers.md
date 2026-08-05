@@ -69,39 +69,22 @@ The Language Manager lets you upload and delete localization PHP files from the 
 
 ## Update Manager (`admin_updates`)
 
-The Update Manager tracks installed versions of the core, plugins, and themes, and can apply updates.
+The Update Manager tracks installed versions of the core, plugins, and themes, and can apply updates from ZIP packages.
 
 - Version tracking is stored in `data/updates.json`
-- Core version is loaded dynamically from the `VERSION` file via `config.php`
+- Core version is defined in `config.php` as `'version' => '1.0.0'`
 - Remote update checks require setting `'update_server'` in `config.php`
-
-### Core updates
-
-If `update_server` points to a GitHub repository, the Update Manager uses the GitHub Releases API to discover the latest version automatically. No `versions.json` is required.
-
-### Plugin and theme updates
-
-Plugins and themes are checked against the repositories listed in `data/catalog.json`. If a catalog entry includes a `repo` URL pointing to GitHub, the Update Manager queries the GitHub Releases API for the latest tag.
-
-### Legacy update server
-
-If `update_server` is not a GitHub URL, the Update Manager falls back to fetching `versions.json` from that server:
-
-```json
-{
-    "core": {"version": "1.1.0"},
-    "plugins": {
-        "hellobored": {"version": "1.0.0", "url": "https://example.com/plugins/hellobored.zip"}
-    },
-    "themes": {
-        "default": {"version": "1.1.0", "url": "https://example.com/themes/default.zip"}
-    }
-}
-```
-
-### Applying updates
-
-- Core updates are downloaded automatically from GitHub releases and extracted into the forum root.
-- Plugin and theme updates can be downloaded automatically from GitHub if a `repo` URL is defined in `catalog.json`.
-- ZIP upload via the admin panel is still supported as a fallback for plugin/theme updates.
-- After extraction, version metadata is updated automatically.
+- The update server must serve a `versions.json` file:
+  ```json
+  {
+      "core": {"version": "1.1.0"},
+      "plugins": {
+          "hellobored": {"version": "1.0.0", "url": "https://example.com/plugins/hellobored.zip"}
+      },
+      "themes": {
+          "default": {"version": "1.1.0", "url": "https://example.com/themes/default.zip"}
+      }
+  }
+  ```
+- Updates are applied by uploading ZIP packages via the admin panel
+- Zips are extracted into the forum root, and version metadata is updated automatically

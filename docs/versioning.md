@@ -1,6 +1,6 @@
 # Versioning
 
-bulletinbored uses semantic versioning (SemVer): `MAJOR.MINOR.PATCH`.
+bulletinbored uses semantic versioning (SemVer): `MAJOR.MINOR.PATCH` — currently `0.1.0`.
 
 The project is released under the BSD Zero Clause (BSD-0). See [LICENSE](LICENSE) and [CLA.md](../CLA.md).
 
@@ -14,16 +14,16 @@ Since this is `0.x`, the API is still considered unstable: minor releases may br
 
 ## How to bump a version
 
-1. Edit the `VERSION` file at the project root (single line, e.g. `MAJOR.MINOR.PATCH`)
+1. Edit the `VERSION` file at the project root (single line, e.g. `0.1.0`)
 2. Update the version constant in `config.php` if you keep an inline fallback there
 3. If you ship updates via the Update Manager, make sure `versions.json` on your update server exposes the new version
 4. Tag the release in git:
 
    ```bash
-    git add VERSION
-    git commit -m "Bump version"
-    git tag VERSION
-    git push --follow-tags
+   git add VERSION
+   git commit -m "Bump version to 0.1.1"
+   git tag 0.1.1
+   git push --follow-tags
    ```
 
 ## Where the version lives in code
@@ -40,11 +40,7 @@ The Update Manager compares installed versions with remote versions:
 - Plugin versions come from the `Version:` header in each plugin PHP file
 - Theme versions come from `manifest.json` in each theme folder
 
-If an `update_server` is configured:
-
-- If it points to a GitHub repository, the Update Manager uses the GitHub Releases API to fetch the latest version for core, plugins, and themes.
-- For plugins and themes, the repository URL is taken from `data/catalog.json`.
-- If `update_server` is not a GitHub URL, the Update Manager falls back to fetching `versions.json` from that server.
+If an update server URL is configured (`config['update_server']`), the Update Manager fetches `versions.json` from it and compares remote versions against installed ones.
 
 ## Example release checklist
 
@@ -52,5 +48,5 @@ If an `update_server` is configured:
 2. Update changelog / docs
 3. Run tests or manual QA
 4. Commit and tag
-5. Create a GitHub release with the same tag
-6. Ensure plugin/theme entries in `data/catalog.json` point to the correct repositories
+5. Build ZIP packages for core, plugin, and theme updates if distributable packages are needed
+6. Update remote `versions.json` pointing to the new packages
