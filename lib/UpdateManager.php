@@ -136,6 +136,10 @@ class UpdateManager
             return null;
         }
 
+        if (!$repoUrl && preg_match('#github\.com/([^/]+)/([^/]+)$#i', $this->updateServer, $m)) {
+            $repoUrl = 'https://github.com/' . $m[1] . '/' . $m[2];
+        }
+
         if ($repoUrl && preg_match('#github\.com/([^/]+)/([^/]+)$#i', $repoUrl, $m)) {
             $apiUrl = 'https://api.github.com/repos/' . rawurlencode($m[1]) . '/' . rawurlencode($m[2]) . '/releases/latest';
             $json = @file_get_contents($apiUrl, false, stream_context_create([
