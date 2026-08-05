@@ -12,6 +12,34 @@
         <div class="alert alert-danger"><?= escape($langError) ?></div>
     <?php endif; ?>
 
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Site Language Settings</h6>
+                </div>
+                <div class="card-body">
+                    <form method="POST">
+                        <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Default Language</label>
+                                <select name="default_lang" class="form-select">
+                                    <?php foreach ($langOptions as $code): ?>
+                                        <option value="<?= escape($code) ?>" <?= ($config['default_lang'] ?? 'en') === $code ? 'selected' : '' ?>><?= strtoupper(escape($code)) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="mt-3">
+                            <button type="submit" name="save_lang_settings" value="1" class="btn btn-primary"><i class="fas fa-save me-1"></i>Save Language Settings</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="row">
         <div class="col-lg-5">
             <div class="card shadow mb-4">

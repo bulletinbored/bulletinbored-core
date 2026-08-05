@@ -1,12 +1,3 @@
-<?php
-global $config;
-$langFiles = glob(__DIR__ . '/../lang/*.php');
-$availableLangs = [];
-foreach ($langFiles as $file) {
-    $code = basename($file, '.php');
-    $availableLangs[] = $code;
-}
-?>
 <?php include __DIR__.'/admin_header.php'; render_admin_header('Settings'); ?>
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-4">
@@ -41,16 +32,6 @@ foreach ($langFiles as $file) {
                     <label class="form-label">Site Icon</label>
                     <input type="text" name="site_icon" class="form-control" value="<?= escape($config['site_icon'] ?? '') ?>">
                     <div class="form-text">Path or URL to the site icon image.</div>
-                </div>
-            </div>
-            
-            <!-- Theme -->
-            <div class="col-md-6">
-                <div class="mb-3">
-                    <label class="form-label">Theme</label>
-                    <select name="theme" class="form-select">
-                        <option value="freshbored" <?= ($config['theme'] ?? 'freshbored') === 'freshbored' ? 'selected' : '' ?>>freshbored</option>
-                    </select>
                 </div>
             </div>
             
@@ -96,27 +77,6 @@ foreach ($langFiles as $file) {
                         <option value="H:i" <?= ($config['time_format'] ?? 'H:i') === 'H:i' ? 'selected' : '' ?>>24-hour (HH:MM)</option>
                         <option value="h:i A" <?= ($config['time_format'] ?? '') === 'h:i A' ? 'selected' : '' ?>>12-hour (hh:MM AM/PM)</option>
                     </select>
-                </div>
-            </div>
-            
-            <!-- Default Language -->
-            <div class="col-md-6">
-                <div class="mb-3">
-                    <label class="form-label">Default Language</label>
-                    <select name="default_lang" class="form-select">
-                        <?php foreach ($availableLangs as $l): ?>
-                            <option value="<?= $l ?>" <?= ($config['default_lang'] ?? 'en') === $l ? 'selected' : '' ?>><?= strtoupper($l) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-            </div>
-            
-            <!-- Available Languages -->
-            <div class="col-md-6">
-                <div class="mb-3">
-                    <label class="form-label">Available Languages (comma-separated codes)</label>
-                    <input type="text" name="available_langs" class="form-control" value="<?= escape(implode(',', $config['available_langs'] ?? ['en'])) ?>">
-                    <div class="form-text">Example: en,it,fr</div>
                 </div>
             </div>
             

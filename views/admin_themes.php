@@ -12,6 +12,30 @@
         <div class="alert alert-danger"><?= escape($adminThemeError) ?></div>
     <?php endif; ?>
 
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Select Active Theme</h6>
+                </div>
+                <div class="card-body">
+                    <form method="POST" class="d-flex align-items-end gap-3">
+                        <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                        <div class="flex-grow-1">
+                            <label class="form-label">Active Theme</label>
+                            <select name="theme_name" class="form-select">
+                                <?php foreach ($allThemes as $theme): ?>
+                                    <option value="<?= escape($theme['name']) ?>" <?= $theme['active'] ? 'selected' : '' ?>><?= escape($theme['name']) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <button type="submit" name="activate_theme" value="1" class="btn btn-primary"><i class="fas fa-check me-1"></i>Activate</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="row">
         <div class="col-lg-4">
             <div class="card shadow mb-4">

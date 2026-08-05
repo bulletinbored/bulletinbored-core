@@ -1822,8 +1822,6 @@ elseif ($action === 'unban_user' && $method === 'POST' && is_admin()) {
         $siteName = trim($_POST['site_name'] ?? $config['site_name']);
         $allowRegistration = isset($_POST['allow_registration']) ? 1 : 0;
         $maintenanceMode = isset($_POST['maintenance_mode']) ? 1 : 0;
-        $defaultLang = trim($_POST['default_lang'] ?? $config['default_lang'] ?? 'en');
-        $availableLangs = array_filter(array_map('trim', explode(',', $_POST['available_langs'] ?? implode(',', $config['available_langs'] ?? ['en']))));
         $siteTagline = trim($_POST['site_tagline'] ?? $config['site_tagline']);
         $siteIcon = trim($_POST['site_icon'] ?? $config['site_icon']);
         $timezone = trim($_POST['timezone'] ?? $config['timezone']);
@@ -1833,8 +1831,6 @@ elseif ($action === 'unban_user' && $method === 'POST' && is_admin()) {
         $config['site_name'] = $siteName;
         $config['allow_registration'] = $allowRegistration;
         $config['maintenance_mode'] = $maintenanceMode;
-        $config['default_lang'] = $defaultLang;
-        $config['available_langs'] = array_values($availableLangs);
         $config['site_tagline'] = $siteTagline;
         $config['site_icon'] = $siteIcon;
         $config['timezone'] = $timezone;
@@ -2002,7 +1998,21 @@ elseif ($action === 'admin_users') {
             if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
                 $langError = 'Invalid CSRF token';
             } else {
-                if (isset($_POST['upload_lang']) && !empty($_FILES['lang_file']['tmp_name'])) {
+                if (isset($_POST['save_lang_settings'])) {
+                    $defaultLang = trim($_POST['default_lang'] ?? $config['default_lang'] ?? 'en');
+                    $config['default_lang'] = $defaultLang;
+                    unset($config['available_langs']);
+                    $configContent = "<?php\n";
+                    foreach ($config as $key => $value) {
+                        if (is_string($value)) {
+                            $configContent .= "\$config['$key'] = '" . addslashes($value) . "';\n";
+                        } else {
+                            $configContent .= "\$config['$key'] = " . var_export($value, true) . ";\n";
+                        }
+                    }
+                    file_put_contents(__DIR__.'/config.php', $configContent);
+                    $langSuccess = 'Language settings saved';
+                } elseif (isset($_POST['upload_lang']) && !empty($_FILES['lang_file']['tmp_name'])) {
                     $langCode = preg_replace('/[^a-z_]/', '', strtolower($_POST['lang_code'] ?? ''));
                     if ($langCode === '') {
                         $langError = 'Invalid language code';

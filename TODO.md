@@ -17,3 +17,4 @@
 [X] Pagina settings: aggiungere voci stile Wordpress. 
 [X] Verificare che sia richiesta conferma email dopo registrazione
 [X] In admin/users dovrebbe essere possibile creare un utente
+[ ] Rivedere settings (ad esempio, localizzazione e temi dovrebbero essere gestiti da un'altra scheda)
