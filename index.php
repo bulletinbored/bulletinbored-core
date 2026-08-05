@@ -2379,10 +2379,12 @@ elseif ($action === 'admin_users') {
                     $extName = $name ?? '';
                     $installedVersion = '1.0.0';
                     if ($type === 'plugins' && $pluginManager) {
-                        $plugin = $pluginManager->get($extName);
+                        $plugin = $pluginManager->getAll();
+                        $plugin = $plugin[$extName] ?? null;
                         $installedVersion = $plugin['version'] ?? '1.0.0';
                     } elseif ($type === 'themes' && $themeManager) {
-                        $theme = $themeManager->get($extName);
+                        $theme = $themeManager->getAll();
+                        $theme = $theme[$extName] ?? null;
                         $installedVersion = $theme['version'] ?? '1.0.0';
                     }
                     if (version_compare($tag, $installedVersion, '<=')) {

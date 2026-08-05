@@ -326,6 +326,11 @@ class UpdateManager
             $this->deleteRecursive($src);
         }
 
+        $libDir = $extractTo . 'lib';
+        if (!is_dir($libDir)) {
+            return false;
+        }
+
         $this->setVersion('core', 'core', $tag);
         $versionFile = __DIR__ . '/../VERSION';
         if (is_writable($versionFile)) {
@@ -442,6 +447,11 @@ class UpdateManager
                 }
             }
             $this->deleteRecursive($tmpExtract);
+        }
+
+        $targetDir = $extractTo . $name;
+        if (!is_dir($targetDir) || !glob($targetDir . '/*')) {
+            return false;
         }
 
         $this->setVersion($type . 's', $name, $tag);
