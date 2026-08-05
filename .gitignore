@@ -3,3 +3,13 @@ data/database.sqlite
 
 /lang/*.php
 !/lang/en.php
+
+/plugins/*
+!/plugins/bellbored
+!/plugins/editbored
+!/plugins/hellobored
+/plugins/*/
+
+/themes/*
+!/themes/freshbored
+/themes/*/
