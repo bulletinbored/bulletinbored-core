@@ -36,7 +36,7 @@
                     <h6 class="m-0 font-weight-bold text-primary"><?= t('catalog') ?></h6>
                 </div>
                 <div class="card-body">
-                    <a href="<?= url('admin_catalog') ?>" class="btn btn-primary"><?= t('browse_catalog') ?></a>
+                    <a href="<?= url('admin_catalog') ?>?type=plugin" class="btn btn-primary"><?= t('browse_catalog') ?></a>
                 </div>
             </div>
         </div>

@@ -365,6 +365,9 @@ return [
     'not_installed' => 'Not installed',
     'official' => 'Official',
     'type' => 'Type',
+    'reinstall' => 'Reinstall',
+    'uninstall' => 'Uninstall',
+    'update' => 'Update',
 
     // --- admin updates ---
     'update_manager' => 'Update Manager',

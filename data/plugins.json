@@ -1,15 +1,5 @@
 {
     "active": "freshbored",
-    "hellobored": {
-        "name": "hellobored",
-        "version": "1.0.0",
-        "author": "mlzog",
-        "description": "Plugin example — displays a random quote on every page.",
-        "file": "C:\\xampp\\htdocs\\forum-nuovo\/plugins\/hellobored\/hellobored.php",
-        "folder": "hellobored",
-        "type": "folder",
-        "enabled": false
-    },
     "editbored": {
         "enabled": true
     },
@@ -22,5 +12,15 @@
         "folder": "bellbored",
         "type": "folder",
         "enabled": true
+    },
+    "hellobored": {
+        "name": "hellobored",
+        "version": "1.0.0",
+        "author": "mlzog",
+        "description": "Plugin example — displays a random quote on every page.",
+        "file": "C:\\xampp\\htdocs\\forum-nuovo\/plugins\/hellobored\/hellobored.php",
+        "folder": "hellobored",
+        "type": "folder",
+        "enabled": false
     }
 }

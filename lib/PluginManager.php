@@ -346,9 +346,17 @@ class PluginManager
             $dir = rtrim($this->pluginsDir, '/') . '/' . $entry['folder'];
             if (is_dir($dir)) {
                 $this->deleteDir($dir);
+                clearstatcache();
+                if (is_dir($dir)) {
+                    return ['success' => false, 'message' => 'Plugin directory could not be deleted. It may be in use by another process.'];
+                }
             }
         } elseif (!empty($entry['file']) && file_exists($entry['file'])) {
             @unlink($entry['file']);
+            clearstatcache();
+            if (file_exists($entry['file'])) {
+                return ['success' => false, 'message' => 'Plugin file could not be deleted. It may be in use by another process.'];
+            }
         }
 
         unset($this->manifest[$key]);
@@ -356,6 +364,31 @@ class PluginManager
         $this->plugins = [];
 
         return ['success' => true, 'message' => 'Plugin deleted'];
+    }
+
+    public function removeMissing(): array
+    {
+        $this->discover();
+        $removed = [];
+        foreach ($this->plugins as $key => $plugin) {
+            if ($plugin['folder']) {
+                $dir = rtrim($this->pluginsDir, '/') . '/' . $plugin['folder'];
+                $hasManifest = is_dir($dir) && file_exists($dir . '/manifest.json');
+                if (!$hasManifest) {
+                    unset($this->manifest[$key]);
+                    $removed[] = $plugin['name'];
+                    if (is_dir($dir)) {
+                        $this->deleteDir($dir);
+                    }
+                }
+            } elseif (!empty($plugin['file']) && !file_exists($plugin['file'])) {
+                unset($this->manifest[$key]);
+                $removed[] = $plugin['name'];
+            }
+        }
+        $this->saveManifest();
+        $this->plugins = [];
+        return $removed;
     }
 
     private function deleteDir(string $dir): void
@@ -367,6 +400,10 @@ class PluginManager
             $item->isDir() ? @rmdir($item->getPathname()) : @unlink($item->getPathname());
         }
         @rmdir($dir);
+        if (is_dir($dir)) {
+            exec('cmd /c rmdir /s /q ' . escapeshellarg($dir) . ' 2>&1', $out, $code);
+            clearstatcache();
+        }
     }
 
     public function installFromRepo(string $repoUrl, ?string $tag = null, ?string $expectedName = null): array
@@ -394,6 +431,10 @@ class PluginManager
             }
             $cmd .= ' ' . escapeshellarg($repoUrl) . ' ' . escapeshellarg($targetDir) . ' 2>&1';
             exec($cmd, $out, $code);
+            if ($code !== 0 && $tag) {
+                $cmd = 'git clone --depth 1 ' . escapeshellarg($repoUrl) . ' ' . escapeshellarg($targetDir) . ' 2>&1';
+                exec($cmd, $out, $code);
+            }
             if ($code !== 0) {
                 return ['success' => false, 'message' => 'Git clone failed: ' . implode("\n", $out)];
             }
@@ -402,7 +443,6 @@ class PluginManager
         if (is_dir($targetDir)) {
             $topFolders = [];
             foreach (glob($targetDir . '/*') as $item) {
-                $parts = explode('/', str_replace('\\', '/', $item));
                 $base = basename($item);
                 if ($base !== '' && !str_contains($base, '.')) {
                     $topFolders[$base] = true;
@@ -439,7 +479,10 @@ class PluginManager
 
         $manifest = $this->getByName($expectedName ?: $repoName);
         if (!$manifest || empty($manifest['file']) || !file_exists($manifest['file'])) {
-            return ['success' => false, 'message' => 'Installed package is not a valid plugin'];
+            if (is_dir($targetDir)) {
+                $this->deleteDir($targetDir);
+            }
+            return ['success' => false, 'message' => 'Installed package is not a valid plugin. Ensure the repository contains a valid manifest.json and bootstrap file.'];
         }
 
         return ['success' => true, 'message' => 'Plugin installed from repo', 'manifest' => $manifest];

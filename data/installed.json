@@ -12,17 +12,17 @@
             "version": "1.0.0",
             "installed_at": "2026-08-05T12:20:43+02:00"
         },
-        "hellobored": {
-            "name": "hellobored",
-            "repo": "https:\/\/github.com\/bulletinbored\/hellobored-plugin",
-            "version": "1.0.0",
-            "installed_at": "2026-08-05T12:20:43+02:00"
-        },
         "textmebored": {
             "name": "textmebored",
             "repo": "https:\/\/github.com\/bulletinbored\/textmebored-plugin",
             "version": "1.0.0",
             "installed_at": "2026-08-05T12:20:43+02:00"
+        },
+        "hellobored": {
+            "name": "hellobored",
+            "repo": "https:\/\/github.com\/bulletinbored\/hellobored-plugin",
+            "version": "1.0.0",
+            "installed_at": "2026-08-05T13:15:41+02:00"
         }
     },
     "themes": {

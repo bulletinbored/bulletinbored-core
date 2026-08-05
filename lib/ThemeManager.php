@@ -208,7 +208,13 @@ class ThemeManager
         }
 
         $dir = $this->themes[$name]['dir'];
-        $this->deleteDir($dir);
+        if (is_dir($dir)) {
+            $this->deleteDir($dir);
+            clearstatcache();
+            if (is_dir($dir)) {
+                return ['success' => false, 'message' => 'Theme directory could not be deleted. It may be in use by another process.'];
+            }
+        }
 
         if ($this->activeTheme === $name) {
             $this->activeTheme = '';
@@ -228,6 +234,27 @@ class ThemeManager
         return ['success' => true, 'message' => 'Theme deleted'];
     }
 
+    public function removeMissing(): array
+    {
+        $this->discover();
+        $removed = [];
+        foreach ($this->themes as $name => $theme) {
+            $hasStyle = is_dir($theme['dir']) && file_exists($theme['css_file']);
+            if (!$hasStyle) {
+                if ($this->activeTheme === $name) {
+                    $this->activeTheme = 'freshbored';
+                }
+                unset($this->themes[$name]);
+                $removed[] = $name;
+                if (is_dir($theme['dir'])) {
+                    $this->deleteDir($theme['dir']);
+                }
+            }
+        }
+        $this->saveManifest();
+        return $removed;
+    }
+
     private function deleteDir(string $dir): void
     {
         if (!is_dir($dir)) {
@@ -237,6 +264,10 @@ class ThemeManager
             $item->isDir() ? @rmdir($item->getPathname()) : @unlink($item->getPathname());
         }
         @rmdir($dir);
+        if (is_dir($dir)) {
+            exec('cmd /c rmdir /s /q ' . escapeshellarg($dir) . ' 2>&1', $out, $code);
+            clearstatcache();
+        }
     }
 
     public function installFromRepo(string $repoUrl, ?string $tag = null, ?string $expectedName = null): array
@@ -264,6 +295,10 @@ class ThemeManager
             }
             $cmd .= ' ' . escapeshellarg($repoUrl) . ' ' . escapeshellarg($targetDir) . ' 2>&1';
             exec($cmd, $out, $code);
+            if ($code !== 0 && $tag) {
+                $cmd = 'git clone --depth 1 ' . escapeshellarg($repoUrl) . ' ' . escapeshellarg($targetDir) . ' 2>&1';
+                exec($cmd, $out, $code);
+            }
             if ($code !== 0) {
                 return ['success' => false, 'message' => 'Git clone failed: ' . implode("\n", $out)];
             }
@@ -317,7 +352,10 @@ class ThemeManager
         }
 
         if (!isset($this->themes[$name])) {
-            return ['success' => false, 'message' => 'Installed package is not a valid theme'];
+            if (is_dir($targetDir)) {
+                $this->deleteDir($targetDir);
+            }
+            return ['success' => false, 'message' => 'Installed package is not a valid theme. Ensure the repository contains a valid style.css and optional manifest.json.'];
         }
 
         return ['success' => true, 'message' => 'Theme installed from repo', 'manifest' => $this->themes[$name]];

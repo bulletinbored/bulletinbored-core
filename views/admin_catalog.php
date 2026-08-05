@@ -101,11 +101,12 @@
                                             <input type="hidden" name="repo" value="<?= escape($repo) ?>">
                                             <input type="hidden" name="tag" value="<?= escape($latestTag) ?>">
                                             <?php if ($isInstalled): ?>
-                                                <button type="submit" name="install_from_catalog" value="1" class="btn btn-sm btn-outline-primary">
-                                                    <?= $updateAvailable ? 'Aggiorna' : 'Reinstalla' ?>
-                                                </button>
+                                                <?php if ($updateAvailable): ?>
+                                                    <button type="submit" name="install_from_catalog" value="1" class="btn btn-sm btn-primary"><?= t('update') ?></button>
+                                                <?php endif; ?>
+                                                <button type="submit" name="uninstall_from_catalog" value="1" class="btn btn-sm btn-outline-danger" onclick="return confirm('<?= t('delete') ?> <?= escape($item['name']) ?>?')"><?= t('uninstall') ?></button>
                                             <?php else: ?>
-                                                <button type="submit" name="install_from_catalog" value="1" class="btn btn-sm btn-primary">Installa</button>
+                                                <button type="submit" name="install_from_catalog" value="1" class="btn btn-sm btn-primary"><?= t('install') ?></button>
                                             <?php endif; ?>
                                         </form>
                                     </td>

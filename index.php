@@ -2145,6 +2145,16 @@ elseif ($action === 'admin_users') {
         }
 
         $allPlugins = $pluginManager->getAll();
+        $missingPlugins = $pluginManager->removeMissing();
+        if (!empty($missingPlugins)) {
+            $installedPath = __DIR__.'/data/installed.json';
+            $installed = file_exists($installedPath) ? json_decode(file_get_contents($installedPath), true) : ['plugins'=>[], 'themes'=>[]];
+            foreach ($missingPlugins as $removed) {
+                $key = strtolower($removed);
+                unset($installed['plugins'][$key]);
+            }
+            file_put_contents($installedPath, json_encode($installed, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+        }
         include __DIR__.'/views/admin_plugins.php';
     }
     elseif ($action === 'admin_themes') {
@@ -2201,6 +2211,16 @@ elseif ($action === 'admin_users') {
         }
 
         $allThemes = $themeManager->getAll();
+        $missingThemes = $themeManager->removeMissing();
+        if (!empty($missingThemes)) {
+            $installedPath = __DIR__.'/data/installed.json';
+            $installed = file_exists($installedPath) ? json_decode(file_get_contents($installedPath), true) : ['plugins'=>[], 'themes'=>[]];
+            foreach ($missingThemes as $removed) {
+                $key = strtolower($removed);
+                unset($installed['themes'][$key]);
+            }
+            file_put_contents($installedPath, json_encode($installed, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+        }
         include __DIR__.'/views/admin_themes.php';
     }
     elseif ($action === 'admin_catalog') {
@@ -2213,6 +2233,31 @@ elseif ($action === 'admin_users') {
         if ($method === 'POST' && isset($_POST['csrf_token'])) {
             if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
                 $adminCatalogError = 'Invalid CSRF token';
+            } elseif (isset($_POST['uninstall_from_catalog'])) {
+                $name = strtolower(trim($_POST['name'] ?? ''));
+                $type = strtolower(trim($_POST['type'] ?? ''));
+                if ($name === '' || !in_array($type, ['plugin', 'theme'])) {
+                    $adminCatalogError = 'Invalid request';
+            } else {
+                $baseDir = $type === 'plugin' ? __DIR__.'/plugins' : __DIR__.'/themes';
+                $target = $baseDir.'/'.$name;
+                if (is_dir($target)) {
+                    require_once __DIR__.'/lib/PluginManager.php';
+                    require_once __DIR__.'/lib/ThemeManager.php';
+                    if ($type === 'plugin') {
+                        $pm = new PluginManager(__DIR__.'/plugins', __DIR__.'/data/plugins.json');
+                        $pm->delete($name);
+                    } else {
+                        $tm = new ThemeManager(__DIR__.'/themes', __DIR__.'/data/themes.json', 'freshbored');
+                        $tm->delete($name);
+                    }
+                }
+                $installedPath = __DIR__.'/data/installed.json';
+                $installed = file_exists($installedPath) ? json_decode(file_get_contents($installedPath), true) : ['plugins'=>[], 'themes'=>[]];
+                unset($installed[$type.'s'][$name]);
+                file_put_contents($installedPath, json_encode($installed, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+                $adminCatalogSuccess = 'Uninstalled successfully';
+            }
             } elseif (isset($_POST['install_from_catalog'])) {
                 $name = strtolower(trim($_POST['name'] ?? ''));
                 $type = strtolower(trim($_POST['type'] ?? ''));
@@ -2257,12 +2302,18 @@ elseif ($action === 'admin_users') {
                 return str_contains(strtolower($item['name'] ?? ''), $search) || str_contains(strtolower($item['description'] ?? ''), $search);
             });
         }
+        $typeFilter = strtolower(trim($_GET['type'] ?? ''));
+        if ($typeFilter !== '' && $typeFilter !== 'all') {
+            $catalog = array_filter($catalog, fn($item) => strtolower($item['type'] ?? '') === $typeFilter);
+        }
 
         foreach ($catalog as $item) {
             $name = strtolower($item['name'] ?? '');
             $type = strtolower($item['type'] ?? '');
             $baseDir = $type === 'plugin' ? __DIR__.'/plugins' : __DIR__.'/themes';
-            if (is_dir($baseDir.'/'.$name) && !isset($installed[$type.'s'][$name])) {
+            $requiredFile = $type === 'plugin' ? '/manifest.json' : '/style.css';
+            $hasFiles = is_dir($baseDir.'/'.$name) && file_exists($baseDir.'/'.$name.$requiredFile);
+            if ($hasFiles && !isset($installed[$type.'s'][$name])) {
                 $manifestPath = $baseDir.'/'.$name.'/manifest.json';
                 $manifest = file_exists($manifestPath) ? json_decode(file_get_contents($manifestPath), true) : [];
                 $installed[$type.'s'][$name] = [
@@ -2271,6 +2322,16 @@ elseif ($action === 'admin_users') {
                     'version' => $manifest['version'] ?? '1.0.0',
                     'installed_at' => date('c')
                 ];
+            }
+        }
+
+        foreach (['plugins','themes'] as $group) {
+            foreach ($installed[$group] as $name => $data) {
+                $baseDir = $group === 'plugins' ? __DIR__.'/plugins' : __DIR__.'/themes';
+                $requiredFile = $group === 'plugins' ? '/manifest.json' : '/style.css';
+                if (!is_dir($baseDir.'/'.$name) || !file_exists($baseDir.'/'.$name.$requiredFile)) {
+                    unset($installed[$group][$name]);
+                }
             }
         }
         file_put_contents(__DIR__.'/data/installed.json', json_encode($installed, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
