@@ -75,6 +75,12 @@ body.admin-layout {
     text-decoration: none;
 }
 
+.sidebar-nav li a.active {
+    background-color: #4e73df;
+    border-left-color: #fff;
+    font-weight: 700;
+}
+
 .sidebar-nav li a i {
     width: 20px;
     margin-right: 10px;

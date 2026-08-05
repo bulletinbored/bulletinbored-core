@@ -1,8 +1,14 @@
 <?php
 // Admin header - completely separate from frontend theme
 function render_admin_header($title = 'Admin Panel') {
-    global $config, $lang;
+    global $config, $lang, $action;
     $siteName = $config['site_name'] ?? 'bulletinbored';
+    $active = function($checks) use ($action) {
+        foreach ((array)$checks as $c) {
+            if ($action === $c) return 'active';
+        }
+        return '';
+    };
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -30,7 +36,7 @@ function render_admin_header($title = 'Admin Panel') {
             <!-- Dashboard -->
             <ul class="sidebar-nav">
                 <li>
-                    <a href="<?= url('admin') ?>">
+                    <a href="<?= url('admin') ?>" class="<?= $active('admin') ?>">
                         <i class="fas fa-tachometer-alt"></i>
                         <span>Dashboard</span>
                     </a>
@@ -41,33 +47,33 @@ function render_admin_header($title = 'Admin Panel') {
             <!-- Moderation -->
             <div class="sidebar-heading">Moderation</div>
             <ul class="sidebar-nav">
-                <li><a href="<?= url('admin_moderation') ?>"><i class="fas fa-clock"></i> <span>Pending Threads</span></a></li>
+                <li><a href="<?= url('admin_moderation') ?>" class="<?= $active('admin_moderation') ?>"><i class="fas fa-clock"></i> <span>Pending Threads</span></a></li>
             </ul>
             <hr class="sidebar-divider">
 
             <!-- Management -->
             <div class="sidebar-heading">Management</div>
             <ul class="sidebar-nav">
-                <li><a href="<?= url('admin_categories') ?>"><i class="fas fa-folder"></i> <span>Categories</span></a></li>
-                <li><a href="<?= url('admin_users') ?>"><i class="fas fa-users"></i> <span>Users</span></a></li>
-                <li><a href="<?= url('admin_roles') ?>"><i class="fas fa-shield-halved"></i> <span>Roles &amp; Permissions</span></a></li>
-                <li><a href="<?= url('admin_plugins') ?>"><i class="fas fa-puzzle-piece"></i> <span>Plugins</span></a></li>
-                <li><a href="<?= url('admin_themes') ?>"><i class="fas fa-palette"></i> <span>Themes</span></a></li>
+                <li><a href="<?= url('admin_categories') ?>" class="<?= $active('admin_categories') ?>"><i class="fas fa-folder"></i> <span>Categories</span></a></li>
+                <li><a href="<?= url('admin_users') ?>" class="<?= $active(['admin_users','admin_user_edit','admin_create_user']) ?>"><i class="fas fa-users"></i> <span>Users</span></a></li>
+                <li><a href="<?= url('admin_roles') ?>" class="<?= $active(['admin_roles','admin_roles_action']) ?>"><i class="fas fa-shield-halved"></i> <span>Roles &amp; Permissions</span></a></li>
+                <li><a href="<?= url('admin_plugins') ?>" class="<?= $active('admin_plugins') ?>"><i class="fas fa-puzzle-piece"></i> <span>Plugins</span></a></li>
+                <li><a href="<?= url('admin_themes') ?>" class="<?= $active('admin_themes') ?>"><i class="fas fa-palette"></i> <span>Themes</span></a></li>
             </ul>
             <hr class="sidebar-divider">
 
             <!-- Extensions -->
             <div class="sidebar-heading">Extensions</div>
             <ul class="sidebar-nav">
-                <li><a href="<?= url('admin_updates') ?>"><i class="fas fa-arrow-up"></i> <span>Updates</span></a></li>
-                <li><a href="<?= url('admin_langs') ?>"><i class="fas fa-language"></i> <span>Languages</span></a></li>
+                <li><a href="<?= url('admin_updates') ?>" class="<?= $active('admin_updates') ?>"><i class="fas fa-arrow-up"></i> <span>Updates</span></a></li>
+                <li><a href="<?= url('admin_langs') ?>" class="<?= $active('admin_langs') ?>"><i class="fas fa-language"></i> <span>Languages</span></a></li>
             </ul>
             <hr class="sidebar-divider">
 
             <!-- System -->
             <div class="sidebar-heading">System</div>
             <ul class="sidebar-nav">
-                <li><a href="<?= url('admin_settings') ?>"><i class="fas fa-cogs"></i> <span>Settings</span></a></li>
+                <li><a href="<?= url('admin_settings') ?>" class="<?= $active('admin_settings') ?>"><i class="fas fa-cogs"></i> <span>Settings</span></a></li>
                 <li><a href="<?= url('home') ?>"><i class="fas fa-arrow-left"></i> <span>Back to Forum</span></a></li>
             </ul>
         </nav>
