@@ -151,7 +151,7 @@ class UpdateManager
             if ($json) {
                 $release = json_decode($json, true);
                 if (is_array($release) && !empty($release['tag_name'])) {
-                    return ltrim($release['tag_name'], 'v');
+                    return $release['tag_name'];
                 }
             }
             return null;
@@ -219,7 +219,7 @@ class UpdateManager
 
     public function applyCoreUpdate(string $tag): bool
     {
-        $zipUrl = 'https://github.com/bulletinbored/bulletinbored-core/archive/refs/tags/v' . rawurlencode($tag) . '.zip';
+        $zipUrl = 'https://github.com/bulletinbored/bulletinbored-core/archive/refs/tags/' . rawurlencode($tag) . '.zip';
         $tmpZip = tempnam(sys_get_temp_dir(), 'bbcore') . '.zip';
         $data = @file_get_contents($zipUrl, false, stream_context_create([
             'http' => [
@@ -291,7 +291,7 @@ class UpdateManager
             return false;
         }
 
-        $zipUrl = 'https://github.com/' . rawurlencode($m[1]) . '/' . rawurlencode($m[2]) . '/archive/refs/tags/v' . rawurlencode($tag) . '.zip';
+        $zipUrl = 'https://github.com/' . rawurlencode($m[1]) . '/' . rawurlencode($m[2]) . '/archive/refs/tags/' . rawurlencode($tag) . '.zip';
         $tmpZip = tempnam(sys_get_temp_dir(), 'bbext') . '.zip';
         $data = @file_get_contents($zipUrl, false, stream_context_create([
             'http' => [

@@ -2,29 +2,29 @@
     "core": {
         "core": {
             "remote_version": "0.1.1",
-            "last_check": "2026-08-05T14:02:47+02:00",
+            "last_check": "2026-08-05T14:04:33+02:00",
             "available_update": null
         }
     },
     "plugins": {
         "bellbored": {
             "remote_version": "0.1.1",
-            "last_check": "2026-08-05T14:02:47+02:00",
+            "last_check": "2026-08-05T14:04:34+02:00",
             "available_update": null
         },
         "editbored": {
             "remote_version": "0.1.1",
-            "last_check": "2026-08-05T14:02:48+02:00",
+            "last_check": "2026-08-05T14:04:35+02:00",
             "available_update": null
         },
         "hellobored": {
             "remote_version": "0.1.1",
-            "last_check": "2026-08-05T14:02:48+02:00",
+            "last_check": "2026-08-05T14:04:35+02:00",
             "available_update": null
         },
         "textmebored": {
             "remote_version": "0.1.1",
-            "last_check": "2026-08-05T14:02:49+02:00",
+            "last_check": "2026-08-05T14:04:36+02:00",
             "available_update": null
         }
     },
@@ -36,7 +36,7 @@
         },
         "freshbored": {
             "remote_version": "0.1.1",
-            "last_check": "2026-08-05T14:02:49+02:00",
+            "last_check": "2026-08-05T14:04:36+02:00",
             "available_update": null
         }
     }
