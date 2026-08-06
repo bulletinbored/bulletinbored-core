@@ -279,7 +279,6 @@ class UpdateManager
     {
         $zipUrl = 'https://github.com/bulletinbored/bulletinbored-core/archive/refs/tags/' . rawurlencode($tag) . '.zip';
         $tmpZip = tempnam(sys_get_temp_dir(), 'bbcore') . '.zip';
-        error_log('BB CORE START tag=' . $tag . ' zip=' . $zipUrl);
         $data = @file_get_contents($zipUrl, false, stream_context_create([
             'http' => [
                 'timeout' => 30,
@@ -287,15 +286,12 @@ class UpdateManager
             ]
         ]));
         if ($data === false) {
-            error_log('BB CORE FAIL download');
             return false;
         }
         file_put_contents($tmpZip, $data);
-        error_log('BB CORE downloaded size=' . strlen($data));
 
         $zip = new ZipArchive();
         if ($zip->open($tmpZip) !== true) {
-            error_log('BB CORE FAIL zip open');
             @unlink($tmpZip);
             return false;
         }
@@ -304,22 +300,17 @@ class UpdateManager
         $zip->extractTo($extractTo);
         $zip->close();
         @unlink($tmpZip);
-        error_log('BB CORE extracted');
 
         $topFolder = glob($extractTo . 'bulletinbored-core-*', GLOB_ONLYDIR);
         if (empty($topFolder)) {
-            error_log('BB CORE FAIL no top folder');
             return false;
         }
-        error_log('BB CORE topFolder=' . $topFolder[0]);
 
         $src = $topFolder[0];
         $items = @scandir($src);
         if ($items === false) {
-            error_log('BB CORE FAIL scandir');
             return false;
         }
-        error_log('BB CORE items=' . count($items));
 
         foreach ($items as $item) {
             if ($item === '.' || $item === '..') {
@@ -359,40 +350,6 @@ class UpdateManager
             }
         }
         $this->deleteRecursive($src);
-                        return false;
-                    }
-                } else {
-                    $this->copyRecursive($srcPath, $targetPath);
-                    if (!@rmdir($srcPath)) {
-                        error_log('BB CORE FAIL rmdir ' . $item);
-                        $this->deleteRecursive($src);
-                        return false;
-                    }
-                }
-            } elseif (is_file($srcPath)) {
-                if (!file_exists($targetPath)) {
-                    if (!rename($srcPath, $targetPath)) {
-                        error_log('BB CORE FAIL rename file ' . $item);
-                        $this->deleteRecursive($src);
-                        return false;
-                    }
-                } else {
-                    if (!copy($srcPath, $targetPath)) {
-                        error_log('BB CORE FAIL copy file ' . $item);
-                        $this->deleteRecursive($src);
-                        return false;
-                    }
-                    if (!@unlink($srcPath)) {
-                        error_log('BB CORE FAIL unlink file ' . $item);
-                        $this->deleteRecursive($src);
-                        return false;
-                    }
-                }
-            }
-        }
-        error_log('BB CORE copied all items');
-        $this->deleteRecursive($src);
-        error_log('BB CORE cleaned src');
 
         $this->setVersion('core', 'core', $tag);
         $versionFile = __DIR__ . '/../VERSION';

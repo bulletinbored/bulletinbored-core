@@ -2,7 +2,7 @@
     "core": {
         "core": {
             "remote_version": "0.1.3",
-            "last_check": "2026-08-06T18:40:33+02:00",
+            "last_check": "2026-08-06T19:14:30+02:00",
             "available_update": null,
             "version": "0.1.2",
             "last_updated": "2026-08-05T15:46:52+02:00"
@@ -11,24 +11,24 @@
     "plugins": {
         "bellbored": {
             "remote_version": "0.1.3",
-            "last_check": "2026-08-06T18:40:33+02:00",
+            "last_check": "2026-08-06T19:14:31+02:00",
             "available_update": null
         },
         "editbored": {
             "remote_version": "0.1.3",
-            "last_check": "2026-08-06T18:40:33+02:00",
+            "last_check": "2026-08-06T19:14:32+02:00",
             "available_update": null
         },
         "hellobored": {
-            "remote_version": "0.1.3",
-            "last_check": "2026-08-06T18:40:33+02:00",
+            "remote_version": "1.0.3",
+            "last_check": "2026-08-06T19:14:32+02:00",
             "available_update": null,
             "version": "1.0.3",
             "last_updated": "2026-08-06T18:34:28+02:00"
         },
         "textmebored": {
             "remote_version": "0.1.3",
-            "last_check": "2026-08-06T18:40:33+02:00",
+            "last_check": "2026-08-06T19:14:32+02:00",
             "available_update": null
         }
     },
@@ -40,7 +40,7 @@
         },
         "freshbored": {
             "remote_version": "0.1.3",
-            "last_check": "2026-08-06T18:40:33+02:00",
+            "last_check": "2026-08-06T19:14:33+02:00",
             "available_update": null
         }
     }
