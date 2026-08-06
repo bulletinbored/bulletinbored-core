@@ -1,6 +1,8 @@
 config.php
 data/database.sqlite
 
+.kilo/
+
 /lang/*.php
 !/lang/en.php
 
