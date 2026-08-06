@@ -492,21 +492,6 @@ class UpdateManager
             }
         }
     }
-        $items = glob($src . '/*');
-        foreach ($items as $item) {
-            $basename = basename($item);
-            $target = $dst . '/' . $basename;
-            if (is_dir($item)) {
-                $this->copyRecursive($item, $target);
-            } elseif (is_file($item)) {
-                if (!file_exists($target)) {
-                    copy($item, $target);
-                } else {
-                    copy($item, $target);
-                }
-            }
-        }
-    }
 
     private function deleteRecursive(string $dir): void
     {
