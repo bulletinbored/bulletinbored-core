@@ -336,8 +336,8 @@ class UpdateManager
                     }
                 } else {
                     $this->copyRecursive($srcPath, $targetPath);
-                    if (basename($srcPath) !== '.kilo' && !@rmdir($srcPath)) {
-                        error_log('BB CORE FAIL rmdir ' . $item);
+                    if (basename($srcPath) !== '.kilo' && !$this->deleteRecursive($srcPath)) {
+                        error_log('BB CORE FAIL delete dir ' . $item);
                         $this->deleteRecursive($src);
                         return false;
                     }
@@ -473,35 +473,39 @@ class UpdateManager
 
     private function copyRecursive(string $src, string $dst): void
     {
-        if (!is_dir($dst)) {
-            if (file_exists($dst)) {
-                return;
+        if (is_dir($src)) {
+            if (!is_dir($dst)) {
+                if (file_exists($dst)) {
+                    @unlink($dst);
+                }
+                mkdir($dst, 0755, true);
             }
-            mkdir($dst, 0755, true);
-        }
-        $items = glob($src . '/*');
-        foreach ($items as $item) {
-            $basename = basename($item);
-            $target = $dst . '/' . $basename;
-            if (is_dir($item)) {
-                $this->copyRecursive($item, $target);
-            } elseif (is_file($item)) {
-                if (!file_exists($target)) {
+            $items = glob($src . '/*');
+            foreach ($items as $item) {
+                $basename = basename($item);
+                $target = $dst . '/' . $basename;
+                if (is_dir($item)) {
+                    $this->copyRecursive($item, $target);
+                } elseif (is_file($item)) {
                     copy($item, $target);
                 }
             }
+        } elseif (is_file($src)) {
+            if (is_dir($dst)) {
+                $this->deleteRecursive($dst);
+            }
+            copy($src, $dst);
         }
     }
 
-    private function deleteRecursive(string $dir): void
+    private function deleteRecursive(string $dir): bool
     {
         if (!is_dir($dir)) {
-            @unlink($dir);
-            return;
+            return @unlink($dir);
         }
         $items = @scandir($dir);
         if ($items === false) {
-            return;
+            return false;
         }
         foreach ($items as $item) {
             if ($item === '.' || $item === '..') {
@@ -514,7 +518,7 @@ class UpdateManager
                 @unlink($path);
             }
         }
-        @rmdir($dir);
+        return @rmdir($dir);
     }
 
     private function clearCache(): void
