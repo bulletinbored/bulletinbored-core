@@ -352,7 +352,7 @@ class UpdateManager
                 } else {
                     $this->copyRecursive($srcPath, $targetPath);
                     if (basename($srcPath) !== '.kilo') {
-                        @rmdir($srcPath);
+                        $this->deleteRecursive($srcPath);
                     }
                 }
             }
