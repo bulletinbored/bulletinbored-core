@@ -5,12 +5,14 @@ class UpdateManager
     private string $manifestPath;
     private array $manifest = [];
     private ?string $updateServer = null;
+    private ?string $githubToken = null;
     private int $cacheTTL = 3600;
 
-    public function __construct(string $manifestPath, ?string $updateServer = null)
+    public function __construct(string $manifestPath, ?string $updateServer = null, ?string $githubToken = null)
     {
         $this->manifestPath = $manifestPath;
         $this->updateServer = $updateServer;
+        $this->githubToken = $githubToken;
         $this->loadManifest();
     }
 
@@ -192,17 +194,26 @@ class UpdateManager
         $version = null;
         if ($repoUrl && preg_match('#(?:https?://)?github\.com/([^/]+)/([^/]+)(?:/|$)#i', $repoUrl, $m)) {
             $apiUrl = 'https://api.github.com/repos/' . rawurlencode($m[1]) . '/' . rawurlencode($m[2]) . '/releases/latest';
+            $headers = [
+                'timeout' => 10,
+                'user_agent' => 'bulletinbored-update-checker/1.0',
+            ];
+            if ($this->githubToken) {
+                $headers['header'] = 'Authorization: token ' . $this->githubToken;
+            }
+            error_log('BB UPDATE CHECK: ' . $type . ' ' . ($name ?? 'core') . ' -> ' . $apiUrl);
             $json = @file_get_contents($apiUrl, false, stream_context_create([
-                'http' => [
-                    'timeout' => 10,
-                    'user_agent' => 'bulletinbored-update-checker/1.0',
-                ]
+                'http' => $headers
             ]));
             if ($json) {
                 $release = json_decode($json, true);
+                error_log('BB UPDATE RESPONSE: ' . $json);
                 if (is_array($release) && !empty($release['tag_name'])) {
                     $version = ltrim($release['tag_name'], 'v');
+                    error_log('BB UPDATE VERSION: ' . $version);
                 }
+            } else {
+                error_log('BB UPDATE FAILED: no response from GitHub');
             }
         }
 
@@ -406,102 +417,49 @@ class UpdateManager
         $zip->close();
         @unlink($tmpZip);
 
+        $src = $tmpExtract;
         $topFolders = glob($tmpExtract . '*', GLOB_ONLYDIR);
         if (count($topFolders) === 1) {
             $src = $topFolders[0];
-            $items = @scandir($src);
-            if ($items !== false) {
-                foreach ($items as $item) {
-                    if ($item === '.' || $item === '..') {
-                        continue;
-                    }
-                    $srcPath = $src . '/' . $item;
-                    $targetPath = $extractTo . $item;
-                    if (is_dir($srcPath)) {
-                        if (!is_dir($targetPath)) {
-                            if (!rename($srcPath, $targetPath)) {
-                                $this->deleteRecursive($src);
-                                $this->deleteRecursive($tmpExtract);
-                                return false;
-                            }
-                        } else {
-                            $this->copyRecursive($srcPath, $targetPath);
-                            if (!@rmdir($srcPath)) {
-                                $this->deleteRecursive($src);
-                                $this->deleteRecursive($tmpExtract);
-                                return false;
-                            }
-                        }
-                    } elseif (is_file($srcPath)) {
-                        if (!file_exists($targetPath)) {
-                            if (!rename($srcPath, $targetPath)) {
-                                $this->deleteRecursive($src);
-                                $this->deleteRecursive($tmpExtract);
-                                return false;
-                            }
-                        } else {
-                            if (!copy($srcPath, $targetPath)) {
-                                $this->deleteRecursive($src);
-                                $this->deleteRecursive($tmpExtract);
-                                return false;
-                            }
-                            if (!@unlink($srcPath)) {
-                                $this->deleteRecursive($src);
-                                $this->deleteRecursive($tmpExtract);
-                                return false;
-                            }
-                        }
-                    }
-                }
+        }
+
+        $pluginDir = $extractTo . $name;
+        $oldDir = $extractTo . '_old_' . $name . '_' . uniqid();
+        if (is_dir($pluginDir)) {
+            if (!@rename($pluginDir, $oldDir)) {
+                $this->deleteRecursive($tmpExtract);
+                return false;
             }
-            $this->deleteRecursive($src);
-        } else {
-            $items = @scandir($tmpExtract);
-            if ($items !== false) {
-                foreach ($items as $item) {
-                    if ($item === '.' || $item === '..') {
-                        continue;
-                    }
-                    $srcPath = $tmpExtract . '/' . $item;
-                    $targetPath = $extractTo . $item;
-                    if (is_dir($srcPath)) {
-                        if (!is_dir($targetPath)) {
-                            if (!rename($srcPath, $targetPath)) {
-                                $this->deleteRecursive($tmpExtract);
-                                return false;
-                            }
-                        } else {
-                            $this->copyRecursive($srcPath, $targetPath);
-                            if (!@rmdir($srcPath)) {
-                                $this->deleteRecursive($tmpExtract);
-                                return false;
-                            }
-                        }
-                    } elseif (is_file($srcPath)) {
-                        if (!file_exists($targetPath)) {
-                            if (!rename($srcPath, $targetPath)) {
-                                $this->deleteRecursive($tmpExtract);
-                                return false;
-                            }
-                        } else {
-                            if (!copy($srcPath, $targetPath)) {
-                                $this->deleteRecursive($tmpExtract);
-                                return false;
-                            }
-                            if (!@unlink($srcPath)) {
-                                $this->deleteRecursive($tmpExtract);
-                                return false;
-                            }
-                        }
-                    }
-                }
+        }
+
+        if (!@rename($src, $pluginDir)) {
+            if (is_dir($oldDir)) {
+                @rename($oldDir, $pluginDir);
             }
             $this->deleteRecursive($tmpExtract);
+            return false;
         }
+
+        $this->deleteRecursive($oldDir);
+        $this->deleteRecursive($tmpExtract);
 
         $targetDir = $extractTo . $name;
         if (!is_dir($targetDir) || !glob($targetDir . '/*')) {
             return false;
+        }
+
+        if ($type === 'plugin') {
+            $pm = new PluginManager(__DIR__ . '/../plugins', __DIR__ . '/../data/plugins.json');
+            $newVersion = $pm->getVersion($name);
+            if ($newVersion !== $tag) {
+                return false;
+            }
+        } elseif ($type === 'theme') {
+            $tm = new ThemeManager(__DIR__ . '/../themes', __DIR__ . '/../data/themes.json', 'freshbored');
+            $newVersion = $tm->getVersion($name);
+            if ($newVersion !== $tag) {
+                return false;
+            }
         }
 
         $this->setVersion($type . 's', $name, $tag);
@@ -557,6 +515,11 @@ class UpdateManager
     private function clearCache(): void
     {
         @unlink($this->cachePath());
+    }
+
+    public function getRemoteVersion(string $type, string $name, ?string $repoUrl = null): ?string
+    {
+        return $this->fetchRemoteVersion($type, $name, $repoUrl);
     }
 
     public function getLockedExtensions(): array

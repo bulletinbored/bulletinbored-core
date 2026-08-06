@@ -54,15 +54,7 @@
                                     $itemName = strtolower($item['name'] ?? '');
                                     $repo = $item['repo'] ?? '';
                                     $type = strtolower($item['type'] ?? '');
-                                    $latestTag = '';
-                                    if (str_contains($repo, 'github.com')) {
-                                        $apiUrl = str_replace(['github.com'], ['api.github.com/repos'], $repo) . '/releases/latest';
-                                        $json = @file_get_contents($apiUrl);
-                                        if ($json) {
-                                            $release = json_decode($json, true);
-                                            $latestTag = $release['tag_name'] ?? '';
-                                        }
-                                    }
+                                    $latestTag = $catalogRemoteVersions[$itemName] ?? '';
                                     if (!$latestTag && !empty($item['version'])) {
                                         $latestTag = $item['version'];
                                     }

@@ -1,8 +1,8 @@
 {
     "core": {
         "core": {
-            "remote_version": null,
-            "last_check": "2026-08-05T16:12:23+02:00",
+            "remote_version": "0.1.2",
+            "last_check": "2026-08-06T18:34:17+02:00",
             "available_update": null,
             "version": "0.1.2",
             "last_updated": "2026-08-05T15:46:52+02:00"
@@ -11,24 +11,24 @@
     "plugins": {
         "bellbored": {
             "remote_version": null,
-            "last_check": "2026-08-05T16:12:24+02:00",
+            "last_check": "2026-08-06T18:34:19+02:00",
             "available_update": null
         },
         "editbored": {
             "remote_version": null,
-            "last_check": "2026-08-05T16:12:25+02:00",
+            "last_check": "2026-08-06T18:34:20+02:00",
             "available_update": null
         },
         "hellobored": {
-            "remote_version": null,
-            "last_check": "2026-08-05T16:03:55+02:00",
+            "remote_version": "1.0.3",
+            "last_check": "2026-08-06T18:34:21+02:00",
             "available_update": null,
-            "version": "1.0.1",
-            "last_updated": "2026-08-05T16:03:01+02:00"
+            "version": "1.0.3",
+            "last_updated": "2026-08-06T18:34:28+02:00"
         },
         "textmebored": {
             "remote_version": null,
-            "last_check": "2026-08-05T16:12:26+02:00",
+            "last_check": "2026-08-06T18:34:22+02:00",
             "available_update": null
         }
     },
@@ -40,7 +40,7 @@
         },
         "freshbored": {
             "remote_version": null,
-            "last_check": "2026-08-05T16:12:28+02:00",
+            "last_check": "2026-08-06T18:34:24+02:00",
             "available_update": null
         }
     }

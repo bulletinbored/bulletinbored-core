@@ -846,7 +846,8 @@ $pluginManager->loadEnabled();
 
 $updateManager = new UpdateManager(
     $config['update_manifest'] ?? __DIR__.'/data/updates.json',
-    !empty($config['update_server']) ? $config['update_server'] : null
+    !empty($config['update_server']) ? $config['update_server'] : null,
+    !empty($config['github_token']) ? $config['github_token'] : null
 );
 
 $activeTheme = $themeManager->getActive();
@@ -2335,6 +2336,14 @@ elseif ($action === 'admin_users') {
             }
         }
         file_put_contents(__DIR__.'/data/installed.json', json_encode($installed, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+
+        $catalogRemoteVersions = [];
+        foreach ($catalog as $item) {
+            $name = strtolower($item['name'] ?? '');
+            $type = strtolower($item['type'] ?? '');
+            $repo = $item['repo'] ?? '';
+            $catalogRemoteVersions[$name] = $updateManager->getRemoteVersion($type, $name, $repo);
+        }
 
         include __DIR__.'/views/admin_catalog.php';
     }

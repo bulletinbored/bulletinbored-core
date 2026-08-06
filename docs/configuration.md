@@ -92,10 +92,24 @@ Configure the default language and available languages:
 
 ## Updates
 
-Configure a remote update server if you want automatic update checking:
+Configure an update server if you want automatic update checking:
 
 ```php
-'update_server' => 'https://updates.example.com',
+'update_server' => 'https://github.com/bulletinbored/bulletinbored-core',
 ```
 
-The server must serve a `versions.json` file. See [Update Manager](managers.md#update-manager) for details.
+If `update_server` points to a GitHub repository, the Update Manager uses the GitHub Releases API automatically and no additional server setup is required.
+
+For non-GitHub servers, the server must expose a `versions.json` file. See [Update Manager](managers.md#update-manager) for details.
+
+### GitHub token
+
+GitHub API has a rate limit of 60 requests/hour for unauthenticated requests. If you expect many update checks, you can provide a GitHub personal access token to raise the limit to 5000 requests/hour:
+
+```php
+'github_token' => 'ghp_xxxxxxxxxxxx',
+```
+
+The token must have the `public_repo` scope. Create one at https://github.com/settings/tokens
+
+> **Security**: never commit `github_token` to a public repository. Store it in an environment variable or a file outside version control.
