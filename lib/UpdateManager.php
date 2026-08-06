@@ -355,16 +355,10 @@ class UpdateManager
                         @rmdir($srcPath);
                     }
                 }
-                    if (!@unlink($srcPath)) {
-                        error_log('BB CORE FAIL unlink file ' . $item);
-                        $this->deleteRecursive($src);
-                        return false;
-                    }
-                }
             }
         }
-        error_log('BB CORE copied all items');
         $this->deleteRecursive($src);
+        error_log('BB CORE copied all items');
         error_log('BB CORE cleaned src');
 
         $this->setVersion('core', 'core', $tag);
@@ -480,8 +474,24 @@ class UpdateManager
     private function copyRecursive(string $src, string $dst): void
     {
         if (!is_dir($dst)) {
+            if (file_exists($dst)) {
+                return;
+            }
             mkdir($dst, 0755, true);
         }
+        $items = glob($src . '/*');
+        foreach ($items as $item) {
+            $basename = basename($item);
+            $target = $dst . '/' . $basename;
+            if (is_dir($item)) {
+                $this->copyRecursive($item, $target);
+            } elseif (is_file($item)) {
+                if (!file_exists($target)) {
+                    copy($item, $target);
+                }
+            }
+        }
+    }
         $items = glob($src . '/*');
         foreach ($items as $item) {
             $basename = basename($item);
