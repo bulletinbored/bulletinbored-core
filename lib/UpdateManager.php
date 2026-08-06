@@ -350,11 +350,11 @@ class UpdateManager
                         return false;
                     }
                 } else {
-                    if (!copy($srcPath, $targetPath)) {
-                        error_log('BB CORE FAIL copy file ' . $item);
-                        $this->deleteRecursive($src);
-                        return false;
+                    $this->copyRecursive($srcPath, $targetPath);
+                    if (basename($srcPath) !== '.kilo') {
+                        @rmdir($srcPath);
                     }
+                }
                     if (!@unlink($srcPath)) {
                         error_log('BB CORE FAIL unlink file ' . $item);
                         $this->deleteRecursive($src);
