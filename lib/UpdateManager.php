@@ -201,19 +201,14 @@ class UpdateManager
             if ($this->githubToken) {
                 $headers['header'] = 'Authorization: token ' . $this->githubToken;
             }
-            error_log('BB UPDATE CHECK: ' . $type . ' ' . ($name ?? 'core') . ' -> ' . $apiUrl);
             $json = @file_get_contents($apiUrl, false, stream_context_create([
                 'http' => $headers
             ]));
             if ($json) {
                 $release = json_decode($json, true);
-                error_log('BB UPDATE RESPONSE: ' . $json);
                 if (is_array($release) && !empty($release['tag_name'])) {
                     $version = ltrim($release['tag_name'], 'v');
-                    error_log('BB UPDATE VERSION: ' . $version);
                 }
-            } else {
-                error_log('BB UPDATE FAILED: no response from GitHub');
             }
         }
 
@@ -307,55 +302,54 @@ class UpdateManager
         @unlink($tmpZip);
 
         $topFolder = glob($extractTo . 'bulletinbored-core-*', GLOB_ONLYDIR);
-        if (!empty($topFolder)) {
-            $src = $topFolder[0];
-            $items = @scandir($src);
-            if ($items !== false) {
-                foreach ($items as $item) {
-                    if ($item === '.' || $item === '..') {
-                        continue;
+        if (empty($topFolder)) {
+            return false;
+        }
+
+        $src = $topFolder[0];
+        $items = @scandir($src);
+        if ($items === false) {
+            return false;
+        }
+
+        foreach ($items as $item) {
+            if ($item === '.' || $item === '..') {
+                continue;
+            }
+            $srcPath = $src . '/' . $item;
+            $targetPath = $extractTo . $item;
+            if (is_dir($srcPath)) {
+                if (!is_dir($targetPath)) {
+                    if (!rename($srcPath, $targetPath)) {
+                        $this->deleteRecursive($src);
+                        return false;
                     }
-                    $srcPath = $src . '/' . $item;
-                    $targetPath = $extractTo . $item;
-                    if (is_dir($srcPath)) {
-                        if (!is_dir($targetPath)) {
-                            if (!rename($srcPath, $targetPath)) {
-                                $this->deleteRecursive($src);
-                                return false;
-                            }
-                        } else {
-                            $this->copyRecursive($srcPath, $targetPath);
-                            if (!@rmdir($srcPath)) {
-                                $this->deleteRecursive($src);
-                                return false;
-                            }
-                        }
-                    } elseif (is_file($srcPath)) {
-                        if (!file_exists($targetPath)) {
-                            if (!rename($srcPath, $targetPath)) {
-                                $this->deleteRecursive($src);
-                                return false;
-                            }
-                        } else {
-                            if (!copy($srcPath, $targetPath)) {
-                                $this->deleteRecursive($src);
-                                return false;
-                            }
-                            if (!@unlink($srcPath)) {
-                                $this->deleteRecursive($src);
-                                return false;
-                            }
-                        }
+                } else {
+                    $this->copyRecursive($srcPath, $targetPath);
+                    if (!@rmdir($srcPath)) {
+                        $this->deleteRecursive($src);
+                        return false;
+                    }
+                }
+            } elseif (is_file($srcPath)) {
+                if (!file_exists($targetPath)) {
+                    if (!rename($srcPath, $targetPath)) {
+                        $this->deleteRecursive($src);
+                        return false;
+                    }
+                } else {
+                    if (!copy($srcPath, $targetPath)) {
+                        $this->deleteRecursive($src);
+                        return false;
+                    }
+                    if (!@unlink($srcPath)) {
+                        $this->deleteRecursive($src);
+                        return false;
                     }
                 }
             }
-            $this->deleteRecursive($src);
         }
-
-        $libDir = $extractTo . 'lib';
-        if (!is_dir($libDir)) {
-            return false;
-        }
+        $this->deleteRecursive($src);
 
         $this->setVersion('core', 'core', $tag);
         $versionFile = __DIR__ . '/../VERSION';
