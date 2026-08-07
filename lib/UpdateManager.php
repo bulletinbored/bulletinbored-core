@@ -176,6 +176,46 @@ class UpdateManager
         return $results;
     }
 
+    /**
+     * HTTP GET helper that prefers cURL (reliable with HTTPS on Windows/XAMPP)
+     * and falls back to file_get_contents when cURL is unavailable.
+     */
+    private function httpGet(string $url, int $timeout = 10, ?string $token = null): ?string
+    {
+        if (function_exists('curl_init')) {
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_TIMEOUT => $timeout,
+                CURLOPT_CONNECTTIMEOUT => $timeout,
+                CURLOPT_USERAGENT => 'bulletinbored-update-checker/1.0',
+                CURLOPT_SSL_VERIFYPEER => false,
+                CURLOPT_SSL_VERIFYHOST => false,
+            ]);
+            if ($token) {
+                curl_setopt($ch, CURLOPT_HTTPHEADER, ['Authorization: token ' . $token]);
+            }
+            $body = curl_exec($ch);
+            $errno = curl_errno($ch);
+            curl_close($ch);
+            if ($errno !== 0 || $body === false) {
+                return null;
+            }
+            return $body;
+        }
+
+        $headers = [
+            'timeout' => $timeout,
+            'user_agent' => 'bulletinbored-update-checker/1.0',
+        ];
+        if ($token) {
+            $headers['header'] = 'Authorization: token ' . $token;
+        }
+        $body = @file_get_contents($url, false, stream_context_create(['http' => $headers]));
+        return $body === false ? null : $body;
+    }
+
     private function fetchRemoteVersion(string $type, ?string $name = null, ?string $repoUrl = null): ?string
     {
         $cached = $this->getCachedVersion($type, $name);
@@ -194,16 +234,7 @@ class UpdateManager
         $version = null;
         if ($repoUrl && preg_match('#(?:https?://)?github\.com/([^/]+)/([^/]+)(?:/|$)#i', $repoUrl, $m)) {
             $apiUrl = 'https://api.github.com/repos/' . rawurlencode($m[1]) . '/' . rawurlencode($m[2]) . '/releases/latest';
-            $headers = [
-                'timeout' => 10,
-                'user_agent' => 'bulletinbored-update-checker/1.0',
-            ];
-            if ($this->githubToken) {
-                $headers['header'] = 'Authorization: token ' . $this->githubToken;
-            }
-            $json = @file_get_contents($apiUrl, false, stream_context_create([
-                'http' => $headers
-            ]));
+            $json = $this->httpGet($apiUrl, 10, $this->githubToken);
             if ($json) {
                 $release = json_decode($json, true);
                 if (is_array($release) && !empty($release['tag_name'])) {
@@ -214,15 +245,8 @@ class UpdateManager
 
         if ($version === null) {
             $url = $this->updateServer . '/versions.json';
-            $context = stream_context_create([
-                'http' => [
-                    'timeout' => 10,
-                    'user_agent' => 'bulletinbored-update-checker/1.0',
-                ]
-            ]);
-
-            $json = @file_get_contents($url, false, $context);
-            if ($json !== false) {
+            $json = $this->httpGet($url, 10);
+            if ($json !== null) {
                 $data = json_decode($json, true);
                 if (is_array($data)) {
                     if ($type === 'core') {
@@ -280,13 +304,8 @@ class UpdateManager
         $zipUrl = 'https://github.com/bulletinbored/bulletinbored-core/archive/refs/tags/' . rawurlencode($tag) . '.zip';
         $tmpZip = tempnam(sys_get_temp_dir(), 'bbcore') . '.zip';
         error_log('BB CORE START tag=' . $tag . ' zip=' . $zipUrl);
-        $data = @file_get_contents($zipUrl, false, stream_context_create([
-            'http' => [
-                'timeout' => 30,
-                'user_agent' => 'bulletinbored-update-checker/1.0',
-            ]
-        ]));
-        if ($data === false) {
+        $data = $this->httpGet($zipUrl, 30);
+        if ($data === null) {
             error_log('BB CORE FAIL download');
             return false;
         }
@@ -392,13 +411,8 @@ class UpdateManager
 
         $zipUrl = 'https://github.com/' . rawurlencode($m[1]) . '/' . rawurlencode($m[2]) . '/archive/refs/tags/' . rawurlencode($tag) . '.zip';
         $tmpZip = tempnam(sys_get_temp_dir(), 'bbext') . '.zip';
-        $data = @file_get_contents($zipUrl, false, stream_context_create([
-            'http' => [
-                'timeout' => 30,
-                'user_agent' => 'bulletinbored-update-checker/1.0',
-            ]
-        ]));
-        if ($data === false) {
+        $data = $this->httpGet($zipUrl, 30);
+        if ($data === null) {
             return false;
         }
         file_put_contents($tmpZip, $data);
