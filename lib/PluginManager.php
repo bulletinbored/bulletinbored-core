@@ -2,6 +2,8 @@
 
 class PluginManager
 {
+    private const DISABLED_BY_DEFAULT = ['hellobored'];
+
     private string $pluginsDir;
     private string $manifestPath;
     private array $plugins = [];
@@ -96,7 +98,7 @@ class PluginManager
             }
             $meta = $this->parseMetadata($file);
             $key = strtolower($meta['name']);
-            $meta['enabled'] = $this->manifest[$key]['enabled'] ?? true;
+            $meta['enabled'] = $this->manifest[$key]['enabled'] ?? !in_array($key, self::DISABLED_BY_DEFAULT, true);
             $this->plugins[$key] = $meta;
         }
 
@@ -122,7 +124,7 @@ class PluginManager
                     'type' => 'folder',
                 ];
                 $key = strtolower($meta['name']);
-                $meta['enabled'] = $this->manifest[$key]['enabled'] ?? true;
+                $meta['enabled'] = $this->manifest[$key]['enabled'] ?? !in_array($key, self::DISABLED_BY_DEFAULT, true);
                 $this->plugins[$key] = $meta;
             }
         }

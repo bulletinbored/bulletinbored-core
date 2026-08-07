@@ -22,6 +22,10 @@ function render_header($title = 'bulletinbored', $options = []) {
     <title><?= escape($title) ?> - <?= escape($siteName) ?></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="icon" type="image/svg+xml" href="<?= base_url() ?>/favicon.svg">
     <?php global $themeCssUrl, $themeManager;
     if (empty($themeCssUrl) && isset($themeManager) && method_exists($themeManager, 'getCssUrl')) {
         $themeCssUrl = $themeManager->getCssUrl();
@@ -34,8 +38,8 @@ function render_header($title = 'bulletinbored', $options = []) {
     <nav class="navbar navbar-expand-lg navbar-forum fixed-top">
         <div class="container">
             <a class="navbar-brand" href="<?= url('home') ?>">
-                <span class="brand-mark"><i class="fas fa-comments"></i></span>
-                <span class="brand-text"><?= escape($siteName) ?></span>
+                <span class="brand-mark">▦</span>
+                <span class="brand-text">bulletin<b>bored</b></span>
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-label="Menu">
                 <span class="navbar-toggler-icon"></span>
@@ -145,7 +149,10 @@ function render_footer() {
         <div class="container">
             <div class="row g-4">
                 <div class="col-md-5">
-                    <h6 class="footer-title"><?= escape($siteName) ?></h6>
+                    <div class="footer-brand">
+                        <span class="brand-mark">▦</span>
+                        <span class="brand-text">bulletin<b>bored</b></span>
+                    </div>
                     <p class="footer-text mb-0"><?= t('footer_tagline') ?></p>
                 </div>
                 <div class="col-6 col-md-3">
@@ -176,6 +183,16 @@ function render_footer() {
     </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        window.addEventListener('scroll', () => {
+            const nav = document.querySelector('.navbar-forum');
+            if (window.scrollY > 20) {
+                nav.classList.add('scrolled');
+            } else {
+                nav.classList.remove('scrolled');
+            }
+        });
+    </script>
 </body>
 </html>
 <?php

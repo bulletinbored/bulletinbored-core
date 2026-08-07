@@ -1,6 +1,9 @@
 config.php
 data/database.sqlite
 data/update-cache.json
+data/plugins.json
+data/installed.json
+data/updates.json
 
 .kilo/
 
@@ -8,8 +11,6 @@ data/update-cache.json
 !/lang/en.php
 
 /plugins/*
-!/plugins/bellbored
-!/plugins/editbored
 !/plugins/hellobored
 /plugins/*/
 

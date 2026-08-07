@@ -379,6 +379,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="step active">1</div>
                 <div class="step-line"></div>
                 <div class="step">2</div>
+                <div class="step-line"></div>
+                <div class="step">3</div>
             </div>
 
             <h1 class="installer-title">Database Setup</h1>
