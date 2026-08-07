@@ -209,8 +209,8 @@ if ($dbDriver === 'mysql') {
         "posts" => "id INT AUTO_INCREMENT PRIMARY KEY, thread_id INT, user_id INT, content TEXT, status VARCHAR(50) DEFAULT 'visible', created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
         "uploads" => "id INT AUTO_INCREMENT PRIMARY KEY, thread_id INT, post_id INT, user_id INT, filename VARCHAR(255), original_name VARCHAR(255), size INT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
         "thread_watchers" => "id INT AUTO_INCREMENT PRIMARY KEY, thread_id INT NOT NULL, user_id INT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE KEY unique_watch (thread_id, user_id)",
-        "notifications" => "id INT AUTO_INCREMENT PRIMARY KEY, user_id INT NOT NULL, type VARCHAR(50) DEFAULT 'info', title TEXT NOT NULL, message TEXT, link TEXT, read INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
-        "private_messages" => "id INT AUTO_INCREMENT PRIMARY KEY, sender_id INT NOT NULL, recipient_id INT NOT NULL, subject TEXT DEFAULT '', content TEXT NOT NULL, read INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
+        "notifications" => "id INT AUTO_INCREMENT PRIMARY KEY, user_id INT NOT NULL, type VARCHAR(50) DEFAULT 'info', title TEXT NOT NULL, message TEXT, link TEXT, is_read INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
+        "private_messages" => "id INT AUTO_INCREMENT PRIMARY KEY, sender_id INT NOT NULL, recipient_id INT NOT NULL, subject TEXT DEFAULT '', content TEXT NOT NULL, is_read INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
         "roles" => "id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(50) NOT NULL UNIQUE, permissions TEXT DEFAULT '[]', created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
         "email_verifications" => "id INT AUTO_INCREMENT PRIMARY KEY, user_id INT NOT NULL, token TEXT NOT NULL, expires_at DATETIME NOT NULL, used INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
     ];
@@ -233,7 +233,7 @@ if ($dbDriver === 'mysql') {
         ['user', json_encode(['can_create_threads', 'can_create_posts', 'can_edit_own_posts', 'can_delete_own_posts'])],
     ];
     foreach ($defaultRoles as $role) {
-        $pdo->prepare("INSERT OR IGNORE INTO roles (name, permissions) VALUES (?, ?)")->execute($role);
+        $pdo->prepare("INSERT IGNORE INTO roles (name, permissions) VALUES (?, ?)")->execute($role);
     }
     
     // Create default category
@@ -305,7 +305,7 @@ CREATE TABLE users (
                 title TEXT NOT NULL,
                 message TEXT,
                 link TEXT,
-                read INTEGER DEFAULT 0,
+                is_read INTEGER DEFAULT 0,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
             CREATE TABLE private_messages (
@@ -314,7 +314,7 @@ CREATE TABLE users (
                 recipient_id INTEGER NOT NULL,
                 subject TEXT DEFAULT '',
                 content TEXT NOT NULL,
-                read INTEGER DEFAULT 0,
+                is_read INTEGER DEFAULT 0,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
             CREATE TABLE roles (
@@ -427,7 +427,7 @@ CREATE TABLE users (
                     title TEXT NOT NULL,
                     message TEXT,
                     link TEXT,
-                    read INTEGER DEFAULT 0,
+                    is_read INTEGER DEFAULT 0,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
             ");
@@ -442,7 +442,7 @@ CREATE TABLE users (
                     recipient_id INTEGER NOT NULL,
                     subject TEXT DEFAULT '',
                     content TEXT NOT NULL,
-                    read INTEGER DEFAULT 0,
+                    is_read INTEGER DEFAULT 0,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
             ");
@@ -468,7 +468,7 @@ CREATE TABLE users (
                 ['user', json_encode(['can_create_threads', 'can_create_posts', 'can_edit_own_posts', 'can_delete_own_posts'])],
             ];
             foreach ($defaultRoles as $role) {
-                $pdo->prepare("INSERT OR IGNORE INTO roles (name, permissions) VALUES (?, ?)")->execute($role);
+        $pdo->prepare("INSERT IGNORE INTO roles (name, permissions) VALUES (?, ?)")->execute($role);
             }
         } catch (PDOException $e) {}
     }
@@ -2581,12 +2581,12 @@ elseif ($action === 'admin_users') {
             if (isset($_POST['do']) && $_POST['do'] === 'mark_read' && isset($_GET['id'])) {
                 $id = (int)$_GET['id'];
                 if ($id > 0) {
-                    $pdo->prepare("UPDATE notifications SET read = 1 WHERE id = ? AND user_id = ?")
+                    $pdo->prepare("UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?")
                         ->execute([$id, $_SESSION['user_id']]);
                 }
             }
             if (isset($_POST['do']) && $_POST['do'] === 'mark_all_read') {
-                $pdo->prepare("UPDATE notifications SET read = 1 WHERE user_id = ? AND read = 0")
+                $pdo->prepare("UPDATE notifications SET is_read = 1 WHERE user_id = ? AND is_read = 0")
                     ->execute([$_SESSION['user_id']]);
             }
             redirect(url('notifications'));
@@ -2622,7 +2622,7 @@ elseif ($action === 'admin_users') {
             $messages->execute(['me' => $_SESSION['user_id'], 'other' => $conversationUserId]);
             $messages = $messages->fetchAll();
 
-            $pdo->prepare("UPDATE private_messages SET read = 1 WHERE recipient_id = :me AND sender_id = :other AND read = 0")
+            $pdo->prepare("UPDATE private_messages SET is_read = 1 WHERE recipient_id = :me AND sender_id = :other AND is_read = 0")
                 ->execute(['me' => $_SESSION['user_id'], 'other' => $conversationUserId]);
 
             $otherUser = $pdo->prepare("SELECT username FROM users WHERE id = ?");
@@ -2635,13 +2635,13 @@ elseif ($action === 'admin_users') {
                 SELECT
                     CASE WHEN sender_id = :uid THEN recipient_id ELSE sender_id END as other_user_id,
                     MAX(created_at) as last_message_at,
-                    MAX(read) as last_read,
+                    MAX(is_read) as last_read,
                     (SELECT content FROM private_messages pm2
                      WHERE ((pm2.sender_id = :uid AND pm2.recipient_id = CASE WHEN pm.sender_id = :uid THEN pm.recipient_id ELSE pm.sender_id END)
                          OR (pm2.recipient_id = :uid AND pm2.sender_id = CASE WHEN pm.sender_id = :uid THEN pm.recipient_id ELSE pm.sender_id END))
                      ORDER BY pm2.created_at DESC LIMIT 1) as last_message,
                     (SELECT username FROM users u WHERE u.id = CASE WHEN pm.sender_id = :uid THEN pm.recipient_id ELSE pm.sender_id END) as other_username,
-                    SUM(CASE WHEN recipient_id = :uid AND read = 0 THEN 1 ELSE 0 END) as unread_count
+                    SUM(CASE WHEN recipient_id = :uid AND is_read = 0 THEN 1 ELSE 0 END) as unread_count
                 FROM private_messages pm
                 WHERE sender_id = :uid OR recipient_id = :uid
                 GROUP BY other_user_id

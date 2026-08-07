@@ -29,7 +29,7 @@
                 $nDate = $n['created_at'] ?? '';
                 $nFormattedDate = $nDate ? date('M j, Y H:i', strtotime($nDate)) : '';
             ?>
-                <div class="list-group-item <?= $n['read'] ? '' : 'list-group-item-warning' ?>">
+                <div class="list-group-item <?= $n['is_read'] ? '' : 'list-group-item-warning' ?>">
                     <div class="d-flex justify-content-between align-items-start">
                         <div>
                             <h6 class="mb-1"><?= escape($n['title']) ?></h6>
@@ -40,7 +40,7 @@
                             <?php if ($n['link']): ?>
                                 <a href="<?= escape($n['link']) ?>" class="btn btn-sm btn-outline-primary"><i class="fas fa-external-link-alt me-1"></i>View</a>
                             <?php endif; ?>
-                            <?php if (!$n['read']): ?>
+                            <?php if (!$n['is_read']): ?>
                                 <form method="POST" action="<?= url('notifications', ['do' => 'mark_read', 'id' => $n['id']]) ?>" class="d-inline" onsubmit="return confirm('Mark as read?')">
                                     <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                                     <button type="submit" class="btn btn-sm btn-outline-success"><i class="fas fa-check me-1"></i>Mark read</button>

@@ -70,10 +70,10 @@ function render_header($title = 'bulletinbored', $options = []) {
                         if (!empty($pdo)) {
                             try {
                                 $me = (int)($_SESSION['user_id'] ?? 0);
-                                $stmt = $pdo->prepare("SELECT COUNT(*) FROM private_messages WHERE recipient_id = ? AND read = 0");
+                                $stmt = $pdo->prepare("SELECT COUNT(*) FROM private_messages WHERE recipient_id = ? AND is_read = 0");
                                 $stmt->execute([$me]);
                                 $navUnreadMsg = (int)$stmt->fetchColumn();
-                                $stmt = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND read = 0");
+                                $stmt = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
                                 $stmt->execute([$me]);
                                 $navUnreadNotif = (int)$stmt->fetchColumn();
                             } catch (PDOException $e) {}
