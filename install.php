@@ -103,20 +103,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Installation - bulletinbored</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="icon" type="image/svg+xml" href="<?= htmlspecialchars(rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'])), '/') . '/favicon.svg', ENT_QUOTES, 'UTF-8') ?>">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
     <style>
         :root {
             --fb-brand: #550296;
-            --fb-brand-dark: #3d046f;
-            --fb-brand-soft: #eef1ff;
+            --fb-brand-dark: #7a04d4;
+            --fb-brand-soft: #f3e5f5;
             --fb-bg: #f6f7f9;
             --fb-surface: #ffffff;
-            --fb-border: #e6e8ec;
+            --fb-border: #e2e2f0;
             --fb-border-soft: #f0f1f4;
-            --fb-text: #1f2430;
-            --fb-muted: #6b7280;
-            --fb-muted-soft: #9aa1ad;
+            --fb-text: #1a1a2e;
+            --fb-muted: #6b6b8a;
+            --fb-muted-soft: #9b9bb8;
             --fb-radius: 12px;
             --fb-radius-sm: 8px;
             --fb-shadow: 0 1px 2px rgba(16, 24, 40, .05);
@@ -126,7 +130,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         body {
             background-color: var(--fb-bg);
             color: var(--fb-text);
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -145,20 +149,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         .installer-logo i {
+            display: none;
+        }
+
+        .installer-logo::before {
+            content: '▦';
             font-size: 2.5rem;
             color: var(--fb-brand);
-            background: var(--fb-brand-soft);
-            padding: 1.1rem;
-            border-radius: 18px;
+            line-height: 1;
         }
 
         .installer-logo span {
             display: block;
             margin-top: 0.75rem;
             font-size: 1.35rem;
-            font-weight: 700;
+            font-weight: 800;
             color: var(--fb-text);
-            letter-spacing: -0.01em;
+            letter-spacing: -0.02em;
+        }
+
+        .installer-logo span b {
+            color: var(--fb-brand);
         }
 
         .installer-card {
@@ -210,9 +221,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         .installer-title {
             font-size: 1.5rem;
-            font-weight: 700;
+            font-weight: 800;
             margin-bottom: 0.35rem;
             text-align: center;
+            letter-spacing: -0.02em;
         }
 
         .installer-subtitle {
@@ -250,14 +262,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         .driver-card input:checked + .driver-card-content {
-            border-color: var(--fb-brand);
-            background: var(--fb-brand-soft);
-            box-shadow: 0 0 0 4px rgba(61, 90, 254, .08);
+            border-color: #550296;
+            background: #f3e5f5;
+            box-shadow: 0 0 0 4px rgba(85, 2, 150, .08);
         }
 
         .driver-card-content i {
             font-size: 1.75rem;
-            color: var(--fb-brand);
+            color: #550296;
             margin-bottom: 0.6rem;
             display: block;
         }
@@ -292,24 +304,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         .form-control:focus {
-            border-color: var(--fb-brand);
-            box-shadow: 0 0 0 3px rgba(61, 90, 254, .1);
+            border-color: #550296;
+            box-shadow: 0 0 0 3px rgba(85, 2, 150, .1);
             background: var(--fb-surface);
         }
 
         .btn-brand {
-            background-color: var(--fb-brand);
-            border: 1px solid var(--fb-brand);
+            background: linear-gradient(135deg, var(--fb-brand), var(--fb-brand-dark));
+            border: 1px solid transparent;
             color: #fff;
             font-weight: 600;
-            border-radius: var(--fb-radius-sm);
-            padding: 0.6rem 1.25rem;
+            border-radius: var(--fb-radius);
+            padding: 0.65rem 1.5rem;
+            box-shadow: 0 4px 16px rgba(85, 2, 150, 0.3);
         }
 
         .btn-brand:hover, .btn-brand:focus {
-            background-color: var(--fb-brand-dark);
-            border-color: var(--fb-brand-dark);
+            background: linear-gradient(135deg, var(--fb-brand), #9a3bf6);
+            border-color: transparent;
             color: #fff;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(85, 2, 150, 0.4);
         }
 
         .btn-outline-soft {
@@ -322,9 +337,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         .btn-outline-soft:hover {
-            background-color: var(--fb-brand-soft);
-            border-color: var(--fb-brand);
-            color: var(--fb-brand-dark);
+            background-color: transparent;
+            border-color: #550296;
+            color: #550296;
+            transform: translateY(-2px);
         }
 
         .installer-foot {
@@ -369,10 +385,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </head>
 <body>
     <div class="installer-wrap">
-        <div class="installer-logo">
-            <i class="fas fa-comments"></i>
-            <span>bulletinbored</span>
-        </div>
+            <div class="installer-logo">
+                <span>bulletin<b>bored</b></span>
+            </div>
 
         <div class="installer-card">
             <div class="installer-steps">
