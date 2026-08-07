@@ -1,7 +1,0 @@
-{
-    "name": "editbored",
-    "version": "1.0.0",
-    "author": "mlzog",
-    "description": "WYSIWYG Markdown editor with mentions and image upload",
-    "bootstrap": "editbored.php"
-}
