@@ -138,6 +138,8 @@ case 'admin_users':
             return $base . '/admin/langs' . (!empty($query) ? '?' . http_build_query($query) : '');
         case 'admin_plugins':
             return $base . '/admin/plugins' . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'admin_diagnostics':
+            return $base . '/admin/diagnostics' . (!empty($query) ? '?' . http_build_query($query) : '');
         case 'admin_catalog':
             return $base . '/admin/catalog' . (!empty($query) ? '?' . http_build_query($query) : '');
         case 'admin_themes':
@@ -195,9 +197,10 @@ $dbPath = $config['db_path'];
 $dbDriver = $config['db_driver'] ?? 'sqlite';
 
 // Database initialization
+require_once __DIR__.'/lib/BbPdo.php';
 if ($dbDriver === 'mysql') {
     $dsn = "mysql:host={$config['db_host']};dbname={$config['db_name']};charset=utf8mb4";
-    $pdo = new PDO($dsn, $config['db_user'], $config['db_pass']);
+    $pdo = new BbPdo($dsn, $config['db_user'], $config['db_pass']);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     $pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
     
@@ -918,7 +921,9 @@ if (!isset($_GET['action'])) {
 } elseif (preg_match('#^admin/users/([0-9]+)/edit$#', $reqPath, $m)) {
           $_GET['action'] = 'admin_user_edit';
           $_GET['id'] = (int)$m[1];
-      } elseif (preg_match('#^admin/updates$#', $reqPath)) {
+      } elseif (preg_match('#^admin/diagnostics$#', $reqPath)) {
+         $_GET['action'] = 'admin_diagnostics';
+    } elseif (preg_match('#^admin/updates$#', $reqPath)) {
          $_GET['action'] = 'admin_updates';
      } elseif (preg_match('#^admin/roles$#', $reqPath)) {
          $_GET['action'] = 'admin_roles';
@@ -2083,6 +2088,78 @@ elseif ($action === 'admin_users') {
             $langOptions[] = $code;
         }
         include __DIR__.'/views/admin_langs.php';
+    }
+    elseif ($action === 'admin_diagnostics') {
+        if (!is_admin()) {
+            die('Admin required');
+        }
+
+        $diag = [];
+
+        $diag['php_version'] = PHP_VERSION;
+
+        $diag['zip'] = extension_loaded('zip');
+        $diag['curl'] = extension_loaded('curl');
+        $diag['allow_url_fopen'] = (bool) ini_get('allow_url_fopen');
+        $diag['exec'] = function_exists('exec');
+        $diag['git'] = false;
+        if (function_exists('exec')) {
+            $out = @shell_exec('git --version 2>/dev/null');
+            $diag['git'] = !empty($out);
+        }
+
+        // Test outbound HTTPS to GitHub (same host used by plugin/theme install)
+        $githubOk = false;
+        $githubError = '';
+        $testUrl = 'https://github.com/bulletinbored/editbored-plugin/archive/refs/heads/main.zip';
+        if (extension_loaded('curl')) {
+            $ch = curl_init($testUrl);
+            curl_setopt_array($ch, [
+                CURLOPT_HEADER => true,
+                CURLOPT_NOBODY => true,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_TIMEOUT => 15,
+                CURLOPT_SSL_VERIFYPEER => true,
+                CURLOPT_USERAGENT => 'Mozilla/5.0 (compatible; ForumDiagnostics/1.0)',
+            ]);
+            $githubOk = curl_exec($ch) !== false && curl_getinfo($ch, CURLINFO_HTTP_CODE) < 500;
+            if (!$githubOk) {
+                $githubError = curl_error($ch) ?: ('HTTP ' . curl_getinfo($ch, CURLINFO_HTTP_CODE));
+            }
+            curl_close($ch);
+        } elseif (ini_get('allow_url_fopen')) {
+            $ctx = stream_context_create(['http' => ['timeout' => 15, 'method' => 'HEAD'], 'https' => ['timeout' => 15, 'method' => 'HEAD']]);
+            $headers = @get_headers($testUrl, 0, $ctx);
+            if ($headers && !str_contains(implode("\n", $headers), ' 5')) {
+                $githubOk = true;
+            } else {
+                $githubError = 'Unable to reach GitHub via file_get_contents';
+            }
+        } else {
+            $githubError = 'No outbound HTTP transport available (need curl or allow_url_fopen)';
+        }
+        $diag['github_reachable'] = $githubOk;
+        $diag['github_error'] = $githubError;
+
+        $diag['can_install'] = $diag['zip'] && ($diag['curl'] || $diag['allow_url_fopen']) && $githubOk;
+
+        $recommendations = [];
+        if (!$diag['zip']) {
+            $recommendations[] = 'Enable the PHP <code>zip</code> extension so packages can be extracted.';
+        }
+        if (!$diag['curl'] && !$diag['allow_url_fopen']) {
+            $recommendations[] = 'Enable <code>curl</code> or set <code>allow_url_fopen = On</code> so the server can download packages.';
+        }
+        if (!$githubOk) {
+            $recommendations[] = 'The server cannot reach GitHub (' . escape($githubError) . '). Outbound HTTPS is required for one-click install.';
+        }
+        if ($diag['git']) {
+            $recommendations[] = 'Git is available — installs will use it directly.';
+        } elseif ($diag['can_install']) {
+            $recommendations[] = 'All requirements met: one-click install from the catalog will work via downloaded zip.';
+        }
+
+        include __DIR__ . '/views/admin_diagnostics.php';
     }
     elseif ($action === 'admin_plugins') {
         // Plugin management

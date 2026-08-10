@@ -284,6 +284,10 @@ class PluginManager
             return ['success' => false, 'message' => 'File not found'];
         }
 
+        if (!class_exists('ZipArchive')) {
+            return ['success' => false, 'message' => 'The PHP zip extension is not enabled on this server. Enable it or extract the plugin manually into the plugins/ directory.'];
+        }
+
         $zip = new ZipArchive();
         $res = $zip->open($zipPath);
         if ($res !== true) {
@@ -415,31 +419,10 @@ class PluginManager
         $repoName = basename(str_replace(['\\', '.git'], ['', ''], $repo));
         $targetDir = $dest . ($expectedName ?: $repoName);
 
-        if (is_dir($targetDir) && is_dir($targetDir . '/.git')) {
-            exec('git -C ' . escapeshellarg($targetDir) . ' fetch --tags 2>&1', $fetchOut, $fetchCode);
-            if ($tag) {
-                exec('git -C ' . escapeshellarg($targetDir) . ' checkout -q ' . escapeshellarg($tag) . ' 2>&1', $out, $code);
-                exec('git -C ' . escapeshellarg($targetDir) . ' pull --ff-only 2>&1', $out, $code);
-            } else {
-                exec('git -C ' . escapeshellarg($targetDir) . ' pull --ff-only 2>&1', $out, $code);
-            }
-        } else {
-            if (is_dir($targetDir)) {
-                $this->deleteDir($targetDir);
-            }
-            $cmd = 'git clone --depth 1';
-            if ($tag) {
-                $cmd .= ' --branch ' . escapeshellarg($tag);
-            }
-            $cmd .= ' ' . escapeshellarg($repoUrl) . ' ' . escapeshellarg($targetDir) . ' 2>&1';
-            exec($cmd, $out, $code);
-            if ($code !== 0 && $tag) {
-                $cmd = 'git clone --depth 1 ' . escapeshellarg($repoUrl) . ' ' . escapeshellarg($targetDir) . ' 2>&1';
-                exec($cmd, $out, $code);
-            }
-            if ($code !== 0) {
-                return ['success' => false, 'message' => 'Git clone failed: ' . implode("\n", $out)];
-            }
+        require_once __DIR__ . '/repo_install.php';
+        $result = install_repo_package($repoUrl, $targetDir, $tag, $expectedName ?: $repoName);
+        if (!$result['success']) {
+            return $result;
         }
 
         if (is_dir($targetDir)) {

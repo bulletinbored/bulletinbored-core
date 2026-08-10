@@ -1,0 +1,181 @@
+<?php
+
+/**
+ * Install a repository without requiring git to be present on the server.
+ *
+ * Tries git first (when available), then falls back to downloading a zip
+ * archive from common Git hosts (GitHub / GitLab) and extracting it.
+ *
+ * @return array{success:bool,message:string}
+ */
+function install_repo_package(string $repoUrl, string $targetDir, ?string $tag = null, ?string $expectedName = null): array
+{
+    $repo = trim($repoUrl, '/');
+    $repoName = basename(str_replace(['\\', '.git'], ['', ''], $repo));
+    $dest = rtrim(dirname($targetDir), '/') . '/';
+    $finalName = $expectedName ?: $repoName;
+    $targetDir = $dest . $finalName;
+
+    if (is_dir($targetDir)) {
+        if (function_exists('exec') && !empty(shell_exec('git --version 2>/dev/null'))) {
+            exec('git -C ' . escapeshellarg($targetDir) . ' fetch --tags 2>&1', $fetchOut, $fetchCode);
+            $pull = $tag
+                ? 'git -C ' . escapeshellarg($targetDir) . ' checkout -q ' . escapeshellarg($tag) . ' 2>&1 && git -C ' . escapeshellarg($targetDir) . ' pull --ff-only 2>&1'
+                : 'git -C ' . escapeshellarg($targetDir) . ' pull --ff-only 2>&1';
+            exec($pull, $out, $code);
+            if ($code === 0) {
+                return ['success' => true, 'message' => 'Repository updated'];
+            }
+        }
+    } else {
+        if (function_exists('exec') && !empty(shell_exec('git --version 2>/dev/null'))) {
+            $cmd = 'git clone --depth 1';
+            if ($tag) {
+                $cmd .= ' --branch ' . escapeshellarg($tag);
+            }
+            $cmd .= ' ' . escapeshellarg($repoUrl) . ' ' . escapeshellarg($targetDir) . ' 2>&1';
+            exec($cmd, $out, $code);
+            if ($code === 0) {
+                return ['success' => true, 'message' => 'Repository cloned'];
+            }
+        }
+    }
+
+    // Fallback: download a zip archive and extract it.
+    return download_repo_archive($repoUrl, $targetDir, $tag);
+}
+
+function download_repo_archive(string $repoUrl, string $targetDir, ?string $tag = null): array
+{
+    if (!is_dir($targetDir)) {
+        if (!@mkdir($targetDir, 0755, true) && !is_dir($targetDir)) {
+            return ['success' => false, 'message' => 'Unable to create target directory: ' . $targetDir];
+        }
+    }
+
+    $archiveUrls = repo_archive_urls($repoUrl, $tag);
+    if (empty($archiveUrls)) {
+        return ['success' => false, 'message' => 'Git is not available and the repository host does not support direct archive downloads. Install git on the server or upload the package manually.'];
+    }
+
+    $tmp = tempnam(sys_get_temp_dir(), 'repo') . '.zip';
+    $downloaded = false;
+    $lastUrl = '';
+    $lastCode = null;
+    foreach ($archiveUrls as $archiveUrl) {
+        $lastUrl = $archiveUrl;
+        $code = null;
+        if (download_file($archiveUrl, $tmp, $code)) {
+            $downloaded = true;
+            break;
+        }
+        $lastCode = $code;
+    }
+    if (!$downloaded) {
+        @unlink($tmp);
+        $detail = $lastCode ? ' (HTTP ' . $lastCode . ')' : '';
+        return ['success' => false, 'message' => 'Failed to download archive from ' . $lastUrl . $detail];
+    }
+
+    $extracted = extract_zip($tmp, $targetDir);
+    @unlink($tmp);
+    if (!$extracted) {
+        return ['success' => false, 'message' => 'Failed to extract archive. Ensure the PHP zip extension is enabled.'];
+    }
+
+    // Git archives nest files under <repo>-<ref>/ ; flatten if needed.
+    $entries = array_values(array_filter(glob($targetDir . '/*'), 'is_dir'));
+    if (count($entries) === 1) {
+        $nested = $entries[0];
+        foreach (glob($nested . '/*') as $item) {
+            $base = basename($item);
+            $destItem = $targetDir . '/' . $base;
+            if (file_exists($destItem)) {
+                continue;
+            }
+            rename($item, $destItem);
+        }
+        @rmdir($nested);
+    }
+
+    return ['success' => true, 'message' => 'Package installed from archive'];
+}
+
+function repo_archive_urls(string $repoUrl, ?string $tag): array
+{
+    $repo = rtrim(trim($repoUrl, '/'), '.git');
+
+    if (preg_match('#^https?://github\.com/([^/]+)/([^/]+)#i', $repo, $m)) {
+        $owner = $m[1];
+        $name = $m[2];
+        if ($tag) {
+            return [
+                "https://github.com/{$owner}/{$name}/archive/refs/tags/{$tag}.zip",
+                "https://github.com/{$owner}/{$name}/archive/refs/heads/main.zip",
+                "https://github.com/{$owner}/{$name}/archive/refs/heads/master.zip",
+            ];
+        }
+        return [
+            "https://github.com/{$owner}/{$name}/archive/refs/heads/main.zip",
+            "https://github.com/{$owner}/{$name}/archive/refs/heads/master.zip",
+        ];
+    }
+
+    if (preg_match('#^https?://gitlab\.com/([^/]+/[^/]+)#i', $repo, $m)) {
+        $project = urlencode($m[1]);
+        $ref = $tag ?: 'main';
+        return ["https://gitlab.com/api/v4/projects/{$project}/repository/archive.zip?sha={$ref}"];
+    }
+
+    return [];
+}
+
+function download_file(string $url, string $dest, ?int &$httpCode = null): bool
+{
+    if (function_exists('curl_init')) {
+        $ch = curl_init($url);
+        $fp = @fopen($dest, 'wb');
+        if ($fp === false) {
+            return false;
+        }
+        curl_setopt($ch, CURLOPT_FILE, $fp);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 120);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (compatible; ForumInstaller/1.0)');
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+        $executed = curl_exec($ch);
+        $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $ok = $executed !== false && $httpCode < 400 && $httpCode > 0;
+        curl_close($ch);
+        fclose($fp);
+        return (bool)$ok;
+    }
+
+    if (ini_get('allow_url_fopen')) {
+        $ctx = stream_context_create([
+            'http' => ['timeout' => 120, 'user_agent' => 'Mozilla/5.0 (compatible; ForumInstaller/1.0)'],
+            'https' => ['timeout' => 120, 'user_agent' => 'Mozilla/5.0 (compatible; ForumInstaller/1.0)'],
+        ]);
+        $data = @file_get_contents($url, false, $ctx);
+        if ($data === false) {
+            return false;
+        }
+        return file_put_contents($dest, $data) !== false;
+    }
+
+    return false;
+}
+
+function extract_zip(string $zipPath, string $targetDir): bool
+{
+    if (!class_exists('ZipArchive')) {
+        return false;
+    }
+    $zip = new ZipArchive();
+    if ($zip->open($zipPath) !== true) {
+        return false;
+    }
+    $ok = $zip->extractTo($targetDir);
+    $zip->close();
+    return (bool)$ok;
+}

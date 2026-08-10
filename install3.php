@@ -37,7 +37,11 @@ $availablePlugins = [
     ],
 ];
 
-$selected = $_POST['plugins'] ?? array_keys($availablePlugins);
+if (isset($_POST['install'])) {
+    $selected = $_POST['plugins'] ?? [];
+} else {
+    $selected = array_keys($availablePlugins);
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install'])) {
     $dbDriver = $_SESSION['install_db_driver'];
