@@ -207,7 +207,7 @@ if ($dbDriver === 'mysql') {
     // MySQL tables
     $tables = [
         "users" => "id INT AUTO_INCREMENT PRIMARY KEY, username VARCHAR(255) UNIQUE NOT NULL, password VARCHAR(255) NOT NULL, email VARCHAR(255), role VARCHAR(50) DEFAULT 'user', avatar VARCHAR(255), status VARCHAR(50) DEFAULT 'active', email_verified INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
-        "categories" => "id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255) NOT NULL, description TEXT, position INT DEFAULT 0",
+        "categories" => "id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255) NOT NULL UNIQUE, description TEXT, position INT DEFAULT 0",
         "threads" => "id INT AUTO_INCREMENT PRIMARY KEY, category_id INT, user_id INT, title TEXT, content TEXT, status VARCHAR(50) DEFAULT 'visible', created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP",
         "posts" => "id INT AUTO_INCREMENT PRIMARY KEY, thread_id INT, user_id INT, content TEXT, status VARCHAR(50) DEFAULT 'visible', created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
         "uploads" => "id INT AUTO_INCREMENT PRIMARY KEY, thread_id INT, post_id INT, user_id INT, filename VARCHAR(255), original_name VARCHAR(255), size INT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
@@ -239,8 +239,8 @@ if ($dbDriver === 'mysql') {
         $pdo->prepare("INSERT IGNORE INTO roles (name, permissions) VALUES (?, ?)")->execute($role);
     }
     
-    // Create default category
-    $pdo->prepare("INSERT IGNORE INTO categories (name, description, position) VALUES ('General', 'General discussion', 1)")->execute();
+    // Create default category (idempotent: only if it does not already exist)
+    $pdo->prepare("INSERT INTO categories (name, description, position) SELECT 'General', 'General discussion', 1 WHERE NOT EXISTS (SELECT 1 FROM categories WHERE name = 'General')")->execute();
 } else {
     // SQLite handling
     if (!file_exists($dbPath)) {
@@ -336,7 +336,7 @@ CREATE TABLE users (
         
         // Insert default data
         $pdo->exec("INSERT INTO users (username, password, role) VALUES ('admin', '".password_hash($config['admin_pass'], PASSWORD_DEFAULT)."', 'admin')");
-        $pdo->exec("INSERT INTO categories (name, description, position) VALUES ('General', 'General discussion', 1)");
+        $pdo->exec("INSERT INTO categories (name, description, position) SELECT 'General', 'General discussion', 1 FROM dual WHERE NOT EXISTS (SELECT 1 FROM categories WHERE name = 'General')");
     } else {
         // Existing database - just connect
         $pdo = new PDO('sqlite:'.$dbPath);

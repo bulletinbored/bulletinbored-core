@@ -103,7 +103,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install'])) {
                 $pdo->prepare("INSERT IGNORE INTO roles (name, permissions) VALUES (?, ?)")->execute($role);
             }
 
-            $pdo->prepare("INSERT IGNORE INTO categories (name, description, position) VALUES ('General', 'General discussion', 1)")->execute();
+            $pdo->prepare("INSERT INTO categories (name, description, position) SELECT 'General', 'General discussion', 1 WHERE NOT EXISTS (SELECT 1 FROM categories WHERE name = 'General')")->execute();
         } else {
             $pdo->exec("
                 CREATE TABLE users (
@@ -218,7 +218,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install'])) {
                 $pdo->prepare("INSERT IGNORE INTO roles (name, permissions) VALUES (?, ?)")->execute($role);
             }
 
-            $pdo->prepare("INSERT IGNORE INTO categories (name, description, position) VALUES ('General', 'General discussion', 1)")->execute();
+            $pdo->prepare("INSERT INTO categories (name, description, position) SELECT 'General', 'General discussion', 1 WHERE NOT EXISTS (SELECT 1 FROM categories WHERE name = 'General')")->execute();
         }
 
         foreach (['data', 'plugins', 'uploads', 'uploads/avatars'] as $d) {
