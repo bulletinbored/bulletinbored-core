@@ -1,12 +1,23 @@
 <IfModule mod_rewrite.c>
     RewriteEngine On
-    RewriteBase /forum-nuovo/
 
-    RewriteRule ^thread/([0-9]+)(?:-([^/]+))?$ index.php?action=thread&id=$1 [L,QSA]
-    RewriteRule ^category/([0-9]+)(?:-([^/]+))?$ index.php?action=category&id=$1 [L,QSA]
-    RewriteRule ^u/([^/]+)$ index.php?action=profile&user=$1 [L,QSA]
+    # Build the rewrite base dynamically from the request path so the rules
+    # work no matter where the forum is installed (/forum, /forum-nuovo, root...).
+    # %1 captures the leading directory portion of the request URI.
+    RewriteCond %{REQUEST_URI} ^(.*?)[^/]*$
+    RewriteRule ^ - [E=REWRITE_BASE:%1]
+
+    RewriteRule ^thread/([0-9]+)(?:-([^/]+))?$ %{ENV:REWRITE_BASE}index.php?action=thread&id=$1 [L,QSA]
+    RewriteRule ^category/([0-9]+)(?:-([^/]+))?$ %{ENV:REWRITE_BASE}index.php?action=category&id=$1 [L,QSA]
+    RewriteRule ^u/([^/]+)$ %{ENV:REWRITE_BASE}index.php?action=profile&user=$1 [L,QSA]
 
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteCond %{REQUEST_FILENAME} !-d
-    RewriteRule ^ index.php [L]
+    RewriteRule ^ %{ENV:REWRITE_BASE}index.php [L]
+</IfModule>
+
+# Fallback if mod_rewrite is unavailable: send 404s to index.php so the
+# pretty-URL parser in index.php can still resolve /login, /admin, etc.
+<IfModule !mod_rewrite.c>
+    ErrorDocument 404 /index.php
 </IfModule>
