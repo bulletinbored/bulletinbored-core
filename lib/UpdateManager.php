@@ -50,6 +50,9 @@ class UpdateManager
 
     private function setCachedVersion(string $type, ?string $name, string $version): void
     {
+        if ($version === '' || $version === null) {
+            return;
+        }
         $cache = $this->loadCache();
         $key = $type . ':' . ($name ?? 'core');
         $cache[$key] = [
@@ -142,14 +145,19 @@ class UpdateManager
 
         $catalog = $catalog ?? [];
         $catalogMap = [];
+        $catalogVersions = [];
         foreach ($catalog as $item) {
             $key = strtolower($item['name'] ?? '');
             $catalogMap[$key] = $item['repo'] ?? null;
+            $catalogVersions[$key] = $item['version'] ?? null;
         }
 
         foreach ($pluginManager->getAll() as $key => $plugin) {
             $repoUrl = $catalogMap[$key] ?? null;
             $remote = $this->fetchRemoteVersion('plugin', $key, $repoUrl);
+            if ($remote === null && !empty($catalogVersions[$key])) {
+                $remote = $catalogVersions[$key];
+            }
             $updateAvailable = $remote && version_compare($remote, $plugin['version'], '>');
             $results['plugins'][$key] = [
                 'installed' => $plugin['version'],
@@ -163,6 +171,9 @@ class UpdateManager
         foreach ($themeManager->getAll() as $key => $theme) {
             $repoUrl = $catalogMap[$key] ?? null;
             $remote = $this->fetchRemoteVersion('theme', $key, $repoUrl);
+            if ($remote === null && !empty($catalogVersions[$key])) {
+                $remote = $catalogVersions[$key];
+            }
             $updateAvailable = $remote && version_compare($remote, ($theme['version'] ?? '1.0.0'), '>');
             $results['themes'][$key] = [
                 'installed' => $theme['version'] ?? '1.0.0',
@@ -466,17 +477,22 @@ class UpdateManager
             return false;
         }
 
-        if ($type === 'plugin') {
-            $pm = new PluginManager(__DIR__ . '/../plugins', __DIR__ . '/../data/plugins.json');
-            $newVersion = $pm->getVersion($name);
-            if ($newVersion !== $tag) {
-                return false;
+        // Keep the installed version in sync with the applied tag, regardless of
+        // the "Version:" declared inside the package files.
+        $manifestFile = $targetDir . '/manifest.json';
+        if (file_exists($manifestFile)) {
+            $pm = json_decode(file_get_contents($manifestFile), true);
+            if (is_array($pm)) {
+                $pm['version'] = ltrim($tag, 'v');
+                file_put_contents($manifestFile, json_encode($pm, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
             }
-        } elseif ($type === 'theme') {
-            $tm = new ThemeManager(__DIR__ . '/../themes', __DIR__ . '/../data/themes.json', 'freshbored');
-            $newVersion = $tm->getVersion($name);
-            if ($newVersion !== $tag) {
-                return false;
+        }
+        foreach (glob($targetDir . '/*.php') as $phpFile) {
+            $content = file_get_contents($phpFile);
+            if (preg_match('/Version:\s*([\d\.]+)/i', $content)) {
+                $content = preg_replace('/(Version:\s*)[\d\.]+/i', '$1' . ltrim($tag, 'v'), $content);
+                file_put_contents($phpFile, $content);
+                break;
             }
         }
 
