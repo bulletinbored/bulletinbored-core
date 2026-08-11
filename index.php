@@ -850,7 +850,8 @@ $pluginManager->loadEnabled();
 $updateManager = new UpdateManager(
     $config['update_manifest'] ?? __DIR__.'/data/updates.json',
     !empty($config['update_server']) ? $config['update_server'] : null,
-    !empty($config['github_token']) ? $config['github_token'] : null
+    !empty($config['github_token']) ? $config['github_token'] : null,
+    !empty($config['update_mirror']) ? $config['update_mirror'] : null
 );
 
 $activeTheme = $themeManager->getActive();

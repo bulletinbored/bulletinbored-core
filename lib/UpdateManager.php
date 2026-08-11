@@ -5,14 +5,16 @@ class UpdateManager
     private string $manifestPath;
     private array $manifest = [];
     private ?string $updateServer = null;
+    private ?string $updateMirror = null;
     private ?string $githubToken = null;
     private int $cacheTTL = 3600;
 
-    public function __construct(string $manifestPath, ?string $updateServer = null, ?string $githubToken = null)
+    public function __construct(string $manifestPath, ?string $updateServer = null, ?string $githubToken = null, ?string $updateMirror = null)
     {
         $this->manifestPath = $manifestPath;
         $this->updateServer = $updateServer;
         $this->githubToken = $githubToken;
+        $this->updateMirror = rtrim($updateMirror ?? '', '/');
         $this->loadManifest();
     }
 
@@ -234,29 +236,12 @@ class UpdateManager
             return $cached;
         }
 
-        if (empty($this->updateServer)) {
-            return null;
-        }
-
-        if (!$repoUrl && preg_match('#(?:https?://)?github\.com/([^/]+)/([^/]+)(?:/|$)#i', $this->updateServer, $m)) {
-            $repoUrl = 'https://github.com/' . $m[1] . '/' . $m[2];
-        }
-
         $version = null;
-        if ($repoUrl && preg_match('#(?:https?://)?github\.com/([^/]+)/([^/]+)(?:/|$)#i', $repoUrl, $m)) {
-            $apiUrl = 'https://api.github.com/repos/' . rawurlencode($m[1]) . '/' . rawurlencode($m[2]) . '/releases/latest';
-            $json = $this->httpGet($apiUrl, 10, $this->githubToken);
-            if ($json) {
-                $release = json_decode($json, true);
-                if (is_array($release) && !empty($release['tag_name'])) {
-                    $version = ltrim($release['tag_name'], 'v');
-                }
-            }
-        }
 
-        if ($version === null) {
-            $url = $this->updateServer . '/versions.json';
-            $json = $this->httpGet($url, 10);
+        // Primary source: a static mirror (versions.json) to avoid GitHub API
+        // rate limits. One request per check instead of one per extension.
+        if ($this->updateMirror) {
+            $json = $this->httpGet($this->updateMirror . '/versions.json', 10);
             if ($json !== null) {
                 $data = json_decode($json, true);
                 if (is_array($data)) {
@@ -264,10 +249,27 @@ class UpdateManager
                         $version = $data['core']['version'] ?? null;
                     } else {
                         $section = $data[$type . 's'] ?? $data[$type] ?? [];
-                        if (is_array($section)) {
-                            $version = $section[$name]['version'] ?? null;
+                        $key = is_string($name) ? strtolower($name) : null;
+                        if ($key !== null && isset($section[$key]['version'])) {
+                            $version = $section[$key]['version'];
                         }
                     }
+                }
+            }
+        }
+
+        // Fallback: GitHub releases/latest API (needs a repo URL).
+        if ($version === null && !$repoUrl && !empty($this->updateServer)
+            && preg_match('#github\.com/([^/]+)/([^/]+)#i', $this->updateServer, $m)) {
+            $repoUrl = 'https://github.com/' . $m[1] . '/' . $m[2];
+        }
+        if ($version === null && $repoUrl && preg_match('#(?:https?://)?github\.com/([^/]+)/([^/]+)(?:/|$)#i', $repoUrl, $m)) {
+            $apiUrl = 'https://api.github.com/repos/' . rawurlencode($m[1]) . '/' . rawurlencode($m[2]) . '/releases/latest';
+            $json = $this->httpGet($apiUrl, 10, $this->githubToken);
+            if ($json) {
+                $release = json_decode($json, true);
+                if (is_array($release) && !empty($release['tag_name'])) {
+                    $version = ltrim($release['tag_name'], 'v');
                 }
             }
         }

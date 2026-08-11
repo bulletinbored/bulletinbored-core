@@ -272,6 +272,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install'])) {
         $configContent .= '$config[\'theme_manifest\'] = __DIR__.\'/data/themes.json\';' . "\n";
         $configContent .= '$config[\'update_manifest\'] = __DIR__.\'/data/updates.json\';' . "\n";
         $configContent .= '$config[\'update_server\'] = \'https://github.com/bulletinbored/bulletinbored-core\';' . "\n";
+        $configContent .= '$config[\'update_mirror\'] = \'https://extend.bulletinbored.net\';' . "\n";
 
         file_put_contents(__DIR__ . '/config.php', $configContent, LOCK_EX);
 

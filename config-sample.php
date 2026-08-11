@@ -43,3 +43,4 @@ $config['plugin_manifest'] = __DIR__.'/data/plugins.json';
 $config['theme_manifest'] = __DIR__.'/data/themes.json';
 $config['update_manifest'] = __DIR__.'/data/updates.json';
 $config['update_server'] = 'https://github.com/bulletinbored/bulletinbored-core';
+$config['update_mirror'] = 'https://extend.bulletinbored.net';
