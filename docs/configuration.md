@@ -63,7 +63,9 @@ Tables are created automatically on first access.
 
 ## Email
 
-The forum uses PHP's `mail()` function by default. For SMTP support, set:
+The forum uses PHP's `mail()` function by default. On local servers like XAMPP, `mail()` usually requires an external SMTP relay because PHP is not configured as a mail transport agent.
+
+For reliable delivery, use SMTP:
 
 ```php
 'mail_method' => 'smtp',
@@ -71,7 +73,16 @@ The forum uses PHP's `mail()` function by default. For SMTP support, set:
 'mail_port' => 587,
 'mail_username' => 'user@example.com',
 'mail_password' => 'secret',
+'mail_secure' => 'tls', // 'ssl', 'tls', or empty for none
+'mail_timeout' => 10,
 ```
+
+Port reference:
+- `25` - plain SMTP (no encryption)
+- `465` - SMTP over SSL (`mail_secure` = `ssl`)
+- `587` - SMTP with STARTTLS (`mail_secure` = `tls`)
+
+If you must keep `mail_method = 'mail'`, configure `sendmail_path` in `php.ini` or set `SMTP` / `smtp_port` on Windows. Note that many SMTP providers reject unauthenticated relay from dynamic/residential IPs.
 
 ## Theme
 

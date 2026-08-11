@@ -62,8 +62,18 @@ function slugify($text) {
     return empty($text) ? 'n-a' : $text;
 }
 
-function url($action, $params = []) {
+function url($action, $params = [], $absolute = false) {
     $base = base_url();
+    if ($absolute) {
+        $scheme = 'http';
+        if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+            $scheme = 'https';
+        } elseif (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') {
+            $scheme = 'https';
+        }
+        $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+        $base = $scheme . '://' . $host . $base;
+    }
     $query = $params;
     switch ($action) {
         case 'thread':
@@ -821,11 +831,85 @@ function send_email($to, $subject, $body) {
         <div class="footer">&copy; '.date('Y').' '.escape($config['site_name'] ?? 'bulletinbored').'</div>
     </div></body></html>';
     
+    $envelope = '-f' . ($config['mail_from'] ?? '');
     if ($config['mail_method'] === 'smtp') {
-        // SMTP support placeholder - extend as needed
-        return mail($to, '=?UTF-8?B?'.base64_encode($subject).'?=', $htmlBody, $headers);
+        $host = $config['mail_host'] ?? 'localhost';
+        $port = (int)($config['mail_port'] ?? 25);
+        $username = $config['mail_username'] ?? '';
+        $password = $config['mail_password'] ?? '';
+        $secure = strtolower($config['mail_secure'] ?? '');
+        $timeout = (int)($config['mail_timeout'] ?? 10);
+        
+        $connectHost = $secure === 'ssl' ? 'ssl://' . $host : $host;
+        
+        $fp = @fsockopen($connectHost, $port, $errno, $errstr, $timeout);
+        if (!$fp) {
+            error_log("SMTP connect failed: {$errstr} ({$errno})");
+            return false;
+        }
+        
+        stream_set_timeout($fp, $timeout);
+        
+        $readResponse = function($fp) {
+            $response = '';
+            while (($line = fgets($fp, 515)) !== false) {
+                $response .= $line;
+                if (isset($line[3]) && $line[3] === ' ') {
+                    break;
+                }
+            }
+            return $response;
+        };
+        
+        $sendCommand = function($fp, $command) {
+            fwrite($fp, $command . "\r\n");
+        };
+        
+        $readResponse($fp);
+        $sendCommand($fp, 'EHLO ' . (php_uname('n') ?: 'localhost'));
+        $readResponse($fp);
+        
+        if ($secure === 'tls') {
+            $sendCommand($fp, 'STARTTLS');
+            $readResponse($fp);
+            if (stream_socket_enable_crypto($fp, true, STREAM_CRYPTO_METHOD_TLS_CLIENT)) {
+                $sendCommand($fp, 'EHLO ' . (php_uname('n') ?: 'localhost'));
+                $readResponse($fp);
+            }
+        }
+        
+        if ($username !== '' && $password !== '') {
+            $sendCommand($fp, 'AUTH LOGIN');
+            $readResponse($fp);
+            $sendCommand($fp, base64_encode($username));
+            $readResponse($fp);
+            $sendCommand($fp, base64_encode($password));
+            $readResponse($fp);
+        }
+        
+        $sendCommand($fp, 'MAIL FROM:<' . $config['mail_from'] . '>');
+        $readResponse($fp);
+        $sendCommand($fp, 'RCPT TO:<' . $to . '>');
+        $readResponse($fp);
+        $sendCommand($fp, 'DATA');
+        $readResponse($fp);
+        
+        fwrite($fp, "Subject: =?UTF-8?B?" . base64_encode($subject) . "?=\r\n");
+        fwrite($fp, "From: {$config['mail_from_name']} <{$config['mail_from']}>\r\n");
+        fwrite($fp, "To: {$to}\r\n");
+        fwrite($fp, "MIME-Version: 1.0\r\n");
+        fwrite($fp, "Content-Type: text/html; charset=UTF-8\r\n");
+        fwrite($fp, "\r\n");
+        fwrite($fp, $htmlBody . "\r\n");
+        fwrite($fp, ".\r\n");
+        $readResponse($fp);
+        
+        $sendCommand($fp, 'QUIT');
+        $readResponse($fp);
+        fclose($fp);
+        return true;
     }
-    return mail($to, '=?UTF-8?B?'.base64_encode($subject).'?=', $htmlBody, $headers);
+    return mail($to, '=?UTF-8?B?'.base64_encode($subject).'?=', $htmlBody, $headers, $envelope);
 }
 
 // Load managers
@@ -1143,7 +1227,7 @@ try {
         foreach ($watchers as $watcher) {
             if (!empty($watcher['email'])) {
                 $subject = t('reply_notification_subject', ['title' => $threadTitle]);
-                $replyLink = url('thread', ['id' => $threadId, 'slug' => slugify($threadTitle)]);
+                $replyLink = url('thread', ['id' => $threadId, 'slug' => slugify($threadTitle)], true);
                 $body = t('reply_notification_body', [
                     'username' => escape($watcher['username']),
                     'title' => escape($threadTitle),
@@ -1338,7 +1422,7 @@ try {
                 $pdo->prepare("INSERT INTO email_verifications (user_id, token, expires_at) VALUES (?, ?, ?)")
                     ->execute([$userId, password_hash($token, PASSWORD_DEFAULT), $expires]);
                 
-                $verifyLink = url('verify_email', ['token' => $token]);
+                $verifyLink = url('verify_email', ['token' => $token], true);
                 $subject = 'Confirm your email';
                 $body = '<p>Hello '.escape($username).',</p>
                         <p>Thank you for registering! Please click the button below to confirm your email address:</p>
@@ -1366,7 +1450,7 @@ try {
             exit;
         }
         
-        $tokensStmt = $pdo->prepare("SELECT * FROM email_verifications WHERE used = 0 AND expires_at > datetime('now') ORDER BY created_at DESC");
+        $tokensStmt = $pdo->prepare("SELECT * FROM email_verifications WHERE used = 0 AND expires_at > NOW() ORDER BY created_at DESC");
         $tokensStmt->execute();
         $validToken = null;
         foreach ($tokensStmt->fetchAll() as $row) {
@@ -1978,14 +2062,14 @@ elseif ($action === 'admin_users') {
               $pdo->prepare("INSERT INTO email_verifications (user_id, token, expires_at) VALUES (?, ?, ?)")
                   ->execute([$userId, password_hash($token, PASSWORD_DEFAULT), $expires]);
               
-              $verifyLink = url('verify_email', ['token' => $token]);
-              $subject = 'Confirm your email';
-              $body = '<p>Hello '.escape($username).',</p>
-                      <p>Your account has been created. Please click the button below to confirm your email address:</p>
-                      <p style="text-align:center;"><a class="btn" href="'.$verifyLink.'">Verify Email</a></p>
-                      <p>Or copy this link: <br><code>'.$verifyLink.'</code></p>
-                      <p>This link expires in 24 hours.</p>';
-              send_email($email, $subject, $body);
+               $verifyLink = url('verify_email', ['token' => $token], true);
+               $subject = 'Confirm your email';
+               $body = '<p>Hello '.escape($username).',</p>
+                       <p>Your account has been created. Please click the button below to confirm your email address:</p>
+                       <p style="text-align:center;"><a class="btn" href="'.$verifyLink.'">Verify Email</a></p>
+                       <p>Or copy this link: <br><code>'.$verifyLink.'</code></p>
+                       <p>This link expires in 24 hours.</p>';
+               send_email($email, $subject, $body);
           }
           
           redirect(url('admin_users'));
@@ -2524,7 +2608,7 @@ elseif ($action === 'admin_users') {
                     ->execute([$user['id'], password_hash($token, PASSWORD_DEFAULT), $expires]);
                 
                 // Send email
-                $resetLink = url('reset_password', ['token' => $token]);
+                $resetLink = url('reset_password', ['token' => $token], true);
                 $subject = 'Password Reset Request';
                 $body = '<p>Hello '.escape($user['username']).',</p>
                         <p>You requested a password reset. Click the button below to reset your password:</p>
@@ -2562,7 +2646,7 @@ elseif ($action === 'admin_users') {
             }
             
             // Find valid token
-            $tokensStmt = $pdo->prepare("SELECT * FROM password_resets WHERE used = 0 AND expires_at > datetime('now') ORDER BY created_at DESC");
+            $tokensStmt = $pdo->prepare("SELECT * FROM password_resets WHERE used = 0 AND expires_at > NOW() ORDER BY created_at DESC");
             $tokensStmt->execute();
             $validToken = null;
             foreach ($tokensStmt->fetchAll() as $row) {
@@ -2736,7 +2820,6 @@ elseif ($action === 'admin_users') {
         echo 'Page not found';
     }
 } catch (Exception $e) {
-    // Log error and show friendly message
     error_log($e->getMessage());
     http_response_code(500);
     echo 'An error occurred. Please try again later.';

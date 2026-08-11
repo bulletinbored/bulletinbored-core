@@ -15,9 +15,17 @@ $config['db_pass'] = ''; // MySQL only
 $config['site_name'] = 'bulletinbored';
 $config['admin_user'] = 'admin';
 $config['admin_pass'] = 'changeme123';
-$config['mail_from'] = 'noreply@bulletinbored.local';
+// IMPORTANT: use a real email address from your own domain, not a fake one.
+// On shared hosting, unauthorized senders are rejected.
+$config['mail_from'] = 'noreply@tuodominio.it';
 $config['mail_from_name'] = 'bulletinbored';
-$config['mail_method'] = 'mail'; // 'mail' or 'smtp'
+$config['mail_method'] = 'mail'; // 'mail' for PHP mail(), 'smtp' for SMTP
+// $config['mail_host'] = 'smtp.example.com';
+// $config['mail_port'] = 587;
+// $config['mail_username'] = 'user@example.com';
+// $config['mail_password'] = 'secret';
+// $config['mail_secure'] = ''; // 'ssl', 'tls', or empty for none
+// $config['mail_timeout'] = 10;
 $config['theme'] = 'freshbored';
 $config['default_lang'] = 'en';
 $config['available_langs'] = array(
