@@ -194,6 +194,30 @@ class ThemeManager
         $zip->close();
         @unlink($zipPath);
 
+        // Normalise the extracted layout: a theme ZIP may nest files under a
+        // single <repo>-<ref>/ folder. Only "un-nest" when there is no
+        // style.css (or manifest.json) directly at the target root.
+        if (!file_exists($dest . 'style.css') && !file_exists($dest . 'manifest.json')) {
+            $nested = null;
+            foreach (glob($dest . '*', GLOB_ONLYDIR) as $dir) {
+                if (file_exists($dir . '/style.css') || file_exists($dir . '/manifest.json')) {
+                    $nested = $dir;
+                    break;
+                }
+            }
+            if ($nested !== null && is_dir($nested)) {
+                foreach (glob($nested . '/*') as $item) {
+                    $base = basename($item);
+                    $destItem = $dest . $base;
+                    if (file_exists($destItem)) {
+                        continue;
+                    }
+                    rename($item, $destItem);
+                }
+                @rmdir($nested);
+            }
+        }
+
         $this->themes = [];
         $this->discover();
 
@@ -287,37 +311,27 @@ class ThemeManager
             return $result;
         }
 
-        if (is_dir($targetDir)) {
-            $topFolders = [];
-            foreach (glob($targetDir . '/*') as $item) {
-                $base = basename($item);
-                if ($base !== '' && !str_contains($base, '.')) {
-                    $topFolders[$base] = true;
+        // Normalise the extracted layout: only "un-nest" when there is no
+        // style.css (or manifest.json) directly at the target root.
+        $hasRootAsset = file_exists($targetDir . '/style.css') || file_exists($targetDir . '/manifest.json');
+        if (is_dir($targetDir) && !$hasRootAsset) {
+            $nested = null;
+            foreach (glob($targetDir . '/*', GLOB_ONLYDIR) as $dir) {
+                if (file_exists($dir . '/style.css') || file_exists($dir . '/manifest.json')) {
+                    $nested = $dir;
+                    break;
                 }
             }
-            if (count($topFolders) === 1) {
-                $folderName = array_keys($topFolders)[0];
-                $src = $targetDir . '/' . $folderName;
-                foreach (glob($src . '/*') as $item) {
-                    $basename = basename($item);
-                    $target = $targetDir . '/' . $basename;
-                    if (is_dir($item)) {
-                        if (!is_dir($target)) {
-                            rename($item, $target);
-                        } else {
-                            foreach (glob($item . '/*') as $sub) {
-                                $subBase = basename($sub);
-                                rename($sub, $target . '/' . $subBase);
-                            }
-                            @rmdir($item);
-                        }
-                    } else {
-                        if (!file_exists($target)) {
-                            rename($item, $target);
-                        }
+            if ($nested !== null && is_dir($nested)) {
+                foreach (glob($nested . '/*') as $item) {
+                    $base = basename($item);
+                    $destItem = $targetDir . '/' . $base;
+                    if (file_exists($destItem)) {
+                        continue;
                     }
+                    rename($item, $destItem);
                 }
-                @rmdir($src);
+                @rmdir($nested);
             }
         }
 

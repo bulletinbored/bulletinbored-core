@@ -65,9 +65,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install'])) {
             if (!is_dir($dir)) {
                 mkdir($dir, 0755, true);
             }
-            $pdo = new PDO('sqlite:' . $dbPath);
-            $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-        }
+                $pdo = new PDO('sqlite:' . $dbPath);
+                $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+            }
+
+            // INSERT IGNORE is MySQL-only; SQLite uses INSERT OR IGNORE.
+            $insertIgnoreSql = $dbDriver === 'mysql' ? 'INSERT IGNORE' : 'INSERT OR IGNORE';
 
         if ($dbDriver === 'mysql') {
             $tables = [
@@ -100,7 +103,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install'])) {
                 ['user', json_encode(['can_create_threads', 'can_create_posts', 'can_edit_own_posts', 'can_delete_own_posts'])],
             ];
             foreach ($defaultRoles as $role) {
-                $pdo->prepare("INSERT IGNORE INTO roles (name, permissions) VALUES (?, ?)")->execute($role);
+                $pdo->prepare("$insertIgnoreSql INTO roles (name, permissions) VALUES (?, ?)")->execute($role);
             }
 
             $pdo->prepare("INSERT INTO categories (name, description, position) SELECT 'General', 'General discussion', 1 WHERE NOT EXISTS (SELECT 1 FROM categories WHERE name = 'General')")->execute();
@@ -215,7 +218,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install'])) {
                 ['user', json_encode(['can_create_threads', 'can_create_posts', 'can_edit_own_posts', 'can_delete_own_posts'])],
             ];
             foreach ($defaultRoles as $role) {
-                $pdo->prepare("INSERT IGNORE INTO roles (name, permissions) VALUES (?, ?)")->execute($role);
+                $pdo->prepare("$insertIgnoreSql INTO roles (name, permissions) VALUES (?, ?)")->execute($role);
             }
 
             $pdo->prepare("INSERT INTO categories (name, description, position) SELECT 'General', 'General discussion', 1 WHERE NOT EXISTS (SELECT 1 FROM categories WHERE name = 'General')")->execute();

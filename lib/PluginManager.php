@@ -295,41 +295,31 @@ class PluginManager
         }
 
         $dest = rtrim($this->pluginsDir, '/') . '/';
-        $topFolders = [];
-        for ($i = 0; $i < $zip->numFiles; $i++) {
-            $name = $zip->getNameIndex($i);
-            $parts = explode('/', str_replace('\\', '/', $name));
-            if (!empty($parts[0]) && !str_contains($parts[0], '.')) {
-                $topFolders[$parts[0]] = true;
-            }
-        }
         $zip->extractTo($dest);
         $zip->close();
         @unlink($zipPath);
 
-        if (count($topFolders) === 1) {
-            $folderName = array_keys($topFolders)[0];
-            $src = $dest . $folderName;
-            foreach (glob($src . '/*') as $item) {
-                $basename = basename($item);
-                $target = $dest . $basename;
-                if (is_dir($item)) {
-                    if (!is_dir($target)) {
-                        rename($item, $target);
-                    } else {
-                        foreach (glob($item . '/*') as $sub) {
-                            $subBase = basename($sub);
-                            rename($sub, $target . '/' . $subBase);
-                        }
-                        @rmdir($item);
-                    }
-                } else {
-                    if (!file_exists($target)) {
-                        rename($item, $target);
-                    }
+        // Normalise the extracted layout (see installFromRepo for details):
+        // only "un-nest" when there is no manifest.json directly at the root.
+        if (!file_exists($dest . 'manifest.json')) {
+            $nested = null;
+            foreach (glob($dest . '*', GLOB_ONLYDIR) as $dir) {
+                if (file_exists($dir . '/manifest.json')) {
+                    $nested = $dir;
+                    break;
                 }
             }
-            @rmdir($src);
+            if ($nested !== null && is_dir($nested)) {
+                foreach (glob($nested . '/*') as $item) {
+                    $base = basename($item);
+                    $destItem = $dest . $base;
+                    if (file_exists($destItem)) {
+                        continue;
+                    }
+                    rename($item, $destItem);
+                }
+                @rmdir($nested);
+            }
         }
 
         $this->plugins = [];
@@ -425,37 +415,30 @@ class PluginManager
             return $result;
         }
 
-        if (is_dir($targetDir)) {
-            $topFolders = [];
-            foreach (glob($targetDir . '/*') as $item) {
-                $base = basename($item);
-                if ($base !== '' && !str_contains($base, '.')) {
-                    $topFolders[$base] = true;
+        // Normalise the extracted layout. GitHub/GitLab archives nest the
+        // plugin under a single <repo>-<ref>/ folder, and some plugins also
+        // ship multiple top-level folders (assets/, lang/, ...). We only need
+        // to "un-nest" when the plugin files are NOT already at the target
+        // root (i.e. there is no manifest.json directly inside targetDir).
+        if (is_dir($targetDir) && !file_exists($targetDir . '/manifest.json')) {
+            // Look one level deep for the folder that actually holds the plugin.
+            $nested = null;
+            foreach (glob($targetDir . '/*', GLOB_ONLYDIR) as $dir) {
+                if (file_exists($dir . '/manifest.json')) {
+                    $nested = $dir;
+                    break;
                 }
             }
-            if (count($topFolders) === 1) {
-                $folderName = array_keys($topFolders)[0];
-                $src = $targetDir . '/' . $folderName;
-                foreach (glob($src . '/*') as $item) {
-                    $basename = basename($item);
-                    $target = $targetDir . '/' . $basename;
-                    if (is_dir($item)) {
-                        if (!is_dir($target)) {
-                            rename($item, $target);
-                        } else {
-                            foreach (glob($item . '/*') as $sub) {
-                                $subBase = basename($sub);
-                                rename($sub, $target . '/' . $subBase);
-                            }
-                            @rmdir($item);
-                        }
-                    } else {
-                        if (!file_exists($target)) {
-                            rename($item, $target);
-                        }
+            if ($nested !== null && is_dir($nested)) {
+                foreach (glob($nested . '/*') as $item) {
+                    $base = basename($item);
+                    $destItem = $targetDir . '/' . $base;
+                    if (file_exists($destItem)) {
+                        continue;
                     }
+                    rename($item, $destItem);
                 }
-                @rmdir($src);
+                @rmdir($nested);
             }
         }
 

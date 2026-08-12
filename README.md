@@ -34,13 +34,15 @@ $config = [
 
 ## Documentation
 
-- [Architecture](docs/architecture.md)
-- [Configuration](docs/configuration.md)
-- [Managers](docs/managers.md)
-- [Localization](docs/localization.md)
-- [Theme Development](docs/themes.md)
-- [Plugin Development](docs/plugins.md)
-- [Versioning](docs/versioning.md)
+Full documentation lives in the separate [`docs`](https://github.com/bulletinbored/docs) repository (published at https://docs.bulletinbored.net):
+
+- [Architecture](https://docs.bulletinbored.net/architecture/)
+- [Configuration](https://docs.bulletinbored.net/configuration/)
+- [Managers](https://docs.bulletinbored.net/managers/)
+- [Localization](https://docs.bulletinbored.net/localization/)
+- [Theme Development](https://docs.bulletinbored.net/themes/)
+- [Plugin Development](https://docs.bulletinbored.net/plugins/)
+- [Versioning](https://docs.bulletinbored.net/versioning/)
 
 ## License
 
