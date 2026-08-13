@@ -1045,6 +1045,35 @@ elseif ($action === 'admin_users') {
             die('Admin required');
         }
 
+        $langMetaPath = __DIR__ . '/../data/lang-meta.json';
+        $langMirrorBase = !empty($config['update_mirror']) ? rtrim($config['update_mirror'], '/') : 'https://extend.bulletinbored.net';
+        $langsJsonUrl = $langMirrorBase . '/langs.json';
+
+        if (!function_exists('loadLangMeta')) {
+            function loadLangMeta(string $path): array {
+                if (!file_exists($path)) {
+                    return [];
+                }
+                $data = json_decode(file_get_contents($path), true);
+                return is_array($data) ? $data : [];
+            }
+        }
+        if (!function_exists('saveLangMeta')) {
+            function saveLangMeta(string $code, string $sha): void {
+                global $langMetaPath;
+                $meta = loadLangMeta($langMetaPath);
+                $meta[$code] = ['sha' => $sha, 'updated' => date('c')];
+                file_put_contents($langMetaPath, json_encode($meta, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
+            }
+        }
+
+        $langMeta = loadLangMeta($langMetaPath);
+        $remoteLangsRaw = @file_get_contents($langsJsonUrl);
+        $remoteLangs = is_string($remoteLangsRaw) ? json_decode($remoteLangsRaw, true) : null;
+        if (!is_array($remoteLangs)) {
+            $remoteLangs = [];
+        }
+
         $langSuccess = $_SESSION['lang_success'] ?? '';
         $langError = $_SESSION['lang_error'] ?? '';
         unset($_SESSION['lang_success'], $_SESSION['lang_error']);
@@ -1086,23 +1115,28 @@ elseif ($action === 'admin_users') {
                             $langError = 'Failed to upload language file';
                         }
                     }
-                } elseif (isset($_POST['install_github_lang'])) {
+                } elseif (isset($_POST['install_github_lang']) || isset($_POST['update_github_lang'])) {
+                    $isUpdate = isset($_POST['update_github_lang']);
                     $langCode = preg_replace('/[^a-z_]/', '', strtolower($_POST['lang_code'] ?? ''));
                     $downloadUrl = $_POST['download_url'] ?? '';
+                    $remoteSha = $_POST['remote_sha'] ?? '';
                     if ($langCode === '' || $downloadUrl === '') {
                         $langError = 'Invalid language code or download URL';
                     } else {
                         $dest = __DIR__ . '/../lang/'.$langCode.'.php';
-                        if (file_exists($dest)) {
+                        if ($isUpdate && !file_exists($dest)) {
+                            $langError = 'Language file not found: '.escape($langCode);
+                        } elseif (!$isUpdate && file_exists($dest)) {
                             $langError = 'Language file already exists: '.escape($langCode);
                         } else {
                             $content = @file_get_contents($downloadUrl);
                             if ($content === false) {
-                                $langError = 'Failed to download language file from GitHub';
+                                $langError = 'Failed to download language file';
                             } elseif (file_put_contents($dest, $content) === false) {
                                 $langError = 'Failed to save language file';
                             } else {
-                                $_SESSION['lang_success'] = 'Language file installed: '.escape($langCode);
+                                saveLangMeta($langCode, $remoteSha);
+                                $_SESSION['lang_success'] = ($isUpdate ? 'Language file updated: ' : 'Language file installed: ') . escape($langCode);
                                 redirect(url('admin_langs'));
                             }
                         }

@@ -46,9 +46,9 @@
                     <h6 class="m-0 font-weight-bold text-primary"><?= t('install_from_github') ?></h6>
                 </div>
                 <div class="card-body">
-                    <p class="text-muted"><?= t('install_from_github') ?> <?= t('from_the') ?> <a href="https://github.com/bulletinbored/langs" target="_blank">bulletinbored/langs</a> <?= t('repository') ?>.</p>
-                    <div id="github-langs-loading" class="text-muted"><?= t('loading_available_languages') ?></div>
-                    <div id="github-langs-error" class="alert alert-danger d-none"></div>
+                    <p class="text-muted"><?= t('install_from_github') ?> <?= t('from_the') ?> <a href="https://github.com/bulletinbored/langs" target="_blank">bulletinbored/langs</a> <?= t('repository') ?> (<?= escape($langMirrorBase) ?>).</p>
+                    <div id="github-langs-loading" class="text-muted d-none"><?= t('loading_available_languages') ?></div>
+                    <div id="github-langs-error" class="alert alert-danger d-none"><?= t('unable_to_load_languages') ?></div>
                     <div id="github-langs-list"></div>
                 </div>
             </div>
@@ -125,20 +125,20 @@
 </div>
 <script>
 (function() {
-    const repoOwner = 'bulletinbored';
-    const repoName = 'langs';
-    const apiUrl = 'https://api.github.com/repos/' + repoOwner + '/' + repoName + '/contents/';
-    const loading = document.getElementById('github-langs-loading');
-    const errorBox = document.getElementById('github-langs-error');
     const list = document.getElementById('github-langs-list');
+    const errorBox = document.getElementById('github-langs-error');
     const txtNoLanguages = <?= json_encode(t('no_languages_found')) ?>;
-    const txtUnable = <?= json_encode(t('unable_to_load_languages')) ?>;
-    const txtFailed = <?= json_encode(t('failed_to_load_languages')) ?>;
     const txtInstalled = <?= json_encode(t('installed')) ?>;
+    const txtUpdate = <?= json_encode(t('update')) ?>;
     const txtInstall = <?= json_encode(t('install')) ?>;
     const txtCode = <?= json_encode(t('code')) ?>;
     const txtFile = <?= json_encode(t('file')) ?>;
     const txtAction = <?= json_encode(t('actions')) ?>;
+    const csrf = '<?= generate_csrf_token() ?>';
+
+    const remoteLangs = <?= json_encode($remoteLangs ?? new stdClass()) ?>;
+    const installed = <?= json_encode(array_values($langOptions)) ?>;
+    const localMeta = <?= json_encode($langMeta ?? new stdClass()) ?>;
 
     function esc(str) {
         const div = document.createElement('div');
@@ -146,44 +146,50 @@
         return div.innerHTML;
     }
 
-    fetch(apiUrl)
-        .then(function(res) { return res.json(); })
-        .then(function(files) {
-            loading.classList.add('d-none');
-            if (!Array.isArray(files)) {
-                errorBox.textContent = txtUnable;
-                errorBox.classList.remove('d-none');
-                return;
-            }
-            const langFiles = files.filter(function(f) {
-                return f.type === 'file' && f.name.endsWith('.php') && f.name !== 'README.md';
-            });
-            if (langFiles.length === 0) {
-                list.innerHTML = '<p class="text-muted">' + esc(txtNoLanguages) + '</p>';
-                return;
-            }
-            const installed = <?= json_encode(array_values($langOptions)) ?>;
-            const table = document.createElement('table');
-            table.className = 'table table-bordered';
-            table.innerHTML = '<thead><tr><th>' + esc(txtCode) + '</th><th>' + esc(txtFile) + '</th><th>' + esc(txtAction) + '</th></tr></thead><tbody></tbody>';
-            const tbody = table.querySelector('tbody');
-            langFiles.forEach(function(file) {
-                const code = file.name.replace(/\.php$/i, '');
-                const tr = document.createElement('tr');
-                const isInstalled = installed.indexOf(code) !== -1;
-                const actionCell = isInstalled
-                    ? '<span class="badge bg-success">' + esc(txtInstalled) + '</span>'
-                    : '<form method="POST" class="d-inline"><input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>"><input type="hidden" name="install_github_lang" value="1"><input type="hidden" name="lang_code" value="' + esc(code) + '"><input type="hidden" name="download_url" value="' + esc(file.download_url) + '"><button type="submit" class="btn btn-sm btn-primary">' + esc(txtInstall) + '</button></form>';
-                tr.innerHTML = '<td>' + esc(code) + '</td><td>' + esc(file.name) + '</td><td>' + actionCell + '</td>';
-                tbody.appendChild(tr);
-            });
-            list.appendChild(table);
-        })
-        .catch(function() {
-            loading.classList.add('d-none');
-            errorBox.textContent = txtFailed;
-            errorBox.classList.remove('d-none');
-        });
+    const codes = Object.keys(remoteLangs);
+    if (codes.length === 0) {
+        errorBox.textContent = txtNoLanguages;
+        errorBox.classList.remove('d-none');
+        return;
+    }
+
+    const table = document.createElement('table');
+    table.className = 'table table-bordered';
+    table.innerHTML = '<thead><tr><th>' + esc(txtCode) + '</th><th>' + esc(txtFile) + '</th><th>' + esc(txtAction) + '</th></tr></thead><tbody></tbody>';
+    const tbody = table.querySelector('tbody');
+
+    codes.forEach(function(code) {
+        const info = remoteLangs[code];
+        const isInstalled = installed.indexOf(code) !== -1;
+        const localSha = localMeta[code] && localMeta[code].sha ? localMeta[code].sha : null;
+        const changed = localSha !== null && localSha !== info.sha;
+
+        let actionCell;
+        if (!isInstalled) {
+            actionCell = '<form method="POST" class="d-inline">'
+                + '<input type="hidden" name="csrf_token" value="' + csrf + '">'
+                + '<input type="hidden" name="install_github_lang" value="1">'
+                + '<input type="hidden" name="lang_code" value="' + esc(code) + '">'
+                + '<input type="hidden" name="download_url" value="' + esc(info.url) + '">'
+                + '<button type="submit" class="btn btn-sm btn-primary">' + esc(txtInstall) + '</button></form>';
+        } else if (changed) {
+            actionCell = '<span class="badge bg-warning text-dark me-1">' + esc(txtInstalled) + '</span>'
+                + '<form method="POST" class="d-inline">'
+                + '<input type="hidden" name="csrf_token" value="' + csrf + '">'
+                + '<input type="hidden" name="update_github_lang" value="1">'
+                + '<input type="hidden" name="lang_code" value="' + esc(code) + '">'
+                + '<input type="hidden" name="download_url" value="' + esc(info.url) + '">'
+                + '<input type="hidden" name="remote_sha" value="' + esc(info.sha) + '">'
+                + '<button type="submit" class="btn btn-sm btn-warning">' + esc(txtUpdate) + '</button></form>';
+        } else {
+            actionCell = '<span class="badge bg-success">' + esc(txtInstalled) + '</span>';
+        }
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = '<td>' + esc(code) + '</td><td>' + esc(info.file) + '</td><td>' + actionCell + '</td>';
+        tbody.appendChild(tr);
+    });
+    list.appendChild(table);
 })();
 </script>
 <?php include __DIR__.'/admin_footer.php'; ?>
