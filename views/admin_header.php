@@ -74,7 +74,7 @@ function render_admin_header($title = 'Admin Panel') {
             <div class="sidebar-heading"><?= t('system') ?></div>
             <ul class="sidebar-nav">
                 <li><a href="<?= url('admin_settings') ?>" class="<?= $active('admin_settings') ?>"><i class="fas fa-cogs"></i> <span><?= t('settings') ?></span></a></li>
-                <li><a href="<?= url('admin_diagnostics') ?>" class="<?= $active('admin_diagnostics') ?>"><i class="fas fa-stethoscope"></i> <span>Diagnostics</span></a></li>
+                <li><a href="<?= url('admin_diagnostics') ?>" class="<?= $active('admin_diagnostics') ?>"><i class="fas fa-stethoscope"></i> <span><?= t('diagnostics') ?></span></a></li>
                 <li><a href="<?= url('home') ?>"><i class="fas fa-arrow-left"></i> <span><?= t('back_to_forum') ?></span></a></li>
             </ul>
         </nav>

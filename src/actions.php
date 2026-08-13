@@ -1221,6 +1221,7 @@ elseif ($action === 'admin_users') {
                 CURLOPT_HEADER => true,
                 CURLOPT_NOBODY => true,
                 CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_TIMEOUT => 15,
                 CURLOPT_SSL_VERIFYPEER => true,
                 CURLOPT_USERAGENT => 'Mozilla/5.0 (compatible; ForumDiagnostics/1.0)',
@@ -1259,7 +1260,7 @@ elseif ($action === 'admin_users') {
         if ($diag['git']) {
             $recommendations[] = 'Git is available — installs will use it directly.';
         } elseif ($diag['can_install']) {
-            $recommendations[] = 'All requirements met: one-click install from the catalog will work via downloaded zip.';
+            $recommendations[] = t('all_requirements_met');
         }
 
         include __DIR__ . '/../views/admin_diagnostics.php';
