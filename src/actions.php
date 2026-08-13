@@ -666,14 +666,10 @@ try {
                 $adminError = 'Invalid CSRF token';
             } else {
                 $siteName = trim($_POST['site_name'] ?? $config['site_name']);
-                $allowRegistration = isset($_POST['allow_registration']) ? 1 : 0;
-                $maintenanceMode = isset($_POST['maintenance_mode']) ? 1 : 0;
                 $defaultLang = trim($_POST['default_lang'] ?? $config['default_lang'] ?? 'en');
                 $availableLangs = array_filter(array_map('trim', explode(',', $_POST['available_langs'] ?? implode(',', $config['available_langs'] ?? ['en']))));
                 
                 $config['site_name'] = $siteName;
-                $config['allow_registration'] = $allowRegistration;
-                $config['maintenance_mode'] = $maintenanceMode;
                 $config['default_lang'] = $defaultLang;
                 $config['available_langs'] = array_values($availableLangs);
                 
@@ -899,22 +895,22 @@ elseif ($action === 'unban_user' && $method === 'POST' && is_admin()) {
             die('CSRF token invalid');
         }
         $siteName = trim($_POST['site_name'] ?? $config['site_name']);
-        $allowRegistration = isset($_POST['allow_registration']) ? 1 : 0;
-        $maintenanceMode = isset($_POST['maintenance_mode']) ? 1 : 0;
         $siteTagline = trim($_POST['site_tagline'] ?? $config['site_tagline']);
         $siteIcon = trim($_POST['site_icon'] ?? $config['site_icon']);
         $timezone = trim($_POST['timezone'] ?? $config['timezone']);
         $dateFormat = trim($_POST['date_format'] ?? $config['date_format']);
         $timeFormat = trim($_POST['time_format'] ?? $config['time_format']);
+        $mailFrom = trim($_POST['mail_from'] ?? $config['mail_from'] ?? '');
+        $mailFromName = trim($_POST['mail_from_name'] ?? $config['mail_from_name'] ?? '');
 
         $config['site_name'] = $siteName;
-        $config['allow_registration'] = $allowRegistration;
-        $config['maintenance_mode'] = $maintenanceMode;
         $config['site_tagline'] = $siteTagline;
         $config['site_icon'] = $siteIcon;
         $config['timezone'] = $timezone;
         $config['date_format'] = $dateFormat;
         $config['time_format'] = $timeFormat;
+        $config['mail_from'] = $mailFrom;
+        $config['mail_from_name'] = $mailFromName;
 
         $configContent = "<?php\n";
         foreach ($config as $key => $value) {
@@ -926,6 +922,7 @@ elseif ($action === 'unban_user' && $method === 'POST' && is_admin()) {
         }
 
         file_put_contents(__DIR__ . '/../config.php', $configContent);
+        $_SESSION['settings_saved'] = true;
         redirect(url('admin_settings'));
     }
 elseif ($action === 'admin_moderation') {

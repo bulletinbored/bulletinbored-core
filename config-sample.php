@@ -39,8 +39,6 @@ $config['avatar_allowed_types'] = array(
     'image/webp',
 );
 $config['base_url'] = ''; // e.g. '/forum' if installed in a subdirectory
-$config['allow_registration'] = 0;
-$config['maintenance_mode'] = 0;
 $config['site_tagline'] = '';
 $config['site_icon'] = '';
 $config['timezone'] = 'UTC';

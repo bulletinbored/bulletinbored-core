@@ -680,6 +680,45 @@ body.sidebar-toggled #content-wrapper {
     transform: translate(-25%, -25%);
 }
 
+/* User actions cell - uniform icon buttons + days input */
+.actions-cell {
+    vertical-align: middle;
+}
+
+.actions-cell form {
+    margin: 0;
+}
+
+.actions-cell .btn-sm {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    height: 32px !important;
+    width: 32px !important;
+    padding: 0 !important;
+    line-height: 1 !important;
+    border-radius: 0 !important;
+}
+
+.actions-cell .days-input {
+    width: 48px !important;
+    height: 32px !important;
+    padding: 0.125rem 0.25rem !important;
+    text-align: center !important;
+    border-radius: 0 !important;
+}
+
+.actions-cell .days-input::-webkit-outer-spin-button,
+.actions-cell .days-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.actions-cell .days-input {
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+
 /* Breadcrumb for admin */
 .breadcrumb {
     background-color: transparent;

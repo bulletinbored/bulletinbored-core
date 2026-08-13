@@ -110,29 +110,33 @@ $users = $pdo->query("SELECT * FROM users ORDER BY id ASC")->fetchAll();
                             <td><?= escape($u['created_at'] ?? 'N/A') ?></td>
                             <td class="text-end">
                                 <?php if ($u['role'] !== 'admin'): ?>
+                                <div class="d-inline-flex align-items-stretch gap-1 flex-nowrap actions-cell">
                                     <?php if ($u['status'] === 'banned' || ($suspensionTime > $now && $now < $suspensionTime)): ?>
-                                    <form method="POST" action="<?= url('unban_user', ['id' => $u['id']]) ?>" class="d-inline" onsubmit="return confirm('<?= t('unban_user') ?>')">
+                                    <form method="POST" action="<?= url('unban_user', ['id' => $u['id']]) ?>" class="d-flex m-0" onsubmit="return confirm('<?= t('unban_user') ?>')">
                                         <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                                         <input type="hidden" name="redirect" value="/admin/users">
-                                        <button class="btn btn-sm btn-success"><i class="fas fa-unlock"></i> <?= t('unban_user') ?></button>
+                                        <button type="submit" class="btn btn-sm btn-success w-100" title="<?= t('unban_user') ?>"><i class="fas fa-unlock"></i></button>
                                     </form>
                                     <?php else: ?>
-                                    <form method="POST" action="<?= url('ban_user', ['id' => $u['id']]) ?>" class="d-inline" onsubmit="return confirm('<?= t('ban_user') ?>')">
+                                    <form method="POST" action="<?= url('ban_user', ['id' => $u['id']]) ?>" class="d-flex m-0" onsubmit="return confirm('<?= t('ban_user') ?>')">
                                         <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                                         <input type="hidden" name="redirect" value="/admin/users">
-                                        <button class="btn btn-sm btn-warning"><i class="fas fa-ban"></i> <?= t('ban_user') ?></button>
+                                        <button type="submit" class="btn btn-sm btn-warning w-100" title="<?= t('ban_user') ?>"><i class="fas fa-ban"></i></button>
                                     </form>
-                                    <form method="POST" action="<?= url('suspend_user', ['id' => $u['id']]) ?>" class="d-inline ms-1" onsubmit="return confirm('<?= t('suspend') ?>')">
+                                    <form method="POST" action="<?= url('suspend_user', ['id' => $u['id']]) ?>" class="d-flex align-items-stretch gap-1 m-0" onsubmit="return confirm('<?= t('suspend') ?>')">
                                         <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
-                                        <input type="number" name="days" min="1" max="30" placeholder="<?= t('days') ?>" class="form-control form-control-sm" style="width: auto;">
+                                        <input type="number" name="days" min="1" max="30" value="1" title="<?= t('days') ?>" class="form-control form-control-sm days-input">
                                         <input type="hidden" name="redirect" value="/admin/users">
-                                        <button class="btn btn-sm btn-info" title="<?= t('suspend') ?>"><i class="fas fa-lock"></i></button>
+                                        <button type="submit" class="btn btn-sm btn-info" title="<?= t('suspend') ?>"><i class="fas fa-lock"></i></button>
                                     </form>
                                     <?php endif; ?>
-                                    <form method="POST" action="<?= url('delete_user', ['id' => $u['id']]) ?>" class="d-inline ms-1" onsubmit="return confirm('<?= t('delete_confirm') ?>')">
+                                    <form method="POST" action="<?= url('delete_user', ['id' => $u['id']]) ?>" class="d-flex m-0" onsubmit="return confirm('<?= t('delete_confirm') ?>')">
                                         <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
-                                        <button class="btn btn-danger btn-sm"><i class="fas fa-trash"></i></button>
+                                        <button type="submit" class="btn btn-sm btn-danger w-100" title="<?= t('delete') ?>"><i class="fas fa-trash"></i></button>
                                     </form>
+                                </div>
+                                <?php else: ?>
+                                <span class="text-muted"><i class="fas fa-shield-alt" title="<?= t('admin') ?>"></i></span>
                                 <?php endif; ?>
                             </td>
                         </tr>

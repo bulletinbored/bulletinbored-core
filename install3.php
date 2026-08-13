@@ -263,8 +263,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install'])) {
         $configContent .= '$config[\'avatar_max_size\'] = 2097152;' . "\n";
         $configContent .= '$config[\'avatar_allowed_types\'] = [\'image/jpeg\', \'image/png\', \'image/gif\', \'image/webp\'];' . "\n";
         $configContent .= '$config[\'base_url\'] = \'\';' . "\n";
-        $configContent .= '$config[\'allow_registration\'] = 0;' . "\n";
-        $configContent .= '$config[\'maintenance_mode\'] = 0;' . "\n";
         $configContent .= '$config[\'site_tagline\'] = \'\';' . "\n";
         $configContent .= '$config[\'site_icon\'] = \'\';' . "\n";
         $configContent .= '$config[\'timezone\'] = \'UTC\';' . "\n";

@@ -306,9 +306,15 @@ return [
     'timezone' => 'Timezone',
     'date_format' => 'Date Format',
     'time_format' => 'Time Format',
-    'allow_registration' => 'Allow Registration',
-    'maintenance_mode' => 'Maintenance Mode',
     'save_settings' => 'Save Settings',
+    'email_settings' => 'Email & System Notifications',
+    'admin_email' => 'Administration Email',
+    'admin_email_hint' => 'Used as the sender address for all system emails (registrations, notifications, alerts).',
+    'mail_from_name' => 'Sender Name',
+    'mail_from_name_hint' => 'The display name shown next to the sender address in outgoing emails.',
+    'general_settings' => 'General',
+    'appearance_settings' => 'Appearance',
+    'regional_settings' => 'Regional & Format',
 
     // --- admin tables ---
     'id' => 'ID',
