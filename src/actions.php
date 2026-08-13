@@ -97,7 +97,13 @@ try {
             if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
                 die('CSRF token invalid');
             }
-            
+
+            // Rate limit: 20 new threads / hour per user.
+            if (!rate_limit('new_thread', 20, 3600, (string)($_SESSION['user_id'] ?? 0))) {
+                http_response_code(429);
+                die('You are posting too fast. Please try again later.');
+            }
+
             $title = validate_input($_POST['title'] ?? '');
             $content = validate_input($_POST['content'] ?? '');
             $categoryId = (int)($_POST['category_id'] ?? 1);
@@ -152,7 +158,13 @@ try {
         if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
             die('CSRF token invalid');
         }
-        
+
+        // Rate limit: 30 replies / hour per user.
+        if (!rate_limit('reply', 30, 3600, (string)($_SESSION['user_id'] ?? 0))) {
+            http_response_code(429);
+            die('You are posting too fast. Please try again later.');
+        }
+
         $threadId = (int)($_POST['thread_id'] ?? 0);
         $content = validate_input($_POST['content'] ?? '');
         
@@ -308,7 +320,14 @@ try {
             if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
                 die('CSRF token invalid');
             }
-            
+
+            // Rate limit: 5 attempts / 15 min per IP+username.
+            $rlKey = ($_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0') . '|' . ($_POST['username'] ?? '');
+            if (!rate_limit('login', 5, 900, $rlKey)) {
+                http_response_code(429);
+                die('Too many login attempts. Please try again later.');
+            }
+
             $username = $_POST['username'] ?? '';
             $password = $_POST['password'] ?? '';
             
@@ -331,6 +350,7 @@ try {
                     $_SESSION['avatar'] = $user['avatar'] ?? '';
                     $_SESSION['user_status'] = $user['status'];
                     $_SESSION['user_suspension_time'] = $user['suspension_time'] ?? 0;
+                    session_regenerate_id(true);
                     if ($user['status'] === 'suspended' && !empty($user['suspension_time']) && time() >= $user['suspension_time']) {
                         $pdo->prepare("UPDATE users SET status = 'active', suspension_time = 0 WHERE id = ?")->execute([$user['id']]);
                         $_SESSION['user_status'] = 'active';
@@ -350,7 +370,13 @@ try {
             if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
                 die('CSRF token invalid');
             }
-            
+
+            // Rate limit: 5 registrations / hour per IP.
+            if (!rate_limit('register', 5, 3600)) {
+                http_response_code(429);
+                die('Too many registration attempts. Please try again later.');
+            }
+
             $username = validate_input($_POST['username'] ?? '');
             $password = $_POST['password'] ?? '';
             
@@ -1587,6 +1613,13 @@ elseif ($action === 'admin_users') {
             if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
                 die('CSRF token invalid');
             }
+
+            // Rate limit: 5 requests / hour per IP (prevents reset-email bombing).
+            if (!rate_limit('forgot_password', 5, 3600)) {
+                http_response_code(429);
+                die('Too many requests. Please try again later.');
+            }
+
             $email = validate_input($_POST['email'] ?? '');
             $userStmt = $pdo->prepare("SELECT * FROM users WHERE email = ?");
             $userStmt->execute([$email]);
@@ -1622,6 +1655,13 @@ elseif ($action === 'admin_users') {
             if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
                 die('CSRF token invalid');
             }
+
+            // Rate limit: 10 reset attempts / hour per IP (token brute-force protection).
+            if (!rate_limit('reset_password', 10, 3600)) {
+                http_response_code(429);
+                die('Too many attempts. Please try again later.');
+            }
+
             $token = $_POST['token'] ?? '';
             $password = $_POST['password'] ?? '';
             $confirm = $_POST['confirm_password'] ?? '';

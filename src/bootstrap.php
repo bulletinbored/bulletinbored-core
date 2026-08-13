@@ -11,6 +11,32 @@
  *   - the PSR-4 autoloader for the Bulletin\ namespace
  */
 
+// --- Security headers -------------------------------------------------------
+// Sent on every request (including the built-in server). Hardening headers
+// that need no app knowledge live here; CSP is intentionally permissive to
+// allow the CDN scripts the editor relies on, but blocks injection vectors.
+header('X-Content-Type-Options: nosniff');
+header('X-Frame-Options: DENY');
+header('Referrer-Policy: strict-origin-when-cross-origin');
+if (!headers_sent()) {
+    header("Content-Security-Policy: default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://connect.facebook.net https://www.instagram.com 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com; font-src 'self' https: data:; img-src 'self' data: https:; frame-src https://www.instagram.com https://connect.facebook.net; connect-src 'self'");
+}
+
+// --- Session hardening ------------------------------------------------------
+// Configure the session cookie before starting the session so the flags are
+// applied on the very first Set-Cookie. Secure is enabled only when we are
+// actually on HTTPS, to avoid breaking local HTTP dev installs.
+$sessionSecure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+    || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
+session_set_cookie_params([
+    'lifetime' => 0,
+    'path'     => '/',
+    'domain'   => '',
+    'secure'   => $sessionSecure,
+    'httponly' => true,
+    'samesite' => 'Lax',
+]);
+
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }

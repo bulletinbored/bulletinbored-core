@@ -160,13 +160,87 @@ function is_suspended() {
     return $status === 'suspended';
 }
 
+/**
+ * Strip dangerous markup from user-supplied HTML.
+ *
+ * The editbored editor stores HTML that was run through validate_input() at
+ * save time, so it arrives here as entities (e.g. <script>). marked_parse()
+ * decodes it back to real HTML before echoing, which would be a stored-XSS
+ * hole unless we strip scripts/handlers/event attributes first. We keep this
+ * dependency-free on purpose: a strict allow-list of tags and the removal of
+ * every on* attribute plus javascript:/data: URI schemes.
+ */
+function sanitize_html($html) {
+    if ($html === '' || $html === null) {
+        return '';
+    }
+
+    // Remove scripts/styles and their contents entirely.
+    $html = preg_replace('#<(script|style)\b[^>]*>.*?</\1>#is', '', $html);
+    $html = preg_replace('#<script\b[^>]*>.*?$#is', '', $html);
+
+    // Decode entities so we can match real tag boundaries, then re-scan.
+    $decoded = html_entity_decode($html, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+    // Strip any tag that is not in the allow-list.
+    $allowedTags = '<p><br><a><strong><em><b><i><u><s><strike><ul><ol><li>'
+        . '<blockquote><code><pre><h1><h2><h3><h4><h5><h6><hr><table><thead>'
+        . '<tbody><tr><th><td><img><span><div><sub><sup><del><ins><mark><abbr>';
+    $decoded = strip_tags($decoded, $allowedTags);
+
+    // Remove every attribute except a small safe set; kill event handlers and
+    // javascript:/data: URIs everywhere.
+    $decoded = preg_replace_callback(
+        '#<([a-zA-Z][a-zA-Z0-9]*)\b([^>]*)>#',
+        function ($m) {
+            $tag = strtolower($m[1]);
+            $attrs = $m[2];
+
+            $safeAttrs = [];
+            if (preg_match_all('#([a-zA-Z_\-][a-zA-Z0-9_\-]*)\s*=\s*("([^"]*)"|\'([^\']*)\'|([^\s>]+))#', $attrs, $am, PREG_SET_ORDER)) {
+                foreach ($am as $a) {
+                    $name = strtolower($a[1]);
+                    $val  = $a[3] ?? ($a[4] ?? ($a[5] ?? ''));
+
+                    // Drop every event handler and non-standard attribute.
+                    if (str_starts_with($name, 'on') || $name === 'style' || $name === 'id') {
+                        continue;
+                    }
+                    if (in_array($name, ['href', 'src'], true)) {
+                        $norm = preg_replace('#\s+#', '', strtolower($val));
+                        if (str_starts_with($norm, 'javascript:') || str_starts_with($norm, 'data:') || str_starts_with($norm, 'vbscript:')) {
+                            continue;
+                        }
+                    }
+                    if ($name === 'href' || $name === 'src') {
+                        $safeAttrs[] = $name . '="' . escape($val) . '"';
+                    } elseif (in_array($name, ['alt', 'title', 'class', 'target', 'rel', 'width', 'height', 'colspan', 'rowspan', 'start', 'cite'])) {
+                        $safeAttrs[] = $name . '="' . escape($val) . '"';
+                    }
+                }
+            }
+
+            // Force safe linking for anchors.
+            if ($tag === 'a' && !in_array('rel="noopener noreferrer"', $safeAttrs, true)) {
+                $safeAttrs[] = 'rel="noopener noreferrer"';
+            }
+
+            return '<' . $tag . (empty($safeAttrs) ? '' : ' ' . implode(' ', $safeAttrs)) . '>';
+        },
+        $decoded
+    );
+
+    return $decoded;
+}
+
 function marked_parse($text) {
     if (empty($text)) return '';
     // Check if content is HTML (saved by editbored editor)
     // The content is escaped by validate_input(), so HTML tags appear as <tag>
     if (str_contains($text, '&lt;')) {
-        // Unescape HTML and output directly
-        return '<div class="markdown-content">' . html_entity_decode($text, ENT_QUOTES, 'UTF-8') . '</div>';
+        // Unescape HTML, sanitize, then output.
+        $html = html_entity_decode($text, ENT_QUOTES, 'UTF-8');
+        return '<div class="markdown-content">' . sanitize_html($html) . '</div>';
     }
     // Content is markdown, JavaScript renderMarkdownContent() will parse it with marked.parse()
     return '<div class="markdown-content">' . $text . '</div>';
@@ -198,6 +272,56 @@ function generate_csrf_token() {
 function validate_csrf_token($token) {
     return isset($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $token);
 }
+
+/**
+ * File-based rate limiter (no dependencies).
+ *
+ * Tracks attempts per (action, key) within a sliding window and returns false
+ * once the limit is exceeded. The key is normally the client IP, optionally
+ * combined with the user id for login-style limits. State lives under
+ * data/ratelimit/ as one small JSON file per bucket.
+ *
+ * @param string $action   Logical bucket, e.g. 'login', 'register', 'post'.
+ * @param int    $max      Max attempts allowed in the window.
+ * @param int    $window   Window length in seconds.
+ * @param string $key      Bucket discriminator (defaults to client IP).
+ * @return bool            true if the request is allowed, false if throttled.
+ */
+function rate_limit($action, $max = 10, $window = 300, $key = null) {
+    $ip = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+    if (is_string($ip) && str_contains($ip, ',')) {
+        $ip = trim(explode(',', $ip)[0]);
+    }
+    $key = $key ?? $ip;
+    $bucket = preg_replace('/[^a-z0-9._-]/i', '_', $action . '_' . $key);
+
+    $dir = __DIR__ . '/../data/ratelimit';
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0755, true);
+    }
+    $file = $dir . '/' . $bucket . '.json';
+
+    $now = time();
+    $hits = [];
+    if (is_file($file)) {
+        $decoded = json_decode(@file_get_contents($file), true);
+        if (is_array($decoded)) {
+            // Keep only timestamps inside the window.
+            $hits = array_values(array_filter($decoded, function ($ts) use ($now, $window) {
+                return is_int($ts) && ($now - $ts) < $window;
+            }));
+        }
+    }
+
+    if (count($hits) >= $max) {
+        return false;
+    }
+
+    $hits[] = $now;
+    @file_put_contents($file, json_encode($hits), LOCK_EX);
+    return true;
+}
+
 function validate_input($data) {
     $data = trim($data);
     $data = stripslashes($data);
