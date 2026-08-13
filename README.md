@@ -8,8 +8,9 @@ Minimal, extensible forum software with zero dependencies. Upload files and run 
 2. Ensure Apache `mod_rewrite` is enabled (for SEO-friendly URLs)
 3. Ensure the `data/`, `uploads/`, and `uploads/avatars/` directories are writable by the web server
 4. Visit the site in your browser. If `config.php` is missing, the 2-step installer starts automatically:
-   - **Step 1**: Choose your database (SQLite or MySQL) and test the connection
-   - **Step 2**: Set your site name, administrator account, and email
+    - **Step 1**: Choose your database (SQLite or MySQL) and test the connection
+    - **Step 2**: Set your site name, administrator account, and email
+    - **Step 3**: Optionally install suggested plugins to make the installation more complete. The core ships only the basic forum features, but you can install the suggested plugins now or add them later from the admin panel.
 5. The installer creates `config.php` and the database automatically
 6. Log in with the administrator credentials you just created
 

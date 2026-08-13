@@ -621,7 +621,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install'])) {
                 </div>
 
                 <h1 class="installer-title">Optional Plugins</h1>
-                <p class="installer-subtitle">Select the plugins you want to install. They will be enabled automatically.</p>
+                <p class="installer-subtitle">The core includes only the basic forum features. Select the suggested plugins below to make your installation more complete. They will be installed and enabled automatically. You can also install them later from the admin panel at any time.</p>
 
                 <?php if ($error): ?>
                     <div class="alert alert-danger"><i class="fas fa-exclamation-circle me-2"></i><?= escape($error) ?></div>
