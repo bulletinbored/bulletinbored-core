@@ -688,7 +688,7 @@ try {
                     }
                 }
                 
-            if (file_put_contents(__DIR__.'/config.php', $configContent) !== false) {
+            if (file_put_contents(__DIR__ . '/../config.php', $configContent) !== false) {
                 $adminSuccess = 'Settings saved successfully';
             } else {
                 $adminError = 'Failed to save settings';
@@ -925,7 +925,7 @@ elseif ($action === 'unban_user' && $method === 'POST' && is_admin()) {
             }
         }
 
-        file_put_contents(__DIR__.'/config.php', $configContent);
+        file_put_contents(__DIR__ . '/../config.php', $configContent);
         redirect(url('admin_settings'));
     }
 elseif ($action === 'admin_moderation') {
@@ -1123,7 +1123,7 @@ elseif ($action === 'admin_users') {
                             $configContent .= "\$config['$key'] = " . var_export($value, true) . ";\n";
                         }
                     }
-                    file_put_contents(__DIR__.'/config.php', $configContent);
+                    file_put_contents(__DIR__ . '/../config.php', $configContent);
                     $_SESSION['lang_success'] = 'Language settings saved';
                     redirect(url('admin_langs'));
                 } elseif (isset($_POST['upload_lang']) && !empty($_FILES['lang_file']['tmp_name'])) {

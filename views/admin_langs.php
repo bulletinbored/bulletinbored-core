@@ -135,6 +135,7 @@
     const txtFile = <?= json_encode(t('file')) ?>;
     const txtAction = <?= json_encode(t('actions')) ?>;
     const csrf = '<?= generate_csrf_token() ?>';
+    const mirrorBase = '<?= escape($langMirrorBase) ?>';
 
     const remoteLangs = <?= json_encode($remoteLangs ?? new stdClass()) ?>;
     const installed = <?= json_encode(array_values($langOptions)) ?>;
@@ -163,6 +164,7 @@
         const isInstalled = installed.indexOf(code) !== -1;
         const localSha = localMeta[code] && localMeta[code].sha ? localMeta[code].sha : null;
         const changed = localSha !== null && localSha !== info.sha;
+        const fullUrl = mirrorBase.replace(/\/+$/, '') + '/' + String(info.url).replace(/^\/+/, '');
 
         let actionCell;
         if (!isInstalled) {
@@ -170,7 +172,7 @@
                 + '<input type="hidden" name="csrf_token" value="' + csrf + '">'
                 + '<input type="hidden" name="install_github_lang" value="1">'
                 + '<input type="hidden" name="lang_code" value="' + esc(code) + '">'
-                + '<input type="hidden" name="download_url" value="' + esc(info.url) + '">'
+                + '<input type="hidden" name="download_url" value="' + esc(fullUrl) + '">'
                 + '<button type="submit" class="btn btn-sm btn-primary">' + esc(txtInstall) + '</button></form>';
         } else if (changed) {
             actionCell = '<span class="badge bg-warning text-dark me-1">' + esc(txtInstalled) + '</span>'
@@ -178,7 +180,7 @@
                 + '<input type="hidden" name="csrf_token" value="' + csrf + '">'
                 + '<input type="hidden" name="update_github_lang" value="1">'
                 + '<input type="hidden" name="lang_code" value="' + esc(code) + '">'
-                + '<input type="hidden" name="download_url" value="' + esc(info.url) + '">'
+                + '<input type="hidden" name="download_url" value="' + esc(fullUrl) + '">'
                 + '<input type="hidden" name="remote_sha" value="' + esc(info.sha) + '">'
                 + '<button type="submit" class="btn btn-sm btn-warning">' + esc(txtUpdate) + '</button></form>';
         } else {
