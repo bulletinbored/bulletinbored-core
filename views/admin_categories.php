@@ -32,13 +32,31 @@ $categories = $pdo->query("SELECT * FROM categories ORDER BY position")->fetchAl
                                     <td><?= escape($cat['description'] ?? '') ?></td>
                                     <td><?= escape($cat['position']) ?></td>
                                     <td class="text-end">
-                                        <form method="POST" action="<?= url('edit_category', ['id' => $cat['id']]) ?>" class="d-inline">
-                                            <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
-                                            <button class="btn btn-sm btn-warning"><i class="fas fa-pen"></i></button>
-                                        </form>
+                                        <button class="btn btn-sm btn-warning" onclick="document.getElementById('edit-form-<?= $cat['id'] ?>').classList.toggle('d-none')">
+                                            <i class="fas fa-pen"></i>
+                                        </button>
                                         <form method="POST" action="<?= url('delete_category', ['id' => $cat['id']]) ?>" class="d-inline" onsubmit="return confirm('<?= t('delete_confirm') ?>')">
                                             <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                                             <button class="btn btn-danger btn-sm"><i class="fas fa-trash"></i></button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                <tr id="edit-form-<?= $cat['id'] ?>" class="d-none">
+                                    <td colspan="3">
+                                        <form method="POST" action="<?= url('edit_category', ['id' => $cat['id']]) ?>" class="row g-2 p-3 bg-light rounded">
+                                            <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                                            <div class="col-md-6">
+                                                <label class="form-label small fw-bold"><?= t('name') ?></label>
+                                                <input type="text" name="name" class="form-control" value="<?= escape($cat['name']) ?>" required>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label small fw-bold"><?= t('description') ?></label>
+                                                <input type="text" name="description" class="form-control" value="<?= escape($cat['description'] ?? '') ?>">
+                                            </div>
+                                            <div class="col-12">
+                                                <button type="submit" class="btn btn-sm btn-primary"><i class="fas fa-save me-1"></i><?= t('save') ?></button>
+                                                <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('edit-form-<?= $cat['id'] ?>').classList.add('d-none')"><?= t('cancel') ?></button>
+                                            </div>
                                         </form>
                                     </td>
                                 </tr>

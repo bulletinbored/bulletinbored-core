@@ -61,7 +61,7 @@ $allPermissions = [
                                     </td>
                                     <td class="text-end">
                                         <div class="d-inline-flex gap-2">
-                                            <button class="btn btn-sm btn-outline-primary" onclick="document.getElementById('edit-form-<?= $role['id'] ?>).classList.toggle('d-none')">
+                                            <button class="btn btn-sm btn-outline-primary" onclick="document.getElementById('edit-form-<?= $role['id'] ?>').classList.toggle('d-none')">
                                                 <i class="fas fa-edit"></i>
                                             </button>
                                             <?php if ($role['name'] !== 'admin'): ?>
