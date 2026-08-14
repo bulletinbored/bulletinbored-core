@@ -10,6 +10,11 @@ $isLogged    = function_exists('is_logged_in') && is_logged_in();
 $canModerate = $isLogged && in_array($_SESSION['user_role'] ?? 'user', ['admin', 'moderator'], true);
 $isLocked    = ($thread['status'] ?? '') === 'locked';
 
+$categories = [];
+if ($canModerate) {
+    $categories = $pdo->query("SELECT * FROM categories ORDER BY position")->fetchAll();
+}
+
 $isWatching = false;
 if ($isLogged) {
     try {
@@ -58,6 +63,7 @@ function render_post($data, $number, $threadId, $threadUrl, $opts = []) {
     $role     = $data['author_role'] ?? 'user';
     $canEdit  = function_exists('is_logged_in') && is_logged_in()
                 && (($_SESSION['user_id'] ?? 0) == ($data['user_id'] ?? -1) || (function_exists('is_admin') && is_admin()));
+    global $canModerate;
     ?>
     <article class="post <?= $isOp ? 'post-op' : '' ?>" id="<?= escape($anchor) ?>">
         <div class="post-side">
@@ -82,7 +88,7 @@ function render_post($data, $number, $threadId, $threadUrl, $opts = []) {
                 </time>
                 <div class="post-actions">
                     <a class="post-action" href="<?= $threadUrl ?>#<?= escape($anchor) ?>" title="<?= t('permalink') ?>"><i class="fas fa-link"></i></a>
-                    <?php if ($canEdit && !$isOp): ?>
+                    <?php if ($canEdit): ?>
                         <a class="post-action" href="<?= url('edit_post', ['id' => $data['id']]) ?>" title="<?= t('edit') ?>"><i class="fas fa-pen"></i></a>
                         <form method="POST" action="<?= url('delete_post', ['id' => $data['id']]) ?>" class="d-inline"
                               onsubmit="return confirm('<?= t('delete_confirm') ?>')">
@@ -154,7 +160,18 @@ render_header($thread['title'] ?? 'Thread', ['info' => $sidebarInfo]);
             <span><i class="fas fa-eye me-1"></i><?= compact_number($viewCount) ?> <span class="count-label"><?= t('views') ?></span></span>
 
             <div class="discussion-head-actions">
-                <?php if ($isLogged): ?>
+    <?php if ($canModerate): ?>
+        <script>
+        document.querySelectorAll('.bb-modal').forEach(function(modal) {
+            modal.addEventListener('click', function(event) {
+                if (event.target === modal) {
+                    modal.close();
+                }
+            });
+        });
+        </script>
+    <?php endif; ?>
+    <?php if ($isLogged): ?>
                     <a class="btn btn-outline-soft btn-sm"
                        href="<?= $isWatching ? url('unwatch', ['thread_id' => $threadId]) : url('watch', ['thread_id' => $threadId]) ?>">
                         <i class="fas <?= $isWatching ? 'fa-bell-slash' : 'fa-bell' ?> me-1"></i><?= $isWatching ? t('unwatch') : t('watch') ?>
@@ -165,31 +182,197 @@ render_header($thread['title'] ?? 'Thread', ['info' => $sidebarInfo]);
 
         <?php if ($canModerate): ?>
             <div class="mod-bar">
-                <span class="mod-bar-label"><i class="fas fa-shield-halved me-1"></i><?= t('moderation') ?></span>
-                <?php
-                if (($thread['status'] ?? '') === 'pending') {
-                    mod_button($threadId, 'approve', 'fa-check', t('approve_thread'), 'outline-soft');
-                }
-                if ($isLocked) {
-                    mod_button($threadId, 'unlock', 'fa-unlock', t('unlock_thread'), 'outline-soft');
-                } else {
-                    mod_button($threadId, 'lock', 'fa-lock', t('lock_thread'), 'outline-soft');
-                }
-                if (($thread['status'] ?? '') === 'sticky') {
-                    mod_button($threadId, 'unsticky', 'fa-thumbtack', t('unsticky_thread'), 'outline-soft');
-                } else {
-                    mod_button($threadId, 'sticky', 'fa-thumbtack', t('sticky_thread'), 'outline-soft');
-                }
-                if (($thread['status'] ?? '') === 'hidden') {
-                    mod_button($threadId, 'approve', 'fa-eye', t('approve_thread'), 'outline-soft');
-                } else {
-                    mod_button($threadId, 'hide', 'fa-eye-slash', t('hide_thread'), 'outline-soft', t('hide_confirm'));
-                }
-                mod_button($threadId, 'delete', 'fa-trash', t('delete'), 'outline-danger', t('delete_thread_confirm'));
-                ?>
+                <div class="dropdown">
+                    <button class="btn btn-outline-soft btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="fas fa-shield-halved"></i> <?= t('moderation') ?>
+                    </button>
+                    <ul class="dropdown-menu">
+                        <?php if (($thread['status'] ?? '') === 'pending'): ?>
+                            <li>
+                                <form method="POST" action="<?= url('frontend_moderate') ?>" class="px-3 py-1">
+                                    <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                                    <input type="hidden" name="do" value="approve">
+                                    <input type="hidden" name="id" value="<?= (int)$threadId ?>">
+                                    <button type="submit" class="btn btn-sm btn-success w-100"><?= t('approve_thread') ?></button>
+                                </form>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                        <?php endif; ?>
+                        <li>
+                            <form method="POST" action="<?= url('frontend_moderate') ?>" class="px-3 py-1">
+                                <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                                <input type="hidden" name="do" value="<?= $isLocked ? 'unlock' : 'lock' ?>">
+                                <input type="hidden" name="id" value="<?= (int)$threadId ?>">
+                                <button type="submit" class="dropdown-item">
+                                    <i class="fas fa-<?= $isLocked ? 'unlock' : 'lock' ?>"></i> <?= $isLocked ? t('unlock_thread') : t('lock_thread') ?>
+                                </button>
+                            </form>
+                        </li>
+                        <li>
+                            <form method="POST" action="<?= url('frontend_moderate') ?>" class="px-3 py-1">
+                                <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                                <input type="hidden" name="do" value="<?= ($thread['status'] ?? '') === 'sticky' ? 'unsticky' : 'sticky' ?>">
+                                <input type="hidden" name="id" value="<?= (int)$threadId ?>">
+                                <button type="submit" class="dropdown-item">
+                                    <i class="fas fa-thumbtack"></i> <?= ($thread['status'] ?? '') === 'sticky' ? t('unsticky_thread') : t('sticky_thread') ?>
+                                </button>
+                            </form>
+                        </li>
+                        <li>
+                            <form method="POST" action="<?= url('frontend_moderate') ?>" class="px-3 py-1">
+                                <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                                <input type="hidden" name="do" value="<?= ($thread['status'] ?? '') === 'hidden' ? 'approve' : 'hide' ?>">
+                                <input type="hidden" name="id" value="<?= (int)$threadId ?>">
+                                <button type="submit" class="dropdown-item">
+                                    <i class="fas fa-<?= ($thread['status'] ?? '') === 'hidden' ? 'eye' : 'eye-slash' ?>"></i> <?= ($thread['status'] ?? '') === 'hidden' ? t('approve_thread') : t('hide_thread') ?>
+                                </button>
+                            </form>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <button type="button" class="dropdown-item" onclick="document.getElementById('move-modal').showModal()">
+                                <i class="fas fa-arrows-alt"></i> <?= t('move_thread') ?>
+                            </button>
+                        </li>
+                        <li>
+                            <button type="button" class="dropdown-item" onclick="document.getElementById('copy-modal').showModal()">
+                                <i class="fas fa-copy"></i> <?= t('copy_thread') ?>
+                            </button>
+                        </li>
+                        <li>
+                            <button type="button" class="dropdown-item" onclick="document.getElementById('merge-modal').showModal()">
+                                <i class="fas fa-code-branch"></i> <?= t('merge_thread') ?>
+                            </button>
+                        </li>
+                        <li>
+                            <button type="button" class="dropdown-item" onclick="document.getElementById('split-modal').showModal()">
+                                <i class="fas fa-scissors"></i> <?= t('split_thread') ?>
+                            </button>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <form method="POST" action="<?= url('frontend_moderate') ?>" class="px-3 py-1" onsubmit="return confirm('<?= t('delete_thread_confirm') ?>')">
+                                <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                                <input type="hidden" name="do" value="delete">
+                                <input type="hidden" name="id" value="<?= (int)$threadId ?>">
+                                <button type="submit" class="dropdown-item text-danger">
+                                    <i class="fas fa-trash"></i> <?= t('delete') ?>
+                                </button>
+                            </form>
+                        </li>
+                    </ul>
+                </div>
             </div>
         <?php endif; ?>
     </header>
+
+    <?php if ($canModerate): ?>
+        <dialog id="move-modal" class="bb-modal">
+            <div class="modal-content">
+                <form method="POST" action="<?= url('frontend_moderate') ?>">
+                    <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                    <input type="hidden" name="do" value="move">
+                    <input type="hidden" name="id" value="<?= (int)$threadId ?>">
+                    <div class="mb-3">
+                        <label class="form-label"><?= t('move_thread') ?></label>
+                        <select name="category_id" class="form-select" required>
+                            <option value=""><?= t('select_category') ?></option>
+                            <?php foreach ($categories ?? [] as $cat): ?>
+                                <?php if ((int)$cat['id'] !== (int)($thread['category_id'] ?? 0)): ?>
+                                    <option value="<?= (int)$cat['id'] ?>"><?= escape($cat['name']) ?></option>
+                                <?php endif; ?>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-secondary" onclick="document.getElementById('move-modal').close()"><?= t('cancel') ?></button>
+                        <button type="submit" class="btn btn-brand"><?= t('move_thread') ?></button>
+                    </div>
+                </form>
+            </div>
+        </dialog>
+
+        <dialog id="copy-modal" class="bb-modal">
+            <div class="modal-content">
+                <form method="POST" action="<?= url('frontend_moderate') ?>">
+                    <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                    <input type="hidden" name="do" value="copy">
+                    <input type="hidden" name="id" value="<?= (int)$threadId ?>">
+                    <div class="mb-3">
+                        <label class="form-label"><?= t('copy_thread') ?></label>
+                        <select name="category_id" class="form-select" required>
+                            <option value=""><?= t('select_category') ?></option>
+                            <?php foreach ($categories ?? [] as $cat): ?>
+                                <option value="<?= (int)$cat['id'] ?>"><?= escape($cat['name']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-secondary" onclick="document.getElementById('copy-modal').close()"><?= t('cancel') ?></button>
+                        <button type="submit" class="btn btn-brand"><?= t('copy_thread') ?></button>
+                    </div>
+                </form>
+            </div>
+        </dialog>
+
+        <dialog id="merge-modal" class="bb-modal">
+            <div class="modal-content">
+                <form method="POST" action="<?= url('merge_thread') ?>">
+                    <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                    <input type="hidden" name="thread_id" value="<?= (int)$threadId ?>">
+                    <div class="mb-3">
+                        <label class="form-label"><?= t('merge_thread') ?></label>
+                        <input type="text" name="target_title" class="form-control" placeholder="<?= t('target_thread_title') ?>" required list="thread-titles">
+                        <datalist id="thread-titles">
+                            <?php
+                            $allThreads = $pdo->query("SELECT title FROM threads WHERE id != $threadId ORDER BY created_at DESC LIMIT 50")->fetchAll(PDO::FETCH_COLUMN);
+                            foreach ($allThreads as $t): ?>
+                                <option value="<?= escape($t) ?>">
+                            <?php endforeach; ?>
+                        </datalist>
+                        <div class="form-text"><?= t('merge_thread_confirm') ?></div>
+                    </div>
+                    <div class="d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-secondary" onclick="document.getElementById('merge-modal').close()"><?= t('cancel') ?></button>
+                        <button type="submit" class="btn btn-brand"><?= t('merge_thread') ?></button>
+                    </div>
+                </form>
+            </div>
+        </dialog>
+
+        <dialog id="split-modal" class="bb-modal">
+            <div class="modal-content">
+                <form method="POST" action="<?= url('split_thread') ?>" onsubmit="document.getElementById('split-post-ids').value = Array.from(document.querySelectorAll('.split-post-check:checked')).map(c => c.value).join(',');">
+                    <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                    <input type="hidden" name="thread_id" value="<?= (int)$threadId ?>">
+                    <input type="hidden" name="post_ids" id="split-post-ids" value="">
+                    <div class="mb-3">
+                        <label class="form-label"><?= t('split_thread') ?></label>
+                        <input type="text" name="new_title" class="form-control" placeholder="<?= t('new_thread_title') ?>" required>
+                        <div class="form-text"><?= t('split_thread_confirm') ?></div>
+                    </div>
+                    <?php if (!empty($posts ?? [])): ?>
+                        <div class="mb-3">
+                            <label class="form-label"><?= t('split_preview') ?></label>
+                            <div class="list-group list-group-flush" style="max-height:240px;overflow-y:auto;">
+                                <?php foreach ($posts as $index => $post): ?>
+                                    <label class="list-group-item d-flex align-items-center gap-2">
+                                        <input type="checkbox" class="split-post-check" value="<?= (int)$post['id'] ?>">
+                                        <span class="small text-muted">#<?= ($postPage - 1) * $perPage + $index + 2 ?></span>
+                                        <span class="small"><?= escape(mb_substr(strip_tags(marked_parse($post['content'] ?? '')), 0, 120)) ?></span>
+                                    </label>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                    <?php endif; ?>
+                    <div class="d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-secondary" onclick="document.getElementById('split-modal').close()"><?= t('cancel') ?></button>
+                        <button type="submit" class="btn btn-brand"><?= t('split_thread') ?></button>
+                    </div>
+                </form>
+            </div>
+        </dialog>
+    <?php endif; ?>
 
     <div class="post-stream">
         <?php if ($postPage === 1): ?>

@@ -15,7 +15,7 @@ try {
         $page = max(1, (int)($_GET['page'] ?? 1));
         $sort = $_GET['sort'] ?? 'latest';
 
-        $listing     = fetch_threads(['page' => $page, 'sort' => $sort, 'per_page' => 15]);
+        $listing     = fetch_threads(['page' => $page, 'sort' => $sort, 'per_page' => 15, 'sticky_first' => false]);
         $threads     = $listing['threads'];
         $total       = $listing['total'];
         $totalPages  = $listing['pages'];
@@ -621,7 +621,7 @@ try {
         $page  = max(1, (int)($_GET['page'] ?? 1));
         $sort  = $_GET['sort'] ?? 'latest';
 
-        $listing     = fetch_threads(['page' => $page, 'sort' => $sort, 'per_page' => 15, 'search' => $query]);
+        $listing     = fetch_threads(['page' => $page, 'sort' => $sort, 'per_page' => 15, 'search' => $query, 'sticky_first' => false]);
         $threads     = $listing['threads'];
         $total       = $listing['total'];
         $totalPages  = $listing['pages'];
@@ -742,43 +742,134 @@ elseif ($action === 'moderate' && $method === 'POST' && is_admin()) {
          }
          
 redirect(url('admin_moderation'));
-     }
-     elseif ($action === 'frontend_moderate' && $method === 'POST' && is_logged_in()) {
-         // Frontend moderation actions (from thread view)
-         if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
-             die('CSRF token invalid');
-         }
-         $threadId = (int)($_POST['id'] ?? 0);
-         $modAction = $_POST['do'] ?? '';
-         if ($threadId <= 0) {
-             die('Invalid thread ID');
-         }
-         // Check if user is admin or has moderation permissions
-         $userRole = $_SESSION['user_role'] ?? 'user';
-         if ($userRole !== 'admin' && $userRole !== 'moderator') {
-             die('Not authorized');
-         }
-         if ($modAction === 'lock') {
-             $pdo->prepare("UPDATE threads SET status = 'locked' WHERE id = ?")->execute([$threadId]);
-         } elseif ($modAction === 'unlock') {
-             $pdo->prepare("UPDATE threads SET status = 'visible' WHERE id = ?")->execute([$threadId]);
-         } elseif ($modAction === 'sticky') {
-             $pdo->prepare("UPDATE threads SET status = 'sticky' WHERE id = ?")->execute([$threadId]);
-         } elseif ($modAction === 'unsticky') {
-             $pdo->prepare("UPDATE threads SET status = 'visible' WHERE id = ?")->execute([$threadId]);
-         } elseif ($modAction === 'hide') {
-             $pdo->prepare("UPDATE threads SET status = 'hidden' WHERE id = ?")->execute([$threadId]);
-} elseif ($modAction === 'delete') {
+      }
+      elseif ($action === 'frontend_moderate' && $method === 'POST' && is_logged_in()) {
+          // Frontend moderation actions (from thread view)
+          if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+              die('CSRF token invalid');
+          }
+          $threadId = (int)($_POST['id'] ?? 0);
+          $modAction = $_POST['do'] ?? '';
+          if ($threadId <= 0) {
+              die('Invalid thread ID');
+          }
+          // Check if user is admin or has moderation permissions
+          $userRole = $_SESSION['user_role'] ?? 'user';
+          if ($userRole !== 'admin' && $userRole !== 'moderator') {
+              die('Not authorized');
+          }
+          if ($modAction === 'lock') {
+              $pdo->prepare("UPDATE threads SET status = 'locked' WHERE id = ?")->execute([$threadId]);
+          } elseif ($modAction === 'unlock') {
+              $pdo->prepare("UPDATE threads SET status = 'visible' WHERE id = ?")->execute([$threadId]);
+          } elseif ($modAction === 'sticky') {
+              $pdo->prepare("UPDATE threads SET status = 'sticky' WHERE id = ?")->execute([$threadId]);
+          } elseif ($modAction === 'unsticky') {
+              $pdo->prepare("UPDATE threads SET status = 'visible' WHERE id = ?")->execute([$threadId]);
+          } elseif ($modAction === 'hide') {
+              $pdo->prepare("UPDATE threads SET status = 'hidden' WHERE id = ?")->execute([$threadId]);
+          } elseif ($modAction === 'delete') {
               $pdo->prepare("DELETE FROM threads WHERE id = ?")->execute([$threadId]);
               redirect(url('admin_moderation'));
           } elseif ($modAction === 'approve') {
-             $pdo->prepare("UPDATE threads SET status = 'visible' WHERE id = ?")->execute([$threadId]);
-         }
-         $threadTitleStmt = $pdo->prepare("SELECT title FROM threads WHERE id = ?");
-         $threadTitleStmt->execute([$threadId]);
-         $threadTitle = $threadTitleStmt->fetchColumn();
-         redirect(url('thread', ['id' => $threadId, 'slug' => slugify($threadTitle ?? '')]));
-     }
+              $pdo->prepare("UPDATE threads SET status = 'visible' WHERE id = ?")->execute([$threadId]);
+          } elseif ($modAction === 'move') {
+              $targetCat = (int)($_POST['category_id'] ?? 0);
+              if ($targetCat > 0) {
+                  $pdo->prepare("UPDATE threads SET category_id = ? WHERE id = ?")->execute([$targetCat, $threadId]);
+              }
+          } elseif ($modAction === 'copy') {
+              $targetCat = (int)($_POST['category_id'] ?? 0);
+              if ($targetCat > 0) {
+                  $src = $pdo->prepare("SELECT * FROM threads WHERE id = ?");
+                  $src->execute([$threadId]);
+                  $srcThread = $src->fetch();
+                  if ($srcThread) {
+                      $ins = $pdo->prepare("INSERT INTO threads (category_id, user_id, title, content, status, created_at) VALUES (?, ?, ?, ?, 'visible', ?)");
+                      $ins->execute([$targetCat, $srcThread['user_id'], $srcThread['title'], $srcThread['content'], $srcThread['created_at']]);
+                      $newThreadId = (int)$pdo->lastInsertId();
+                      $postsStmt = $pdo->prepare("SELECT * FROM posts WHERE thread_id = ? AND status = 'visible'");
+                      $postsStmt->execute([$threadId]);
+                      $posts = $postsStmt->fetchAll();
+                      $postIns = $pdo->prepare("INSERT INTO posts (thread_id, user_id, content, status, created_at) VALUES (?, ?, ?, 'visible', ?)");
+                      foreach ($posts as $post) {
+                          $postIns->execute([$newThreadId, $post['user_id'], $post['content'], $post['created_at']]);
+                      }
+                  }
+              }
+          }
+          $threadTitleStmt = $pdo->prepare("SELECT title FROM threads WHERE id = ?");
+          $threadTitleStmt->execute([$threadId]);
+          $threadTitle = $threadTitleStmt->fetchColumn();
+          redirect(url('thread', ['id' => $threadId, 'slug' => slugify($threadTitle ?? '')]));
+      }
+      elseif ($action === 'split_thread' && $method === 'POST' && is_logged_in()) {
+          if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+              die('CSRF token invalid');
+          }
+          $threadId = (int)($_POST['thread_id'] ?? 0);
+          $postIds = $_POST['post_ids'] ?? '';
+          $newTitle = trim($_POST['new_title'] ?? '');
+          if (!is_array($postIds)) {
+              $postIds = array_filter(array_map('trim', explode(',', (string)$postIds)));
+          }
+          if ($threadId <= 0 || empty($postIds) || $newTitle === '') {
+              die('Invalid input');
+          }
+          $userRole = $_SESSION['user_role'] ?? 'user';
+          if ($userRole !== 'admin' && $userRole !== 'moderator') {
+              die('Not authorized');
+          }
+          $srcThreadStmt = $pdo->prepare("SELECT * FROM threads WHERE id = ?");
+          $srcThreadStmt->execute([$threadId]);
+          $srcThread = $srcThreadStmt->fetch();
+          if (!$srcThread) {
+              die('Thread not found');
+          }
+          $ins = $pdo->prepare("INSERT INTO threads (category_id, user_id, title, content, status, created_at) VALUES (?, ?, ?, ?, 'visible', ?)");
+          $ins->execute([$srcThread['category_id'], $srcThread['user_id'], $newTitle, $srcThread['content'], $srcThread['created_at']]);
+          $newThreadId = (int)$pdo->lastInsertId();
+          $postIns = $pdo->prepare("INSERT INTO posts (thread_id, user_id, content, status, created_at) SELECT ?, user_id, content, status, created_at FROM posts WHERE id IN (" . implode(',', array_fill(0, count($postIds), '?')) . ")");
+          $params = array_merge([$newThreadId], array_map('intval', $postIds));
+          $postIns->execute($params);
+          $delParams = array_merge([$threadId], array_map('intval', $postIds));
+          $delSql = "DELETE FROM posts WHERE thread_id = ? AND id IN (" . implode(',', array_fill(0, count($postIds), '?')) . ")";
+          $pdo->prepare($delSql)->execute($delParams);
+          $countStmt = $pdo->prepare("SELECT COUNT(*) FROM posts WHERE thread_id = ? AND status = 'visible'");
+          $countStmt->execute([$threadId]);
+          if (empty($countStmt->fetchColumn())) {
+              $pdo->prepare("DELETE FROM threads WHERE id = ?")->execute([$threadId]);
+              redirect(url('home'));
+          }
+          redirect(url('thread', ['id' => $newThreadId, 'slug' => slugify($newTitle)]));
+      }
+      elseif ($action === 'merge_thread' && $method === 'POST' && is_logged_in()) {
+          if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+              die('CSRF token invalid');
+          }
+          $threadId = (int)($_POST['thread_id'] ?? 0);
+          $targetTitle = trim($_POST['target_title'] ?? '');
+          if ($threadId <= 0 || $targetTitle === '') {
+              die('Invalid input');
+          }
+          $userRole = $_SESSION['user_role'] ?? 'user';
+          if ($userRole !== 'admin' && $userRole !== 'moderator') {
+              die('Not authorized');
+          }
+          $targetThreadStmt = $pdo->prepare("SELECT * FROM threads WHERE title LIKE ? LIMIT 1");
+          $targetThreadStmt->execute(["%$targetTitle%"]);
+          $targetThread = $targetThreadStmt->fetch();
+          if (!$targetThread) {
+              die('Target thread not found');
+          }
+          $targetThreadId = (int)$targetThread['id'];
+          if ($threadId === $targetThreadId) {
+              die('Cannot merge a thread into itself');
+          }
+          $pdo->prepare("UPDATE posts SET thread_id = ? WHERE thread_id = ?")->execute([$targetThreadId, $threadId]);
+          $pdo->prepare("DELETE FROM threads WHERE id = ?")->execute([$threadId]);
+          redirect(url('thread', ['id' => $targetThreadId, 'slug' => slugify($targetThread['title'] ?? '')]));
+      }
      elseif ($action === 'admin_categories') {
         // Show categories management page / handle create & edit
         if (!is_admin()) {

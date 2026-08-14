@@ -247,6 +247,15 @@ function marked_parse($text) {
 }
 function is_logged_in() { return isset($_SESSION['user_id']); }
 function is_admin() { return ($_SESSION['user_role'] ?? '') === 'admin'; }
+function user_has_permission(string $permission): bool {
+    if (is_admin()) return true;
+    $roleName = $_SESSION['user_role'] ?? 'user';
+    global $pdo;
+    $stmt = $pdo->prepare("SELECT permissions FROM roles WHERE name = ?");
+    $stmt->execute([$roleName]);
+    $perms = json_decode($stmt->fetchColumn() ?: '[]', true) ?: [];
+    return in_array($permission, $perms, true);
+}
 function redirect($url) { header("Location: $url"); exit; }
 function base_url() {
     static $baseUrl = null;
@@ -494,12 +503,14 @@ function fetch_threads(array $opts = []) {
     $whereSql = 'WHERE '.implode(' AND ', $where);
 
     $sort   = $opts['sort'] ?? 'latest';
+    $stickyFirst = $opts['sticky_first'] ?? true;
+    $stickyOrder = $stickyFirst ? 'sticky_first DESC, ' : '';
     $orders = [
-        'latest'  => "sticky_first DESC, last_activity DESC",
-        'replies' => "sticky_first DESC, reply_count DESC, last_activity DESC",
-        'views'   => "sticky_first DESC, view_count DESC, last_activity DESC",
-        'newest'  => "sticky_first DESC, t.created_at DESC, t.id DESC",
-        'oldest'  => "sticky_first DESC, t.created_at ASC, t.id ASC",
+        'latest'  => $stickyOrder."last_activity DESC",
+        'replies' => $stickyOrder."reply_count DESC, last_activity DESC",
+        'views'   => $stickyOrder."view_count DESC, last_activity DESC",
+        'newest'  => $stickyOrder."t.created_at DESC, t.id DESC",
+        'oldest'  => $stickyOrder."t.created_at ASC, t.id ASC",
     ];
     $orderSql = $orders[$sort] ?? $orders['latest'];
 

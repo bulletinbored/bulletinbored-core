@@ -15,6 +15,10 @@ $allPermissions = [
     'can_create_posts' => t('can_create_posts'),
     'can_edit_own_posts' => t('can_edit_own_posts'),
     'can_delete_own_posts' => t('can_delete_own_posts'),
+    'can_move_threads' => t('can_move_threads'),
+    'can_split_threads' => t('can_split_threads'),
+    'can_merge_threads' => t('can_merge_threads'),
+    'can_copy_threads' => t('can_copy_threads'),
 ];
 ?>
 <?php include __DIR__.'/admin_header.php'; render_admin_header(t('roles_permissions')); ?>
