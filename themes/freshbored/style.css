@@ -515,16 +515,9 @@ hr { border-color: var(--fb-border); opacity: 1; }
 .pagination .page-item.disabled .page-link { color: var(--fb-muted-soft); background: var(--fb-surface); }
 
 /* ---------- single discussion ---------- */
-.discussion-head {
-    background: var(--fb-surface);
-    border: 1px solid var(--fb-border);
-    border-radius: var(--fb-radius);
-    padding: 1.15rem 1.25rem;
-    margin-bottom: 1rem;
-    box-shadow: var(--fb-shadow);
-}
-.discussion-head-top { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: .55rem; }
-.discussion-heading {
+.thread-head { padding-bottom: .4rem; margin-bottom: .4rem; }
+.thread-head-top { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: .55rem; }
+.thread-heading {
     font-size: 1.6rem;
     font-weight: 800;
     line-height: 1.25;
@@ -532,7 +525,7 @@ hr { border-color: var(--fb-border); opacity: 1; }
     margin: 0 0 .6rem;
     word-break: break-word;
 }
-.discussion-head-meta {
+.thread-head-meta {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -540,9 +533,9 @@ hr { border-color: var(--fb-border); opacity: 1; }
     font-size: .82rem;
     color: var(--fb-muted);
 }
-.discussion-head-meta a { font-weight: 600; color: var(--fb-text); }
-.discussion-head-meta a:hover { color: var(--fb-brand); }
-.discussion-head-actions { margin-left: auto; display: flex; gap: .4rem; }
+.thread-head-meta a { font-weight: 600; color: var(--fb-text); }
+.thread-head-meta a:hover { color: var(--fb-brand); }
+.thread-head-actions { margin-left: auto; display: flex; gap: .4rem; }
 
 .count-label { text-transform: lowercase; }
 
@@ -903,7 +896,7 @@ hr { border-color: var(--fb-border); opacity: 1; }
     .post-side-meta { margin-left: auto; }
     .post-main { padding: .9rem 1rem 1rem; }
 
-    .discussion-heading { font-size: 1.3rem; }
+    .thread-heading { font-size: 1.3rem; }
     .page-title { font-size: 1.35rem; }
     .profile-head { flex-wrap: wrap; }
     .profile-head-actions { margin-left: 0; width: 100%; }
