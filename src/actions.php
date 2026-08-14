@@ -108,7 +108,23 @@ try {
             $content = validate_input($_POST['content'] ?? '');
             $categoryId = (int)($_POST['category_id'] ?? 1);
             
-            if ($title === '' || $content === '') {
+            $catStmt = $pdo->prepare("SELECT allowed_roles FROM categories WHERE id = ?");
+            $catStmt->execute([$categoryId]);
+            $allowedRoles = $catStmt->fetchColumn();
+            if ($allowedRoles && $allowedRoles !== 'all' && !is_admin()) {
+                if ($allowedRoles === 'moderator' && !in_array($_SESSION['user_role'] ?? 'user', ['admin', 'moderator'], true)) {
+                    die(t('not_authorized_category'));
+                } elseif ($allowedRoles === 'admin' && ($_SESSION['user_role'] ?? 'user') !== 'admin') {
+                    die(t('not_authorized_category'));
+                } else {
+                    $allowed = json_decode($allowedRoles, true);
+                    if ($allowed && is_array($allowed) && !in_array($_SESSION['user_role'] ?? 'user', $allowed)) {
+                        die(t('not_authorized_category'));
+                    }
+                }
+             }
+             
+             if ($title === '' || $content === '') {
                 die('Title and content are required');
             }
             
@@ -768,26 +784,28 @@ redirect(url('admin_moderation'));
         if (!is_admin()) {
             die('Admin required');
         }
-        if ($method === 'POST') {
-            if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
-                die('CSRF token invalid');
-            }
+         if ($method === 'POST') {
+             if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+                 die('CSRF token invalid');
+             }
+            $allowedRoles = $_POST['allowed_roles'] ?? 'all';
+            $allowedRoles = in_array($allowedRoles, ['all', 'admin', 'moderator'], true) ? $allowedRoles : 'all';
             if (isset($_GET['id'])) {
                 $catId = (int)$_GET['id'];
                 $name = validate_input($_POST['name'] ?? '');
                 $description = validate_input($_POST['description'] ?? '');
                 if ($catId > 0 && $name !== '') {
-                    $pdo->prepare("UPDATE categories SET name = ?, description = ? WHERE id = ?")->execute([$name, $description, $catId]);
+                    $pdo->prepare("UPDATE categories SET name = ?, description = ?, allowed_roles = ? WHERE id = ?")->execute([$name, $description, $allowedRoles, $catId]);
                 }
             } else {
                 $name = validate_input($_POST['name'] ?? '');
                 $description = validate_input($_POST['description'] ?? '');
                 if ($name !== '') {
-                    $pdo->prepare("INSERT INTO categories (name, description) VALUES (?, ?)")->execute([$name, $description]);
+                    $pdo->prepare("INSERT INTO categories (name, description, allowed_roles) VALUES (?, ?, ?)")->execute([$name, $description, $allowedRoles]);
                 }
             }
-            redirect(url('admin_categories'));
-        }
+             redirect(url('admin_categories'));
+         }
         include __DIR__ . '/../views/admin_categories.php';
     }
     elseif ($action === 'delete_category' && $method === 'POST' && is_admin()) {

@@ -30,6 +30,7 @@ return [
     'category' => 'Category',
     'admin_panel' => 'Admin Panel',
     'admin_required' => 'Admin required',
+    'not_authorized_category' => 'You are not authorized to post in this category.',
     'settings_saved' => 'Settings saved successfully',
     'thread_not_found' => 'Thread not found',
     'post_not_found' => 'Post not found',
@@ -50,6 +51,7 @@ return [
     'permissions' => 'Permissions',
     'roles' => 'Roles',
     'role_name' => 'Role Name',
+    'all' => 'All',
     'create_role' => 'Create Role',
     'edit_role' => 'Edit Role',
     'delete_role' => 'Delete Role',
@@ -322,6 +324,11 @@ return [
     'description' => 'Description',
     'position' => 'Position',
     'version' => 'Version',
+    'allowed_roles' => 'Who can post here',
+    'allowed_roles_hint' => 'Restrict posting to a specific role. Leave as Everybody to allow everyone.',
+    'allowed_roles_everybody' => 'Everybody',
+    'allowed_roles_admin' => 'Admins only',
+    'allowed_roles_moderator' => 'Moderators and admins',
 
     // --- admin categories ---
     'categories_management' => 'Categories Management',

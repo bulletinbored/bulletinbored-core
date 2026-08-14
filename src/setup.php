@@ -31,7 +31,7 @@ if ($dbDriver === 'mysql') {
     // MySQL tables
     $tables = [
         "users" => "id INT AUTO_INCREMENT PRIMARY KEY, username VARCHAR(255) UNIQUE NOT NULL, password VARCHAR(255) NOT NULL, email VARCHAR(255), role VARCHAR(50) DEFAULT 'user', avatar VARCHAR(255), status VARCHAR(50) DEFAULT 'active', email_verified INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
-        "categories" => "id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255) NOT NULL UNIQUE, description TEXT, position INT DEFAULT 0",
+        "categories" => "id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255) NOT NULL UNIQUE, description TEXT, position INT DEFAULT 0, allowed_roles TEXT DEFAULT NULL",
         "threads" => "id INT AUTO_INCREMENT PRIMARY KEY, category_id INT, user_id INT, title TEXT, content TEXT, status VARCHAR(50) DEFAULT 'visible', created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP",
         "posts" => "id INT AUTO_INCREMENT PRIMARY KEY, thread_id INT, user_id INT, content TEXT, status VARCHAR(50) DEFAULT 'visible', created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
         "uploads" => "id INT AUTO_INCREMENT PRIMARY KEY, thread_id INT, post_id INT, user_id INT, filename VARCHAR(255), original_name VARCHAR(255), size INT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
@@ -88,7 +88,8 @@ if ($dbDriver === 'mysql') {
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
                 description TEXT,
-                position INTEGER DEFAULT 0
+                position INTEGER DEFAULT 0,
+                allowed_roles TEXT DEFAULT NULL
             );
             CREATE TABLE threads (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -300,6 +301,21 @@ if ($dbDriver === 'mysql') {
         } catch (PDOException $e) {}
     }
 }
+
+// Safe column addition for categories table
+try {
+    $cols = [];
+    if (($config['db_driver'] ?? 'sqlite') === 'mysql') {
+        foreach ($pdo->query("SHOW COLUMNS FROM categories") as $c) {
+            $cols[] = $c['Field'];
+        }
+    } else {
+        $cols = $pdo->query("PRAGMA table_info(categories)")->fetchAll(PDO::FETCH_COLUMN);
+    }
+    if (!in_array('allowed_roles', $cols)) {
+        $pdo->exec("ALTER TABLE categories ADD COLUMN allowed_roles TEXT DEFAULT NULL");
+    }
+} catch (PDOException $e) {}
 
 // Handle legacy database - add email + created_at if missing (SQLite migration for existing DB)
 try {
