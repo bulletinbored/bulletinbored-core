@@ -403,7 +403,10 @@ class UpdateManager
         if (is_writable($configFile)) {
             $content = file_get_contents($configFile);
             $content = preg_replace(
-                "/\\$config\['version'\]\s*=\s*'[^']*';/",
+                <<<'REGEX'
+/\$config\['version'\]\s*=\s*\'[^\']*\';/
+REGEX
+                ,
                 "\$config['version'] = '" . ltrim($tag, 'v') . "';",
                 $content
             );
