@@ -33,6 +33,14 @@
                         <label class="form-label"><?= t('site_tagline') ?></label>
                         <input type="text" name="site_tagline" class="form-control" value="<?= escape($config['site_tagline'] ?? '') ?>">
                     </div>
+                    <div class="col-md-6">
+                        <div class="form-check">
+                            <input type="hidden" name="attachments_enabled" value="0">
+                            <input type="checkbox" name="attachments_enabled" value="1" class="form-check-input" id="attachments_enabled" <?= !empty($config['attachments_enabled']) ? 'checked' : '' ?>>
+                            <label class="form-check-label" for="attachments_enabled"><?= t('attachments_enabled') ?></label>
+                            <div class="form-text"><?= t('attachments_enabled_hint') ?></div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

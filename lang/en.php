@@ -334,6 +334,8 @@ return [
     'general_settings' => 'General',
     'appearance_settings' => 'Appearance',
     'regional_settings' => 'Regional & Format',
+    'attachments_enabled' => 'Enable Attachments',
+    'attachments_enabled_hint' => 'Allow users to upload files when creating new threads.',
 
     // --- admin tables ---
     'id' => 'ID',

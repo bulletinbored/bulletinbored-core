@@ -2,11 +2,15 @@
 global $pdo;
 $categories = $pdo->query("SELECT * FROM categories ORDER BY position")->fetchAll();
 $allRoles = $pdo->query("SELECT name FROM roles ORDER BY name")->fetchAll(PDO::FETCH_COLUMN);
+$csrf = generate_csrf_token();
 ?>
 <?php include __DIR__.'/admin_header.php'; render_admin_header(t('categories')); ?>
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2><?= t('categories_management') ?></h2>
+        <button id="save-order-btn" class="btn btn-primary" disabled>
+            <i class="fas fa-save me-1"></i><?= t('save') ?>
+        </button>
     </div>
 
     <div class="row mb-4">
@@ -20,6 +24,7 @@ $allRoles = $pdo->query("SELECT name FROM roles ORDER BY name")->fetchAll(PDO::F
                         <table class="table table-hover">
                             <thead>
                                  <tr>
+                                     <th style="width:40px"></th>
                                      <th><?= t('name') ?></th>
                                      <th><?= t('description') ?></th>
                                      <th><?= t('position') ?></th>
@@ -27,12 +32,13 @@ $allRoles = $pdo->query("SELECT name FROM roles ORDER BY name")->fetchAll(PDO::F
                                      <th class="text-end"><?= t('actions') ?></th>
                                  </tr>
                             </thead>
-                            <tbody>
+                            <tbody id="categories-sortable">
                                 <?php foreach ($categories as $cat): ?>
-                                <tr>
+                                <tr data-id="<?= $cat['id'] ?>">
+                                    <td><i class="fas fa-grip-vertical text-muted"></i></td>
                                     <td><?= escape($cat['name']) ?></td>
                                     <td><?= escape($cat['description'] ?? '') ?></td>
-                                    <td><?= escape($cat['position']) ?></td>
+                                    <td class="position-display"><?= escape($cat['position']) ?></td>
                                     <td><?php
                                         $allowed = $cat['allowed_roles'] ?? null;
                                         if ($allowed === null || $allowed === '' || $allowed === 'all') {
@@ -51,7 +57,8 @@ $allRoles = $pdo->query("SELECT name FROM roles ORDER BY name")->fetchAll(PDO::F
                                         }
                                     ?></td>
                                     <td class="text-end">
-                                        <button class="btn btn-sm btn-warning" onclick="document.getElementById('edit-form-<?= $cat['id'] ?>').classList.toggle('d-none')">
+                                        <button class="btn btn-sm btn-warning"
+                                            onclick="document.getElementById('edit-form-<?= $cat['id'] ?>').classList.toggle('d-none')">
                                             <i class="fas fa-pen"></i>
                                         </button>
                                         <form method="POST" action="<?= url('delete_category', ['id' => $cat['id']]) ?>" class="d-inline" onsubmit="return confirm('<?= t('delete_confirm') ?>')">
@@ -61,7 +68,7 @@ $allRoles = $pdo->query("SELECT name FROM roles ORDER BY name")->fetchAll(PDO::F
                                     </td>
                                 </tr>
                                 <tr id="edit-form-<?= $cat['id'] ?>" class="d-none">
-                                    <td colspan="5">
+                                    <td colspan="6">
                                         <form method="POST" action="<?= url('admin_categories', ['id' => $cat['id']]) ?>" class="row g-2 p-3 bg-light rounded">
                                             <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                                             <div class="col-md-3">
@@ -117,21 +124,81 @@ $allRoles = $pdo->query("SELECT name FROM roles ORDER BY name")->fetchAll(PDO::F
                              <input type="text" name="description" class="form-control">
                          </div>
                            <div class="col-md-4">
-                               <label class="form-label"><?= t('allowed_roles') ?></label>
-                               <select name="allowed_roles" class="form-select">
-                                   <option value="all"><?= t('allowed_roles_everybody') ?></option>
-                                   <option value="admin"><?= t('allowed_roles_admin') ?></option>
-                                   <option value="moderator"><?= t('allowed_roles_moderator') ?></option>
-                               </select>
-                               <div class="form-text"><?= t('allowed_roles_hint') ?></div>
-                           </div>
+                             <label class="form-label"><?= t('allowed_roles') ?></label>
+                             <select name="allowed_roles" class="form-select">
+                                 <option value="all"><?= t('allowed_roles_everybody') ?></option>
+                                 <option value="admin"><?= t('allowed_roles_admin') ?></option>
+                                 <option value="moderator"><?= t('allowed_roles_moderator') ?></option>
+                             </select>
+                             <div class="form-text"><?= t('allowed_roles_hint') ?></div>
+                         </div>
                          <div class="col-md-12">
                              <button type="submit" class="btn btn-primary"><i class="fas fa-plus me-1"></i><?= t('add_category') ?></button>
                          </div>
                      </form>
-                </div>
-            </div>
-        </div>
-    </div>
+                 </div>
+             </div>
+         </div>
+     </div>
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+<script>
+(function() {
+    const tbody = document.getElementById('categories-sortable');
+    const saveBtn = document.getElementById('save-order-btn');
+    if (!tbody) return;
+
+    let sortable = Sortable.create(tbody, {
+        handle: 'i.fa-grip-vertical',
+        animation: 150,
+        onEnd: function() {
+            saveBtn.disabled = false;
+            updatePositionNumbers();
+        }
+    });
+
+    function updatePositionNumbers() {
+        const rows = tbody.querySelectorAll('tr[data-id]');
+        rows.forEach((row, index) => {
+            const posCell = row.querySelector('.position-display');
+            if (posCell) {
+                posCell.textContent = index + 1;
+            }
+        });
+    }
+
+    saveBtn.addEventListener('click', function() {
+        const rows = tbody.querySelectorAll('tr[data-id]');
+        const order = Array.from(rows).map(row => row.getAttribute('data-id'));
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span><?= t('save') ?>';
+
+        fetch('<?= url('update_category_order') ?>', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: 'csrf_token=<?= $csrf ?>&order=' + encodeURIComponent(JSON.stringify(order))
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+            if (data.success) {
+                updatePositionNumbers();
+                saveBtn.disabled = true;
+            } else {
+                    alert('Si è verificato un errore');
+                    saveBtn.disabled = false;
+            }
+        })
+        .catch(function() {
+            alert('Si è verificato un errore');
+            saveBtn.disabled = false;
+        })
+        .finally(function() {
+            saveBtn.innerHTML = '<i class="fas fa-save me-1"></i><?= t('save') ?>';
+        });
+    });
+})();
+</script>
 <?php include __DIR__.'/admin_footer.php'; ?>

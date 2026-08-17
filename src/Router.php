@@ -52,6 +52,7 @@ class Router
             '#^admin/roles-action$#'                    => fn()   => ['action' => 'admin_roles_action'],
             '#^admin/moderate$#'                        => fn()   => ['action' => 'moderate'],
             '#^admin/delete-category$#'                 => fn()   => ['action' => 'delete_category'],
+            '#^admin/update-category-order$#'            => fn()   => ['action' => 'update_category_order'],
             '#^admin/delete-user$#'                     => fn()   => ['action' => 'delete_user'],
             '#^admin/ban-user$#'                        => fn()   => ['action' => 'ban_user'],
             '#^admin/unban-user$#'                      => fn()   => ['action' => 'unban_user'],

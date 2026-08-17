@@ -136,7 +136,7 @@ try {
             $threadId = $pdo->lastInsertId();
             
             // Handle file uploads
-            if (!empty($_FILES['attachments']['name'][0])) {
+            if (!empty($config['attachments_enabled']) && !empty($_FILES['attachments']['name'][0])) {
                 foreach ($_FILES['attachments']['name'] as $index => $originalName) {
                     if ($_FILES['attachments']['error'][$index] === UPLOAD_ERR_OK) {
                         $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
@@ -910,6 +910,31 @@ redirect(url('admin_moderation'));
         }
         redirect(url('admin_categories'));
     }
+    elseif ($action === 'update_category_order' && $method === 'POST' && is_admin()) {
+        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'message' => 'CSRF token invalid']);
+            exit;
+        }
+        $orderRaw = $_POST['order'] ?? '';
+        $order = is_string($orderRaw) ? json_decode($orderRaw, true) : $orderRaw;
+        if (!is_array($order)) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Invalid order data']);
+            exit;
+        }
+        $position = 1;
+        $stmt = $pdo->prepare("UPDATE categories SET position = ? WHERE id = ?");
+        foreach ($order as $catId) {
+            $catId = (int)$catId;
+            if ($catId > 0) {
+                $stmt->execute([$position, $catId]);
+                $position++;
+            }
+        }
+        echo json_encode(['success' => true]);
+        exit;
+    }
 elseif ($action === 'delete_user' && $method === 'POST' && is_admin()) {
          // Delete user
          if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
@@ -1011,6 +1036,7 @@ elseif ($action === 'unban_user' && $method === 'POST' && is_admin()) {
         $timeFormat = trim($_POST['time_format'] ?? $config['time_format']);
         $mailFrom = trim($_POST['mail_from'] ?? $config['mail_from'] ?? '');
         $mailFromName = trim($_POST['mail_from_name'] ?? $config['mail_from_name'] ?? '');
+        $attachmentsEnabled = !empty($_POST['attachments_enabled']) ? 1 : 0;
 
         $config['site_name'] = $siteName;
         $config['site_tagline'] = $siteTagline;
@@ -1020,6 +1046,7 @@ elseif ($action === 'unban_user' && $method === 'POST' && is_admin()) {
         $config['time_format'] = $timeFormat;
         $config['mail_from'] = $mailFrom;
         $config['mail_from_name'] = $mailFromName;
+        $config['attachments_enabled'] = $attachmentsEnabled;
 
         $configContent = "<?php\n";
         foreach ($config as $key => $value) {

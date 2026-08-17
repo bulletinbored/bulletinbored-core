@@ -49,11 +49,6 @@ function render_header($title = 'bulletinbored', $options = []) {
                     <li class="nav-item">
                         <a class="nav-link" href="<?= url('home') ?>"><?= t('all_discussions') ?></a>
                     </li>
-                    <?php foreach (array_slice(sidebar_categories(), 0, 4) as $topCat): ?>
-                        <li class="nav-item d-none d-xl-block">
-                            <a class="nav-link" href="<?= url('category', ['id' => $topCat['id'], 'slug' => slugify($topCat['name'] ?? '')]) ?>"><?= escape($topCat['name']) ?></a>
-                        </li>
-                    <?php endforeach; ?>
                 </ul>
 
                 <form class="topbar-search me-lg-3" method="GET" action="<?= url('search') ?>" role="search">

@@ -117,6 +117,8 @@ function url($action, $params = [], $absolute = false) {
             return $base . '/admin/categories' . (!empty($query) ? '?' . http_build_query($query) : '');
         case 'delete_category':
             return $base . '/admin/delete-category' . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'update_category_order':
+            return $base . '/admin/update-category-order' . (!empty($query) ? '?' . http_build_query($query) : '');
         case 'delete_user':
             return $base . '/admin/delete-user' . (!empty($query) ? '?' . http_build_query($query) : '');
         case 'ban_user':

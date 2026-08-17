@@ -43,10 +43,12 @@ $preselected = (int)($_GET['category'] ?? 0);
                 <textarea id="editbored-content" name="content" class="form-control" rows="10" required></textarea>
             </div>
 
+            <?php if (!empty($config['attachments_enabled'])): ?>
             <div class="mt-3">
                 <label class="form-label"><?= t('attachments') ?> <span class="text-muted fw-normal">(<?= t('optional') ?>)</span></label>
                 <input type="file" name="attachments[]" class="form-control" multiple>
             </div>
+            <?php endif; ?>
 
             <div class="form-actions">
                 <button type="submit" class="btn btn-brand"><i class="fas fa-paper-plane me-2"></i><?= t('create_thread') ?></button>
