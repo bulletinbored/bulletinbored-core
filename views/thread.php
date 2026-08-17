@@ -68,7 +68,7 @@ function render_post($data, $number, $threadId, $threadUrl, $opts = []) {
     $isLocked   = ($thread['status'] ?? '') === 'locked';
     global $canModerate, $categories, $isLogged;
     ?>
-    <article class="post <?= $isOp ? 'post-op' : '' ?>" id="<?= escape($anchor) ?>">
+    <article class="post <?= $isOp ? 'post-op' : '' ?>" id="<?= escape($anchor) ?>" data-post-id="<?= (int)($data['id'] ?? 0) ?>" data-is-op="<?= $isOp ? '1' : '0' ?>">
         <div class="post-side">
             <a href="<?= url('profile', ['user' => $author]) ?>" class="post-side-avatar">
                 <?= render_avatar($author, $data['author_avatar'] ?? '', 56) ?>

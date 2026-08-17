@@ -1657,7 +1657,14 @@ elseif ($action === 'admin_users') {
             }
         }
 
-        $catalog = json_decode(file_get_contents(__DIR__.'/../data/catalog.json'), true) ?: [];
+        $catalogMirrorBase = !empty($config['update_mirror']) ? rtrim($config['update_mirror'], '/') : 'https://extend.bulletinbored.net';
+        $remoteCatalogRaw = @file_get_contents($catalogMirrorBase . '/catalog.json');
+        $remoteCatalog = is_string($remoteCatalogRaw) ? json_decode($remoteCatalogRaw, true) : null;
+        if (is_array($remoteCatalog)) {
+            $catalog = $remoteCatalog;
+        } else {
+            $catalog = json_decode(file_get_contents(__DIR__.'/../data/catalog.json'), true) ?: [];
+        }
         $installed = json_decode(file_get_contents(__DIR__.'/../data/installed.json'), true) ?: ['plugins'=>[], 'themes'=>[]];
         $search = strtolower(trim($_GET['q'] ?? ''));
         if ($search !== '') {
@@ -1723,8 +1730,12 @@ elseif ($action === 'admin_users') {
             if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
                 $updateError = 'Invalid CSRF token';
             } else {
-                $catalogPath = __DIR__.'/../data/catalog.json';
-                $catalog = file_exists($catalogPath) ? json_decode(file_get_contents($catalogPath), true) : [];
+                $catalogMirrorBase = !empty($config['update_mirror']) ? rtrim($config['update_mirror'], '/') : 'https://extend.bulletinbored.net';
+                $remoteCatalogRaw = @file_get_contents($catalogMirrorBase . '/catalog.json');
+                $remoteCatalog = is_string($remoteCatalogRaw) ? json_decode($remoteCatalogRaw, true) : null;
+                $catalog = is_array($remoteCatalog)
+                    ? $remoteCatalog
+                    : (file_exists(__DIR__.'/../data/catalog.json') ? json_decode(file_get_contents(__DIR__.'/../data/catalog.json'), true) : []);
                 $updateResults = $updateManager->checkAll($config['version'] ?? '1.0.0', $pluginManager, $themeManager, $catalog);
             }
         }

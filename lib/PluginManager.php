@@ -278,6 +278,59 @@ class PluginManager
         return $plugin['version'] ?? '1.0.0';
     }
 
+    /**
+     * Un-nest a plugin extracted under a single nested folder (e.g. the
+     * <repo>-<ref>/ directory GitHub/GitLab ship inside their archives).
+     *
+     * Files from the nested folder are merged into $targetDir, overwriting
+     * any existing counterpart. Once flattened, the now-empty (or duplicate)
+     * nested folder is removed so it does not accumulate in production.
+     */
+    private function flattenNestedDir(string $targetDir): void
+    {
+        if (!is_dir($targetDir) || file_exists($targetDir . '/manifest.json')) {
+            return;
+        }
+
+        $nested = null;
+        foreach (glob($targetDir . '/*', GLOB_ONLYDIR) as $dir) {
+            if (file_exists($dir . '/manifest.json')) {
+                $nested = $dir;
+                break;
+            }
+        }
+        if ($nested === null || !is_dir($nested)) {
+            return;
+        }
+
+        foreach (glob($nested . '/*') as $item) {
+            $destItem = $targetDir . '/' . basename($item);
+            if (is_dir($item)) {
+                if (!is_dir($destItem)) {
+                    @mkdir($destItem, 0755, true);
+                }
+                foreach (glob($item . '/*') as $child) {
+                    $childDest = $destItem . '/' . basename($child);
+                    if (file_exists($childDest)) {
+                        if (is_dir($childDest)) {
+                            $this->deleteDir($childDest);
+                        } else {
+                            @unlink($childDest);
+                        }
+                    }
+                    @rename($child, $childDest) or copy($child, $childDest);
+                }
+            } else {
+                if (file_exists($destItem)) {
+                    @unlink($destItem);
+                }
+                @rename($item, $destItem) or copy($item, $destItem);
+            }
+        }
+
+        $this->deleteDir($nested);
+    }
+
     public function installFromZip(string $zipPath): array
     {
         if (!file_exists($zipPath)) {
@@ -301,26 +354,7 @@ class PluginManager
 
         // Normalise the extracted layout (see installFromRepo for details):
         // only "un-nest" when there is no manifest.json directly at the root.
-        if (!file_exists($dest . 'manifest.json')) {
-            $nested = null;
-            foreach (glob($dest . '*', GLOB_ONLYDIR) as $dir) {
-                if (file_exists($dir . '/manifest.json')) {
-                    $nested = $dir;
-                    break;
-                }
-            }
-            if ($nested !== null && is_dir($nested)) {
-                foreach (glob($nested . '/*') as $item) {
-                    $base = basename($item);
-                    $destItem = $dest . $base;
-                    if (file_exists($destItem)) {
-                        continue;
-                    }
-                    rename($item, $destItem);
-                }
-                @rmdir($nested);
-            }
-        }
+        $this->flattenNestedDir($dest);
 
         $this->plugins = [];
         $this->discover();
@@ -420,27 +454,7 @@ class PluginManager
         // ship multiple top-level folders (assets/, lang/, ...). We only need
         // to "un-nest" when the plugin files are NOT already at the target
         // root (i.e. there is no manifest.json directly inside targetDir).
-        if (is_dir($targetDir) && !file_exists($targetDir . '/manifest.json')) {
-            // Look one level deep for the folder that actually holds the plugin.
-            $nested = null;
-            foreach (glob($targetDir . '/*', GLOB_ONLYDIR) as $dir) {
-                if (file_exists($dir . '/manifest.json')) {
-                    $nested = $dir;
-                    break;
-                }
-            }
-            if ($nested !== null && is_dir($nested)) {
-                foreach (glob($nested . '/*') as $item) {
-                    $base = basename($item);
-                    $destItem = $targetDir . '/' . $base;
-                    if (file_exists($destItem)) {
-                        continue;
-                    }
-                    rename($item, $destItem);
-                }
-                @rmdir($nested);
-            }
-        }
+        $this->flattenNestedDir($targetDir);
 
         $this->plugins = [];
         $this->discover();

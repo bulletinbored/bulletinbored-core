@@ -4,6 +4,7 @@ data/update-cache.json
 data/plugins.json
 data/installed.json
 data/updates.json
+data/ratelimit/
 
 .kilo/
 
