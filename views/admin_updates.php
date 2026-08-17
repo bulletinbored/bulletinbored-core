@@ -135,23 +135,6 @@
                                             </td>
                                         </tr>
                                     <?php endforeach; ?>
-                                    <?php foreach ($themeUpdates as $name => $info): ?>
-                                        <tr>
-                                            <td><?= escape($name) ?></td>
-                                            <td><span class="badge bg-primary"><?= t('theme') ?></span></td>
-                                            <td>v<?= escape($info['installed']) ?></td>
-                                            <td>v<?= escape($info['remote']) ?></td>
-                                            <td>
-                                                <form method="POST" class="d-inline">
-                                                    <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
-                                                    <input type="hidden" name="type" value="themes">
-                                                    <input type="hidden" name="name" value="<?= escape($name) ?>">
-                                                    <input type="hidden" name="ext_tag" value="<?= escape($info['remote']) ?>">
-                                                    <button type="submit" name="apply_update" value="1" class="btn btn-sm btn-success"><?= t('apply') ?></button>
-                                                </form>
-                                            </td>
-                                        </tr>
-                                    <?php endforeach; ?>
                                 </tbody>
                             </table>
                         </div>

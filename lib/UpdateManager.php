@@ -398,6 +398,20 @@ class UpdateManager
         if (is_writable($versionFile)) {
             file_put_contents($versionFile, $tag);
         }
+
+        $configFile = __DIR__ . '/../config.php';
+        if (is_writable($configFile)) {
+            $content = file_get_contents($configFile);
+            $content = preg_replace(
+                "/\\$config\['version'\]\s*=\s*'[^']*';/",
+                "\$config['version'] = '" . ltrim($tag, 'v') . "';",
+                $content
+            );
+            if ($content !== null) {
+                file_put_contents($configFile, $content);
+            }
+        }
+
         $this->clearCache();
         return true;
     }
@@ -488,6 +502,8 @@ class UpdateManager
                 $pm['version'] = ltrim($tag, 'v');
                 file_put_contents($manifestFile, json_encode($pm, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
             }
+        } else {
+            file_put_contents($manifestFile, json_encode(['version' => ltrim($tag, 'v')], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
         }
         foreach (glob($targetDir . '/*.php') as $phpFile) {
             $content = file_get_contents($phpFile);

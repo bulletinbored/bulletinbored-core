@@ -1687,6 +1687,11 @@ elseif ($action === 'admin_users') {
                         $updateError = 'No newer version available';
                     } elseif ($updateManager->applyExtensionUpdate($type === 'plugins' ? 'plugin' : 'theme', $extName, $tag)) {
                         $updateSuccess = 'Extension updated to v' . escape($tag);
+                        if ($type === 'plugins' && $pluginManager) {
+                            $pluginManager->discover();
+                        } elseif ($type === 'themes' && $themeManager) {
+                            $themeManager->discover();
+                        }
                     } else {
                         $updateError = 'Failed to update extension';
                     }
@@ -1700,11 +1705,6 @@ elseif ($action === 'admin_users') {
                     }
                 } else {
                     $updateError = 'No update package uploaded';
-                }
-
-                if ($updateSuccess) {
-                    header('Location: ' . url('admin_updates') . '?updated=1');
-                    exit;
                 }
 
                 $updateResults = $updateManager->checkAll($config['version'] ?? '1.0.0', $pluginManager, $themeManager);
