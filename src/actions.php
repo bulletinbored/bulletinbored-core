@@ -1753,6 +1753,13 @@ elseif ($action === 'admin_users') {
                         $updateError = 'No newer version available';
                     } elseif ($updateManager->applyCoreUpdate($tag)) {
                         $updateSuccess = 'Core updated to v' . escape($tag);
+                        // Reload the version from disk: applyCoreUpdate persists it
+                        // to config.php/VERSION, but the in-memory $config is stale.
+                        clearstatcache();
+                        $versionFile = __DIR__ . '/../VERSION';
+                        if (file_exists($versionFile)) {
+                            $config['version'] = trim(@file_get_contents($versionFile));
+                        }
                     } else {
                         $updateError = 'Failed to update core';
                     }
