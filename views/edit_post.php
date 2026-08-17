@@ -21,8 +21,14 @@ $backUrl = url('thread', ['id' => $post['thread_id'] ?? 0, 'slug' => slugify($po
         <form method="POST" action="<?= url('edit_post', ['id' => $post['id'] ?? 0]) ?>">
             <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
             <input type="hidden" name="post_id" value="<?= (int)($post['id'] ?? 0) ?>">
+            <?php if (!empty($editThreadTitle)): ?>
             <div class="mb-3">
-                <textarea id="editbored-content" name="content" class="form-control" rows="10" required><?= escape($post['content'] ?? '') ?></textarea>
+                <label class="form-label"><?= t('title') ?></label>
+                <input type="text" name="title" class="form-control" value="<?= escape($post['title'] ?? '') ?>" required>
+            </div>
+            <?php endif; ?>
+            <div class="mb-3">
+                <textarea id="editbored-content" name="content" class="form-control" rows="10" required><?= html_entity_decode($post['content'] ?? '', ENT_QUOTES, 'UTF-8') ?></textarea>
             </div>
             <div class="form-actions">
                 <button type="submit" class="btn btn-brand"><i class="fas fa-save me-2"></i><?= t('save_changes') ?></button>

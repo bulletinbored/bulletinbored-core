@@ -219,8 +219,8 @@ function render_post($data, $number, $threadId, $threadUrl, $opts = []) {
                 <div class="post-actions">
                     <a class="post-action" href="<?= $threadUrl ?>#<?= escape($anchor) ?>" title="<?= t('permalink') ?>"><i class="fas fa-link"></i></a>
                     <?php if ($canEdit): ?>
-                        <a class="post-action" href="<?= url('edit_post', ['id' => $data['id']]) ?>" title="<?= t('edit') ?>"><i class="fas fa-pen"></i></a>
-                        <form method="POST" action="<?= url('delete_post', ['id' => $data['id']]) ?>" class="d-inline"
+                        <a class="post-action" href="<?= url('edit_post', ['id' => !empty($opts['is_op']) ? $threadId : $data['id']]) ?>" title="<?= t('edit') ?>"><i class="fas fa-pen"></i></a>
+                        <form method="POST" action="<?= url('delete_post', ['id' => !empty($opts['is_op']) ? $threadId : $data['id']]) ?>" class="d-inline"
                               onsubmit="return confirm('<?= t('delete_confirm') ?>')">
                             <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                             <button type="submit" class="post-action post-action-danger" title="<?= t('delete') ?>"><i class="fas fa-trash"></i></button>

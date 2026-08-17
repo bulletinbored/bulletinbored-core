@@ -227,12 +227,13 @@ try {
         redirect(url('thread', ['id' => $threadId, 'slug' => slugify($threadTitle)]));
     }
     elseif ($action === 'edit_post' && isset($_GET['id'])) {
-        // Show edit post form / handle post update
         if (!is_logged_in()) {
             die('Login required');
         }
         
         $postId = (int)$_GET['id'];
+        $source = 'post';
+        
         $postStmt = $pdo->prepare("
             SELECT p.*, t.title as thread_title, t.id as thread_id 
             FROM posts p 
@@ -241,6 +242,17 @@ try {
         ");
         $postStmt->execute([$postId]);
         $post = $postStmt->fetch();
+        
+        if (!$post) {
+            $source = 'thread';
+            $threadStmt = $pdo->prepare("
+                SELECT t.*, t.title as thread_title, t.id as thread_id 
+                FROM threads t 
+                WHERE t.id = ?
+            ");
+            $threadStmt->execute([$postId]);
+            $post = $threadStmt->fetch();
+        }
         
         if (!$post) {
             die('Post not found');
@@ -257,33 +269,69 @@ try {
             }
             
             $postId = (int)($_POST['post_id'] ?? 0);
-            $content = validate_input($_POST['content'] ?? '');
+            $rawContent = $_POST['content'] ?? '';
+            $title = '';
             
-            if ($postId <= 0 || $content === '') {
+            if ($postId <= 0 || $rawContent === '') {
                 die('Invalid post or empty content');
             }
             
-            // Check permissions
+            // Re-check permissions for the target record
+            $postSource = 'post';
             $postStmt2 = $pdo->prepare("SELECT user_id FROM posts WHERE id = ?");
             $postStmt2->execute([$postId]);
-            $post = $postStmt2->fetch();
-            if (!$post || ($post['user_id'] !== $_SESSION['user_id'] && !is_admin())) {
+            $postCheck = $postStmt2->fetch();
+            
+            if (!$postCheck) {
+                $postSource = 'thread';
+                $postStmt2 = $pdo->prepare("SELECT user_id FROM threads WHERE id = ?");
+                $postStmt2->execute([$postId]);
+                $postCheck = $postStmt2->fetch();
+            }
+            
+            $canEdit = is_admin()
+                || (($postCheck['user_id'] ?? null) == ($_SESSION['user_id'] ?? 0))
+                || (function_exists('user_has_permission')
+                    && (($postSource === 'thread' && user_has_permission('can_edit_threads'))
+                        || ($postSource === 'post' && user_has_permission('can_edit_posts'))));
+            
+            if (!$postCheck || !$canEdit) {
                 die('Not authorized');
             }
             
-            $pdo->prepare("UPDATE posts SET content = ? WHERE id = ?")
-                ->execute([$content, $postId]);
+            // editbored stores ready HTML; do not re-encode it with htmlspecialchars.
+            // Plain markdown input (no HTML tags) still gets escaped for safety.
+            $content = (str_contains($rawContent, '<') && str_contains($rawContent, '>'))
+                ? $rawContent
+                : validate_input($rawContent);
+            
+            if ($postSource === 'thread') {
+                $title = validate_input($_POST['title'] ?? '');
+                if ($title === '') {
+                    die('Invalid title');
+                }
+                $pdo->prepare("UPDATE threads SET title = ?, content = ? WHERE id = ?")
+                    ->execute([$title, $content, $postId]);
+            } else {
+                $pdo->prepare("UPDATE posts SET content = ? WHERE id = ?")
+                    ->execute([$content, $postId]);
+            }
             
             // Get thread ID for redirect
-            $tidStmt = $pdo->prepare("SELECT thread_id FROM posts WHERE id = ?");
-            $tidStmt->execute([$postId]);
-            $threadId = $tidStmt->fetchColumn();
+            if ($postSource === 'thread') {
+                $threadId = $postId;
+            } else {
+                $tidStmt = $pdo->prepare("SELECT thread_id FROM posts WHERE id = ?");
+                $tidStmt->execute([$postId]);
+                $threadId = $tidStmt->fetchColumn();
+            }
             $titleStmt = $pdo->prepare("SELECT title FROM threads WHERE id = ?");
             $titleStmt->execute([$threadId]);
             $threadTitle = $titleStmt->fetchColumn();
             redirect(url('thread', ['id' => $threadId, 'slug' => slugify($threadTitle)]));
         }
         
+        $editThreadTitle = ($source === 'thread');
         include __DIR__ . '/../views/edit_post.php';
     }
     elseif ($action === 'delete_post' && isset($_GET['id']) && $method === 'POST') {
