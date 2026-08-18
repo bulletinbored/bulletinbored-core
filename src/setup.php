@@ -34,7 +34,7 @@ if ($dbDriver === 'mysql') {
         "categories" => "id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255) NOT NULL UNIQUE, description TEXT, position INT DEFAULT 0, allowed_roles TEXT DEFAULT NULL",
         "threads" => "id INT AUTO_INCREMENT PRIMARY KEY, category_id INT, user_id INT, title TEXT, content TEXT, status VARCHAR(50) DEFAULT 'visible', created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP",
         "posts" => "id INT AUTO_INCREMENT PRIMARY KEY, thread_id INT, user_id INT, content TEXT, status VARCHAR(50) DEFAULT 'visible', created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
-        "uploads" => "id INT AUTO_INCREMENT PRIMARY KEY, thread_id INT, post_id INT, user_id INT, filename VARCHAR(255), original_name VARCHAR(255), size INT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
+        "uploads" => "id INT AUTO_INCREMENT PRIMARY KEY, thread_id INT, post_id INT, user_id INT, filename VARCHAR(255), original_name VARCHAR(255), size INT, mime_type VARCHAR(100), created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
         "thread_watchers" => "id INT AUTO_INCREMENT PRIMARY KEY, thread_id INT NOT NULL, user_id INT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE KEY unique_watch (thread_id, user_id)",
         "notifications" => "id INT AUTO_INCREMENT PRIMARY KEY, user_id INT NOT NULL, type VARCHAR(50) DEFAULT 'info', title TEXT NOT NULL, message TEXT, link TEXT, is_read INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
                 "private_messages" => "id INT AUTO_INCREMENT PRIMARY KEY, sender_id INT NOT NULL, recipient_id INT NOT NULL, subject TEXT, content TEXT NOT NULL, is_read INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
@@ -117,6 +117,7 @@ if ($dbDriver === 'mysql') {
                 filename TEXT,
                 original_name TEXT,
                 size INTEGER,
+                mime_type TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
             CREATE TABLE thread_watchers (
@@ -143,12 +144,6 @@ if ($dbDriver === 'mysql') {
                 subject TEXT DEFAULT '',
                 content TEXT NOT NULL,
                 is_read INTEGER DEFAULT 0,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE TABLE roles (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL UNIQUE,
-                permissions TEXT DEFAULT '[]',
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
             CREATE TABLE roles (
@@ -302,8 +297,23 @@ if ($dbDriver === 'mysql') {
     }
 }
 
-// Safe column addition for categories table
+// Safe column addition for uploads table (mime_type) — works on both drivers
 try {
+    $uploadCols = [];
+    if (($config['db_driver'] ?? 'sqlite') === 'mysql') {
+        foreach ($pdo->query("SHOW COLUMNS FROM uploads") as $c) {
+            $uploadCols[] = $c['Field'];
+        }
+    } else {
+        $uploadCols = $pdo->query("PRAGMA table_info(uploads)")->fetchAll(PDO::FETCH_COLUMN);
+    }
+    if (!in_array('mime_type', $uploadCols, true)) {
+        $pdo->exec("ALTER TABLE uploads ADD COLUMN mime_type VARCHAR(100)");
+    }
+} catch (PDOException $e) {}
+
+        // Safe column addition for categories table
+        try {
     $cols = [];
     if (($config['db_driver'] ?? 'sqlite') === 'mysql') {
         foreach ($pdo->query("SHOW COLUMNS FROM categories") as $c) {

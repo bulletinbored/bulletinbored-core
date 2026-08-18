@@ -1,0 +1,29 @@
+# Never execute any script inside the uploads directory.
+# Even though uploads are validated on the way in, this is a defence-in-depth
+# measure so legacy/forged files (e.g. a .php renamed to .jpg) can never run.
+<IfModule mod_php.c>
+    php_flag engine off
+</IfModule>
+<IfModule mod_php7.c>
+    php_flag engine off
+</IfModule>
+<IfModule mod_php8.c>
+    php_flag engine off
+</IfModule>
+
+RemoveHandler .php .phtml .php3 .php4 .php5 .php7 .phps .cgi .pl .py .asp .aspx .sh .shtml
+RemoveType .php .phtml .php3 .php4 .php5 .php7 .phps .cgi .pl .py .asp .aspx .sh .shtml
+
+<FilesMatch "\.(php|phtml|php3|php4|php5|php7|phps|cgi|pl|py|asp|aspx|sh|shtml)$">
+    Require all denied
+</FilesMatch>
+
+# Never negotiate MIME types from the filename.
+<IfModule mod_negotiation.c>
+    Options -MultiViews
+</IfModule>
+
+# Block any attempt to access hidden files.
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>

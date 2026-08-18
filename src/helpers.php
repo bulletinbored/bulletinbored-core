@@ -125,6 +125,10 @@ function url($action, $params = [], $absolute = false) {
             return $base . '/admin/ban-user' . (!empty($query) ? '?' . http_build_query($query) : '');
         case 'unban_user':
             return $base . '/admin/unban-user' . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'download':
+            $id = (int)($params['id'] ?? 0);
+            unset($query['id']);
+            return $base . '/download/' . $id . (!empty($query) ? '?' . http_build_query($query) : '');
         case 'do_login':
         case 'do_register':
         case 'do_forgot_password':
@@ -238,14 +242,66 @@ function sanitize_html($html) {
 function marked_parse($text) {
     if (empty($text)) return '';
     // Check if content is HTML (saved by editbored editor)
-    // The content is escaped by validate_input(), so HTML tags appear as <tag>
-    if (str_contains($text, '&lt;')) {
-        // Unescape HTML, sanitize, then output.
-        $html = html_entity_decode($text, ENT_QUOTES, 'UTF-8');
-        return '<div class="markdown-content">' . sanitize_html($html) . '</div>';
+    // The content is escaped by validate_input(), so HTML tags appear as
+    // <tag> (i.e. the literal string "<" is present).
+    if (str_contains($text, '&' . chr(108) . 't;')) {
+        // Pass the escaped content straight to sanitize_html(). It performs
+        // the single html_entity_decode() internally; decoding here too would
+        // create a double-decode bypass for stored-XSS payloads.
+        return '<div class="markdown-content">' . sanitize_html($text) . '</div>';
     }
     // Content is markdown, JavaScript renderMarkdownContent() will parse it with marked.parse()
     return '<div class="markdown-content">' . $text . '</div>';
+}
+
+/**
+ * Validate an uploaded file against a strict MIME + extension whitelist and
+ * return a safe, randomly-named destination filename derived from the real
+ * MIME type. Returns null when the file is rejected.
+ *
+ * Zero-dependency: uses finfo (or mime_content_type as fallback) on the
+ * temporary file, never trusts the client-supplied extension or content-type.
+ *
+ * @param string $tmpPath  Path to the uploaded temporary file.
+ * @param string $origName Original client filename (used only for the DB record).
+ * @param array  $allowed  Map of real MIME => safe extension, e.g.
+ *                         ['image/jpeg' => 'jpg', 'image/png' => 'png'].
+ * @param int    $maxSize  Maximum allowed size in bytes.
+ * @return array|null      ['mime' => ..., 'ext' => ..., 'safe_name' => ...] or null.
+ */
+function validate_upload(string $tmpPath, string $origName, array $allowed, int $maxSize): ?array
+{
+    if ($tmpPath === '' || !is_uploaded_file($tmpPath)) {
+        return null;
+    }
+    if (filesize($tmpPath) > $maxSize) {
+        return null;
+    }
+
+    // Detect the real MIME type from the file content, never the extension.
+    $mime = null;
+    if (class_exists('finfo')) {
+        $finfo = new finfo(FILEINFO_MIME_TYPE);
+        $mime  = $finfo->file($tmpPath);
+    } elseif (function_exists('mime_content_type')) {
+        $mime = mime_content_type($tmpPath);
+    }
+    if (!is_string($mime) || !isset($allowed[$mime])) {
+        return null;
+    }
+
+    // For images, run an extra structural check via getimagesize().
+    if (str_starts_with($mime, 'image/')) {
+        $info = @getimagesize($tmpPath);
+        if ($info === false) {
+            return null;
+        }
+    }
+
+    $ext = $allowed[$mime];
+    $safeName = bin2hex(random_bytes(8)) . '.' . $ext;
+
+    return ['mime' => $mime, 'ext' => $ext, 'safe_name' => $safeName];
 }
 function is_logged_in() { return isset($_SESSION['user_id']); }
 function is_admin() { return ($_SESSION['user_role'] ?? '') === 'admin'; }

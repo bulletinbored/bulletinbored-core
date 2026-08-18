@@ -235,7 +235,7 @@ function render_post($data, $number, $threadId, $threadUrl, $opts = []) {
                 <div class="post-attachments">
                     <h6><i class="fas fa-paperclip me-1"></i><?= t('attachments') ?></h6>
                     <?php foreach ($opts['uploads'] as $upload): ?>
-                        <a href="<?= base_url() ?>/uploads/<?= escape($upload['filename']) ?>" class="attachment" download>
+                        <a href="<?= url('download', ['id' => $upload['id']]) ?>" class="attachment" download>
                             <i class="fas fa-file"></i><?= escape($upload['original_name']) ?>
                             <span><?= round($upload['size'] / 1024, 1) ?> KB</span>
                         </a>

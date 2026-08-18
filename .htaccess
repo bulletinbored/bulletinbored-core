@@ -6,6 +6,7 @@
     RewriteRule ^thread/([0-9]+)(?:-([^/]+))?$ index.php?action=thread&id=$1 [L,QSA]
     RewriteRule ^category/([0-9]+)(?:-([^/]+))?$ index.php?action=category&id=$1 [L,QSA]
     RewriteRule ^u/([^/]+)$ index.php?action=profile&user=$1 [L,QSA]
+    RewriteRule ^download/([0-9]+)$ index.php?action=download&id=$1 [L,QSA]
 
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteCond %{REQUEST_FILENAME} !-d

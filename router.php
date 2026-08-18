@@ -18,6 +18,9 @@ if (preg_match('#^thread/([0-9]+)(?:-[^/]+)?$#', $path, $m)) {
 } elseif (preg_match('#^u/([^/]+)$#', $path, $m)) {
     $_GET['action'] = 'profile';
     $_GET['user'] = urldecode($m[1]);
+} elseif (preg_match('#^download/([0-9]+)$#', $path, $m)) {
+    $_GET['action'] = 'download';
+    $_GET['id'] = (int)$m[1];
 }
 
 require __DIR__ . '/index.php';

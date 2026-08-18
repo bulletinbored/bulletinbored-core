@@ -135,26 +135,47 @@ try {
             $stmt->execute([$categoryId, $_SESSION['user_id'], $title, $content]);
             $threadId = $pdo->lastInsertId();
             
-            // Handle file uploads
+            // Handle file uploads — strict MIME + extension whitelist, safe rename.
             if (!empty($config['attachments_enabled']) && !empty($_FILES['attachments']['name'][0])) {
+                $allowedAttachments = $config['attachment_allowed_types'] ?? [
+                    'image/jpeg' => 'jpg',
+                    'image/png' => 'png',
+                    'image/gif' => 'gif',
+                    'image/webp' => 'webp',
+                    'application/pdf' => 'pdf',
+                    'text/plain' => 'txt',
+                    'application/zip' => 'zip',
+                    'application/x-zip-compressed' => 'zip',
+                ];
+                $maxAttachmentSize = $config['attachment_max_size'] ?? 10*1024*1024;
+
                 foreach ($_FILES['attachments']['name'] as $index => $originalName) {
-                    if ($_FILES['attachments']['error'][$index] === UPLOAD_ERR_OK) {
-                        $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
-                        $safeName = uniqid().'.'.$extension;
-                        $uploadPath = __DIR__ . '/../uploads/'.$safeName;
-                        
-                        if (move_uploaded_file($_FILES['attachments']['tmp_name'][$index], $uploadPath)) {
-                            $pdo->prepare("
-                                INSERT INTO uploads (thread_id, user_id, filename, original_name, size) 
-                                VALUES (?, ?, ?, ?, ?)
-                            ")->execute([
-                                $threadId,
-                                $_SESSION['user_id'],
-                                $safeName,
-                                basename($originalName),
-                                $_FILES['attachments']['size'][$index]
-                            ]);
-                        }
+                    if ($_FILES['attachments']['error'][$index] !== UPLOAD_ERR_OK) {
+                        continue;
+                    }
+                    $validated = validate_upload(
+                        $_FILES['attachments']['tmp_name'][$index],
+                        $originalName,
+                        $allowedAttachments,
+                        $maxAttachmentSize
+                    );
+                    if ($validated === null) {
+                        continue;
+                    }
+                    $uploadPath = __DIR__ . '/../uploads/'.$validated['safe_name'];
+
+                    if (move_uploaded_file($_FILES['attachments']['tmp_name'][$index], $uploadPath)) {
+                        $pdo->prepare("
+                            INSERT INTO uploads (thread_id, user_id, filename, original_name, size, mime_type) 
+                            VALUES (?, ?, ?, ?, ?, ?)
+                        ")->execute([
+                            $threadId,
+                            $_SESSION['user_id'],
+                            $validated['safe_name'],
+                            basename($originalName),
+                            $_FILES['attachments']['size'][$index],
+                            $validated['mime']
+                        ]);
                     }
                 }
             }
@@ -1964,6 +1985,41 @@ elseif ($action === 'admin_users') {
         }
         http_response_code(500);
         echo json_encode(['error' => 'Failed to move uploaded file']);
+        exit;
+    }
+    elseif ($action === 'download' && isset($_GET['id'])) {
+        // Serve an attachment with correct security headers.
+        $uploadId = (int)$_GET['id'];
+        $stmt = $pdo->prepare("SELECT * FROM uploads WHERE id = ?");
+        $stmt->execute([$uploadId]);
+        $upload = $stmt->fetch();
+
+        if (!$upload) {
+            http_response_code(404);
+            die('File not found');
+        }
+
+        $filePath = __DIR__ . '/../uploads/' . basename($upload['filename']);
+        if (!is_file($filePath)) {
+            http_response_code(404);
+            die('File not found');
+        }
+
+        $mime = $upload['mime_type'] ?? (function_exists('mime_content_type') ? mime_content_type($filePath) : 'application/octet-stream');
+        if (!is_string($mime) || $mime === '') {
+            $mime = 'application/octet-stream';
+        }
+
+        // Images are shown inline; everything else is forced as a download.
+        $isImage = str_starts_with($mime, 'image/');
+        $disposition = $isImage ? 'inline' : 'attachment';
+
+        header('Content-Type: ' . $mime);
+        header('X-Content-Type-Options: nosniff');
+        header('Content-Disposition: ' . $disposition . '; filename="' . addslashes(basename($upload['original_name'])) . '"');
+        header('Content-Length: ' . (string)filesize($filePath));
+        header('Cache-Control: private, max-age=3600');
+        readfile($filePath);
         exit;
     }
     elseif ($action === 'notifications') {
