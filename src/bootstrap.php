@@ -22,6 +22,19 @@ if (!headers_sent()) {
     header("Content-Security-Policy: default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://connect.facebook.net https://www.instagram.com https://platform.twitter.com https://www.youtube.com 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com; font-src 'self' https: data:; img-src 'self' data: https:; frame-src https://www.instagram.com https://connect.facebook.net https://www.facebook.com https://facebook.com https://www.youtube.com https://www.youtube-nocookie.com https://platform.twitter.com; connect-src 'self' https://www.instagram.com https://connect.facebook.net https://www.facebook.com https://platform.twitter.com https://www.google.com");
 }
 
+// --- Session storage --------------------------------------------------------
+// Use an app-owned, writable directory for session files. The system default
+// (/var/lib/php/sessions) is frequently not writable for the site user on
+// shared hosting, which makes every request start a fresh session and breaks
+// CSRF validation (login, posting, etc.). Must run before session_start().
+$sessionDir = __DIR__ . '/../data/sessions';
+if (!is_dir($sessionDir)) {
+    @mkdir($sessionDir, 0755, true);
+}
+if (is_dir($sessionDir) && is_writable($sessionDir)) {
+    session_save_path($sessionDir);
+}
+
 // --- Session hardening ------------------------------------------------------
 // Configure the session cookie before starting the session so the flags are
 // applied on the very first Set-Cookie. Secure is enabled only when we are
