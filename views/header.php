@@ -75,15 +75,15 @@ function render_header($title = 'bulletinbored', $options = []) {
                         }
                         ?>
                         <li class="nav-item">
-                            <a class="nav-link nav-icon position-relative" href="<?= url('notifications') ?>" title="<?= t('notifications') ?>">
-                                <i class="fas fa-bell"></i>
-                                <?php if ($navUnreadNotif > 0): ?><span class="nav-badge"><?= $navUnreadNotif > 99 ? '99+' : $navUnreadNotif ?></span><?php endif; ?>
-                            </a>
-                        </li>
-                        <li class="nav-item">
                             <a class="nav-link nav-icon position-relative" href="<?= url('messages') ?>" title="<?= t('messages') ?>">
                                 <i class="fas fa-envelope"></i>
                                 <?php if ($navUnreadMsg > 0): ?><span class="nav-badge"><?= $navUnreadMsg > 99 ? '99+' : $navUnreadMsg ?></span><?php endif; ?>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link nav-icon position-relative" href="<?= url('notifications') ?>" title="<?= t('notifications') ?>">
+                                <i class="fas fa-bell"></i>
+                                <?php if ($navUnreadNotif > 0): ?><span class="nav-badge"><?= $navUnreadNotif > 99 ? '99+' : $navUnreadNotif ?></span><?php endif; ?>
                             </a>
                         </li>
                         <li class="nav-item dropdown">

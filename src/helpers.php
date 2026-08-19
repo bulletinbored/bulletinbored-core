@@ -800,3 +800,41 @@ function notify_mentioned_users($pdo, $content, $threadId, $threadTitle, $author
     }
     return $sent;
 }
+
+// Idempotently ensure the private_messages table exists. The table is normally
+// created by setup.php, but a migrated/production database may be missing it,
+// which would otherwise cause a 500 on the messages page and the textmebored
+// API. Works on both MySQL and SQLite.
+function ensure_private_messages_table($pdo) {
+    $cfg = $GLOBALS['config'] ?? [];
+    $driver = ($cfg['db_driver'] ?? 'sqlite');
+    if ($driver === 'mysql') {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS private_messages (
+                id INT PRIMARY KEY AUTO_INCREMENT,
+                sender_id INT NOT NULL,
+                recipient_id INT NOT NULL,
+                subject TEXT,
+                content TEXT NOT NULL,
+                is_read INT DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ");
+        try { $pdo->exec("CREATE INDEX idx_pm_recipient ON private_messages(recipient_id, is_read, created_at)"); } catch (Throwable $e) {}
+        try { $pdo->exec("CREATE INDEX idx_pm_sender ON private_messages(sender_id, created_at)"); } catch (Throwable $e) {}
+    } else {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS private_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sender_id INTEGER NOT NULL,
+                recipient_id INTEGER NOT NULL,
+                subject TEXT DEFAULT '',
+                content TEXT NOT NULL,
+                is_read INTEGER DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ");
+        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_pm_recipient ON private_messages(recipient_id, is_read, created_at)");
+        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_pm_sender ON private_messages(sender_id, created_at)");
+    }
+}

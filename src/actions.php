@@ -2111,6 +2111,14 @@ elseif ($action === 'admin_users') {
         if (!is_logged_in()) {
             die('Login required');
         }
+        // Ensure the table exists at runtime (it is normally created by
+        // setup.php, but a migrated/production DB may be missing it, which
+        // would otherwise cause a 500 on this page).
+        try {
+            ensure_private_messages_table($pdo);
+        } catch (Throwable $e) {
+            error_log('ensure_private_messages_table failed: ' . $e->getMessage());
+        }
         if ($method === 'POST' && isset($_POST['content']) && validate_csrf_token($_POST['csrf_token'] ?? '')) {
             $recipientId = (int)($_GET['conversation'] ?? 0);
             $content = trim($_POST['content'] ?? '');
@@ -2141,45 +2149,42 @@ elseif ($action === 'admin_users') {
 
             include __DIR__ . '/../views/messages.php';
         } else {
-            $conversations = $pdo->prepare("
+            // Aggregate query kept strict-GROUP-BY safe (no subqueries in
+            // SELECT), then enrich each conversation with its last message and
+            // username in PHP. Avoids ONLY_FULL_GROUP_BY errors on MySQL 5.7+.
+            $convStmt = $pdo->prepare("
                 SELECT
-                    CASE WHEN sender_id = :uid THEN recipient_id ELSE sender_id END as other_user_id,
+                    CASE WHEN sender_id = :uid1 THEN recipient_id ELSE sender_id END as other_user_id,
                     MAX(created_at) as last_message_at,
                     MAX(is_read) as last_read,
-                    (SELECT content FROM private_messages pm2
-                     WHERE ((pm2.sender_id = :uid AND pm2.recipient_id = CASE WHEN pm.sender_id = :uid THEN pm.recipient_id ELSE pm.sender_id END)
-                         OR (pm2.recipient_id = :uid AND pm2.sender_id = CASE WHEN pm.sender_id = :uid THEN pm.recipient_id ELSE pm.sender_id END))
-                     ORDER BY pm2.created_at DESC LIMIT 1) as last_message,
-                    (SELECT username FROM users u WHERE u.id = CASE WHEN pm.sender_id = :uid THEN pm.recipient_id ELSE pm.sender_id END) as other_username,
-                    SUM(CASE WHEN recipient_id = :uid AND is_read = 0 THEN 1 ELSE 0 END) as unread_count
-                FROM private_messages pm
-                WHERE sender_id = :uid OR recipient_id = :uid
+                    SUM(CASE WHEN recipient_id = :uid2 AND is_read = 0 THEN 1 ELSE 0 END) as unread_count
+                FROM private_messages
+                WHERE sender_id = :uid3 OR recipient_id = :uid4
                 GROUP BY other_user_id
                 ORDER BY last_message_at DESC
             ");
-            // MySQL runs in ONLY_FULL_GROUP_BY mode by default (5.7+). The
-            // dependent subqueries (last_message / other_username) are not
-            // part of the GROUP BY and are not aggregates, so the query above
-            // is rewritten below in a MySQL-safe way using ANY_VALUE() on the
-            // non-aggregated derived columns.
-            $conversations = $pdo->prepare("
-                SELECT
-                    CASE WHEN sender_id = :uid THEN recipient_id ELSE sender_id END as other_user_id,
-                    MAX(created_at) as last_message_at,
-                    MAX(is_read) as last_read,
-                    ANY_VALUE((SELECT content FROM private_messages pm2
-                     WHERE ((pm2.sender_id = :uid AND pm2.recipient_id = CASE WHEN pm.sender_id = :uid THEN pm.recipient_id ELSE pm.sender_id END)
-                         OR (pm2.recipient_id = :uid AND pm2.sender_id = CASE WHEN pm.sender_id = :uid THEN pm.recipient_id ELSE pm.sender_id END))
-                     ORDER BY pm2.created_at DESC LIMIT 1)) as last_message,
-                    ANY_VALUE((SELECT username FROM users u WHERE u.id = CASE WHEN pm.sender_id = :uid THEN pm.recipient_id ELSE pm.sender_id END)) as other_username,
-                    SUM(CASE WHEN recipient_id = :uid AND is_read = 0 THEN 1 ELSE 0 END) as unread_count
-                FROM private_messages pm
-                WHERE sender_id = :uid OR recipient_id = :uid
-                GROUP BY other_user_id
-                ORDER BY last_message_at DESC
+            $convStmt->execute([
+                'uid1' => $_SESSION['user_id'],
+                'uid2' => $_SESSION['user_id'],
+                'uid3' => $_SESSION['user_id'],
+                'uid4' => $_SESSION['user_id'],
+            ]);
+            $conversations = $convStmt->fetchAll();
+
+            $msgStmt = $pdo->prepare("
+                SELECT content FROM private_messages
+                WHERE (sender_id = :uid1 AND recipient_id = :other) OR (recipient_id = :uid2 AND sender_id = :other)
+                ORDER BY created_at DESC LIMIT 1
             ");
-            $conversations->execute(['uid' => $_SESSION['user_id']]);
-            $conversations = $conversations->fetchAll();
+            $userStmt = $pdo->prepare("SELECT username FROM users WHERE id = :id");
+            foreach ($conversations as &$conv) {
+                $otherId = (int)$conv['other_user_id'];
+                $msgStmt->execute(['uid1' => $_SESSION['user_id'], 'uid2' => $_SESSION['user_id'], 'other' => $otherId]);
+                $conv['last_message'] = $msgStmt->fetchColumn();
+                $userStmt->execute(['id' => $otherId]);
+                $conv['other_username'] = $userStmt->fetchColumn();
+            }
+            unset($conv);
             include __DIR__ . '/../views/messages.php';
         }
     }
@@ -2188,9 +2193,13 @@ elseif ($action === 'admin_users') {
         http_response_code(404);
         echo 'Page not found';
     }
-} catch (Exception $e) {
-    error_log($e->getMessage());
+} catch (Throwable $e) {
+    error_log($e->getMessage() . "\n" . $e->getTraceAsString());
     http_response_code(500);
-    echo 'An error occurred. Please try again later.';
+    if (!empty($config['debug']) || (isset($_GET['debug']) && $_GET['debug'] === '1')) {
+        echo 'DEBUG ERROR: ' . escape($e->getMessage()) . "\n\n" . escape($e->getTraceAsString());
+    } else {
+        echo 'An error occurred. Please try again later.';
+    }
 }
 ?>

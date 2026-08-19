@@ -46,6 +46,12 @@ if ($dbDriver === 'mysql') {
         $pdo->exec("CREATE TABLE IF NOT EXISTS $name ($schema)");
     }
 
+    // Relax ONLY_FULL_GROUP_BY so GROUP BY queries written for SQLite
+    // (dependent subqueries in the SELECT list) also run on MySQL 5.7+.
+    try {
+        $pdo->exec("SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode, 'ONLY_FULL_GROUP_BY', ''))");
+    } catch (PDOException $e) {}
+
     // Create admin user if not exists
     $stmt = $pdo->query("SELECT COUNT(*) FROM users WHERE role='admin'");
     if ($stmt->fetchColumn() == 0) {
