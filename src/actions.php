@@ -2134,10 +2134,10 @@ elseif ($action === 'admin_users') {
                 SELECT pm.*, u.username as sender_name
                 FROM private_messages pm
                 JOIN users u ON pm.sender_id = u.id
-                WHERE (pm.sender_id = :me AND pm.recipient_id = :other) OR (pm.sender_id = :other AND pm.recipient_id = :me)
+                WHERE (pm.sender_id = :me1 AND pm.recipient_id = :other1) OR (pm.sender_id = :other2 AND pm.recipient_id = :me2)
                 ORDER BY pm.created_at ASC
             ");
-            $messages->execute(['me' => $_SESSION['user_id'], 'other' => $conversationUserId]);
+            $messages->execute(['me1' => $_SESSION['user_id'], 'me2' => $_SESSION['user_id'], 'other1' => $conversationUserId, 'other2' => $conversationUserId]);
             $messages = $messages->fetchAll();
 
             $pdo->prepare("UPDATE private_messages SET is_read = 1 WHERE recipient_id = :me AND sender_id = :other AND is_read = 0")
@@ -2173,13 +2173,13 @@ elseif ($action === 'admin_users') {
 
             $msgStmt = $pdo->prepare("
                 SELECT content FROM private_messages
-                WHERE (sender_id = :uid1 AND recipient_id = :other) OR (recipient_id = :uid2 AND sender_id = :other)
+                WHERE (sender_id = :uid1 AND recipient_id = :other1) OR (recipient_id = :uid2 AND sender_id = :other2)
                 ORDER BY created_at DESC LIMIT 1
             ");
             $userStmt = $pdo->prepare("SELECT username FROM users WHERE id = :id");
             foreach ($conversations as &$conv) {
                 $otherId = (int)$conv['other_user_id'];
-                $msgStmt->execute(['uid1' => $_SESSION['user_id'], 'uid2' => $_SESSION['user_id'], 'other' => $otherId]);
+                $msgStmt->execute(['uid1' => $_SESSION['user_id'], 'uid2' => $_SESSION['user_id'], 'other1' => $otherId, 'other2' => $otherId]);
                 $conv['last_message'] = $msgStmt->fetchColumn();
                 $userStmt->execute(['id' => $otherId]);
                 $conv['other_username'] = $userStmt->fetchColumn();
