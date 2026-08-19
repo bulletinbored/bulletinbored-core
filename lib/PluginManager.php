@@ -39,7 +39,10 @@ class PluginManager
 
     private function parseMetadata(string $file, ?string $folder = null): array
     {
-        $content = file_get_contents($file);
+        $content = $this->readFileRetry($file);
+        if ($content === null) {
+            $content = '';
+        }
         $meta = [
             'name' => $folder ?? basename($file, '.php'),
             'version' => '1.0.0',
@@ -72,11 +75,34 @@ class PluginManager
         if (!file_exists($manifestFile)) {
             return null;
         }
-        $data = json_decode(file_get_contents($manifestFile), true);
+        $raw = $this->readFileRetry($manifestFile);
+        if ($raw === null) {
+            return null;
+        }
+        $data = json_decode($raw, true);
         if (!is_array($data)) {
             return null;
         }
         return $data;
+    }
+
+    /**
+     * Read a file with a few retries. On Windows the file can momentarily be
+     * locked by another process (web server, antivirus, a file watcher, ...)
+     * which would otherwise cause plugin discovery to fail with a misleading
+     * "not a valid plugin" error.
+     */
+    private function readFileRetry(string $path): ?string
+    {
+        for ($i = 0; $i < 8; $i++) {
+            $content = @file_get_contents($path);
+            if ($content !== false) {
+                return $content;
+            }
+            clearstatcache(true, $path);
+            usleep(150000);
+        }
+        return null;
     }
 
     public function discover(): array
@@ -286,9 +312,40 @@ class PluginManager
      * any existing counterpart. Once flattened, the now-empty (or duplicate)
      * nested folder is removed so it does not accumulate in production.
      */
+    /**
+     * Move a file or directory with retries, tolerating transient Windows
+     * permission/locking errors (e.g. when the destination is momentarily
+     * held by another process such as the web server or an antivirus).
+     */
+    private function moveWithRetry(string $source, string $dest): bool
+    {
+        for ($i = 0; $i < 5; $i++) {
+            clearstatcache(true, $dest);
+            if (file_exists($dest)) {
+                if (is_dir($dest)) {
+                    $this->deleteDir($dest);
+                } else {
+                    @unlink($dest);
+                }
+            }
+            clearstatcache(true, $source);
+            clearstatcache(true, $dest);
+            if (@rename($source, $dest)) {
+                return true;
+            }
+            if (@copy($source, $dest)) {
+                clearstatcache(true, $source);
+                @unlink($source);
+                return true;
+            }
+            usleep(100000);
+        }
+        return false;
+    }
+
     private function flattenNestedDir(string $targetDir): void
     {
-        if (!is_dir($targetDir) || file_exists($targetDir . '/manifest.json')) {
+        if (!is_dir($targetDir)) {
             return;
         }
 
@@ -311,20 +368,10 @@ class PluginManager
                 }
                 foreach (glob($item . '/*') as $child) {
                     $childDest = $destItem . '/' . basename($child);
-                    if (file_exists($childDest)) {
-                        if (is_dir($childDest)) {
-                            $this->deleteDir($childDest);
-                        } else {
-                            @unlink($childDest);
-                        }
-                    }
-                    @rename($child, $childDest) or copy($child, $childDest);
+                    $this->moveWithRetry($child, $childDest);
                 }
             } else {
-                if (file_exists($destItem)) {
-                    @unlink($destItem);
-                }
-                @rename($item, $destItem) or copy($item, $destItem);
+                $this->moveWithRetry($item, $destItem);
             }
         }
 
@@ -356,10 +403,87 @@ class PluginManager
         // only "un-nest" when there is no manifest.json directly at the root.
         $this->flattenNestedDir($dest);
 
+        // Optional integrity checks. These can be disabled by the admin via
+        // config: plugin_verify_files = false.
+        if ($this->verifyFilesEnabled()) {
+            // 1) File-list integrity: reject when declared files are missing or
+            //    extra undeclared files are present (potential backdoor).
+            $check = $this->verifyInstalledFiles();
+            if (!$check['success']) {
+                $this->deleteDir(rtrim($dest, '/'));
+                $this->plugins = [];
+                $this->discover();
+                return $check;
+            }
+        }
+
         $this->plugins = [];
         $this->discover();
 
         return ['success' => true, 'message' => 'Plugin installed'];
+    }
+
+    private function verifyFilesEnabled(): bool
+    {
+        global $config;
+        return !isset($config['plugin_verify_files']) || $config['plugin_verify_files'] !== false;
+    }
+
+    /**
+     * Verify that every extracted plugin folder honours the "files" list in its
+     * manifest.json: no declared file missing, no undeclared file present.
+     * Plugins without a manifest.json or without a "files" key are skipped.
+     */
+    private function verifyInstalledFiles(): array
+    {
+        $pending = [];
+        foreach (glob($this->pluginsDir . '/*', GLOB_ONLYDIR) as $dir) {
+            $manifestFile = $dir . '/manifest.json';
+            if (!file_exists($manifestFile)) {
+                continue;
+            }
+            $manifest = json_decode(file_get_contents($manifestFile), true);
+            if (!is_array($manifest) || empty($manifest['files']) || !is_array($manifest['files'])) {
+                continue;
+            }
+            $expected = array_map(function ($f) {
+                return ltrim(str_replace('\\', '/', (string)$f), '/');
+            }, $manifest['files']);
+
+            // Collect all actual files below the plugin folder.
+            $actual = [];
+            foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS)) as $item) {
+                if ($item->isFile()) {
+                    $actual[] = ltrim(str_replace('\\', '/', substr($item->getPathname(), strlen($dir) + 1)), '/');
+                }
+            }
+
+            $missing = array_diff($expected, $actual);
+            $extra = array_diff($actual, $expected);
+            if (!empty($missing) || !empty($extra)) {
+                $pending[] = [
+                    'plugin' => basename($dir),
+                    'missing' => array_values($missing),
+                    'extra' => array_values($extra),
+                ];
+            }
+        }
+
+        if (!empty($pending)) {
+            $detail = '';
+            foreach ($pending as $p) {
+                $detail .= "\n- " . $p['plugin'];
+                if (!empty($p['missing'])) {
+                    $detail .= "\n  missing: " . implode(', ', $p['missing']);
+                }
+                if (!empty($p['extra'])) {
+                    $detail .= "\n  undeclared: " . implode(', ', $p['extra']);
+                }
+            }
+            return ['success' => false, 'message' => 'Plugin integrity check failed. The archive contains files not declared in manifest.json (or is missing declared files). This may indicate a tampered package:' . $detail . "\n\nYou can disable this check by setting \$config['plugin_verify_files'] = false; in config.php."];
+        }
+
+        return ['success' => true, 'message' => 'ok'];
     }
 
     public function delete(string $name): array
@@ -431,7 +555,15 @@ class PluginManager
         }
         @rmdir($dir);
         if (is_dir($dir)) {
-            exec('cmd /c rmdir /s /q ' . escapeshellarg($dir) . ' 2>&1', $out, $code);
+            // On Windows a leftover directory can be locked or carry ACLs that
+            // prevent deletion. Force ownership/permissions then remove it.
+            if (stripos(PHP_OS, 'WIN') === 0 && function_exists('exec')) {
+                exec('takeown /f ' . escapeshellarg($dir) . ' /r /d y 2>nul');
+                exec('icacls ' . escapeshellarg($dir) . ' /grant administrators:F /t 2>nul');
+                exec('cmd /c rmdir /s /q ' . escapeshellarg($dir) . ' 2>nul');
+            } else {
+                exec('cmd /c rmdir /s /q ' . escapeshellarg($dir) . ' 2>&1', $out, $code);
+            }
             clearstatcache();
         }
     }
@@ -443,23 +575,35 @@ class PluginManager
         $repoName = basename(str_replace(['\\', '.git'], ['', ''], $repo));
         $targetDir = $dest . ($expectedName ?: $repoName);
 
+        // Remove any leftover/partial directory from a previous failed install
+        // so we never merge a new download into a broken folder.
+        if (is_dir($targetDir)) {
+            $this->deleteDir($targetDir);
+        }
+
         require_once __DIR__ . '/repo_install.php';
         $result = install_repo_package($repoUrl, $targetDir, $tag, $expectedName ?: $repoName);
         if (!$result['success']) {
             return $result;
         }
 
-        // Normalise the extracted layout. GitHub/GitLab archives nest the
-        // plugin under a single <repo>-<ref>/ folder, and some plugins also
-        // ship multiple top-level folders (assets/, lang/, ...). We only need
-        // to "un-nest" when the plugin files are NOT already at the target
-        // root (i.e. there is no manifest.json directly inside targetDir).
         $this->flattenNestedDir($targetDir);
 
-        $this->plugins = [];
-        $this->discover();
+        // Give the filesystem a moment and retry discovery: on Windows the
+        // freshly written manifest.json can be briefly locked by another
+        // process, which would otherwise trigger a false "not a valid plugin".
+        $manifest = null;
+        for ($i = 0; $i < 10; $i++) {
+            $this->plugins = [];
+            $this->discover();
+            $manifest = $this->getByName($expectedName ?: $repoName);
+            if ($manifest && !empty($manifest['file']) && file_exists($manifest['file'])) {
+                break;
+            }
+            clearstatcache();
+            usleep(200000);
+        }
 
-        $manifest = $this->getByName($expectedName ?: $repoName);
         if (!$manifest || empty($manifest['file']) || !file_exists($manifest['file'])) {
             if (is_dir($targetDir)) {
                 $this->deleteDir($targetDir);

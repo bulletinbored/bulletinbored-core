@@ -4,8 +4,9 @@
     "type": "plugin",
     "repo": "https://github.com/bulletinbored/editbored-plugin",
     "author": "mlzog",
+    "author_type": "first_party",
     "description": "WYSIWYG Markdown editor with mentions and image upload",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "official": true
   },
   {
@@ -13,8 +14,9 @@
     "type": "plugin",
     "repo": "https://github.com/bulletinbored/bellbored-plugin",
     "author": "mlzog",
+    "author_type": "first_party",
     "description": "Notification center for the forum",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "official": true
   },
   {
@@ -22,8 +24,9 @@
     "type": "plugin",
     "repo": "https://github.com/bulletinbored/hellobored-plugin",
     "author": "mlzog",
+    "author_type": "first_party",
     "description": "Plugin example — displays a random quote on every page.",
-    "version": "1.0.0",
+    "version": "1.0.3",
     "official": true
   },
   {
@@ -31,7 +34,18 @@
     "type": "plugin",
     "repo": "https://github.com/bulletinbored/textmebored-plugin",
     "author": "mlzog",
+    "author_type": "first_party",
     "description": "Private messaging and chat system",
+    "version": "1.0.1",
+    "official": true
+  },
+  {
+    "name": "updownbored",
+    "type": "plugin",
+    "repo": "https://github.com/bulletinbored/updownbored-plugin",
+    "author": "mlzog",
+    "author_type": "first_party",
+    "description": "Add upvotes and downvotes to bulletinbored posts",
     "version": "1.0.0",
     "official": true
   },
@@ -40,6 +54,7 @@
     "type": "theme",
     "repo": "https://github.com/bulletinbored/freshbored-theme",
     "author": "mlzog",
+    "author_type": "first_party",
     "description": "Default frontend theme for bulletinbored. Bootstrap 5 based, sidebar driven discussion layout.",
     "version": "1.0.0",
     "official": true

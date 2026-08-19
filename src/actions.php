@@ -500,6 +500,8 @@ try {
                         <p>This link expires in 24 hours.</p>';
                 send_email($email, $subject, $body);
             }
+
+            notify_admin_new_user($username, $email);
             
             redirect(url('login', ['registered' => 1]));
         }
@@ -1105,7 +1107,10 @@ elseif ($action === 'unban_user' && $method === 'POST' && is_admin()) {
         $timeFormat = trim($_POST['time_format'] ?? $config['time_format']);
         $mailFrom = trim($_POST['mail_from'] ?? $config['mail_from'] ?? '');
         $mailFromName = trim($_POST['mail_from_name'] ?? $config['mail_from_name'] ?? '');
+        $notifyAdminEmail = trim($_POST['notify_admin_email'] ?? $config['notify_admin_email'] ?? '');
         $attachmentsEnabled = !empty($_POST['attachments_enabled']) ? 1 : 0;
+        $allowCatalogOnly = !empty($_POST['allow_catalog_only']) ? 1 : 0;
+        $pluginVerifyFiles = !empty($_POST['plugin_verify_files']) ? 1 : 0;
 
         $config['site_name'] = $siteName;
         $config['site_tagline'] = $siteTagline;
@@ -1115,7 +1120,10 @@ elseif ($action === 'unban_user' && $method === 'POST' && is_admin()) {
         $config['time_format'] = $timeFormat;
         $config['mail_from'] = $mailFrom;
         $config['mail_from_name'] = $mailFromName;
+        $config['notify_admin_email'] = $notifyAdminEmail;
         $config['attachments_enabled'] = $attachmentsEnabled;
+        $config['allow_catalog_only'] = $allowCatalogOnly;
+        $config['plugin_verify_files'] = $pluginVerifyFiles;
 
         $configContent = "<?php\n";
         foreach ($config as $key => $value) {
@@ -1255,10 +1263,12 @@ elseif ($action === 'admin_users') {
                        <p style="text-align:center;"><a class="btn" href="'.$verifyLink.'">Verify Email</a></p>
                        <p>Or copy this link: <br><code>'.$verifyLink.'</code></p>
                        <p>This link expires in 24 hours.</p>';
-               send_email($email, $subject, $body);
-          }
-          
-          redirect(url('admin_users'));
+                send_email($email, $subject, $body);
+           }
+
+           notify_admin_new_user($username, $email);
+           
+           redirect(url('admin_users'));
       }
       elseif ($action === 'admin_settings') {
         // Show settings page
@@ -1479,7 +1489,21 @@ elseif ($action === 'admin_users') {
             if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
                 $adminPluginError = 'Invalid CSRF token';
             } else {
-                if (isset($_POST['install_plugin']) && !empty($_FILES['plugin_zip']['tmp_name'])) {
+                if (isset($_POST['save_plugin_settings'])) {
+                    $config['allow_catalog_only'] = !empty($_POST['allow_catalog_only']) ? 1 : 0;
+                    $config['plugin_verify_files'] = !empty($_POST['plugin_verify_files']) ? 1 : 0;
+
+                    $configContent = "<?php\n";
+                    foreach ($config as $key => $value) {
+                        if (is_string($value)) {
+                            $configContent .= "\$config['$key'] = '" . addslashes($value) . "';\n";
+                        } else {
+                            $configContent .= "\$config['$key'] = " . var_export($value, true) . ";\n";
+                        }
+                    }
+                    file_put_contents(__DIR__ . '/../config.php', $configContent);
+                    $adminPluginSuccess = t('settings_saved');
+                } elseif (isset($_POST['install_plugin']) && !empty($_FILES['plugin_zip']['tmp_name'])) {
                     $tmpPath = $_FILES['plugin_zip']['tmp_name'];
                     $result = $pluginManager->installFromZip($tmpPath);
                     if ($result['success']) {
@@ -1491,6 +1515,24 @@ elseif ($action === 'admin_users') {
                     $repo = $_POST['repo'] ?? '';
                     $tag = $_POST['tag'] ?? null;
                     $name = strtolower($_POST['plugin_name'] ?? '');
+                    // Check allow_catalog_only flag
+                    if (!empty($config['allow_catalog_only'])) {
+                        $catalogMirrorBase = !empty($config['update_mirror']) ? rtrim($config['update_mirror'], '/') : 'https://extend.bulletinbored.net';
+                        $remoteCatalogRaw = @file_get_contents($catalogMirrorBase . '/catalog.json');
+                        $remoteCatalog = is_string($remoteCatalogRaw) ? json_decode($remoteCatalogRaw, true) : null;
+                        $catalog = is_array($remoteCatalog) ? $remoteCatalog : (json_decode(file_get_contents(__DIR__ . '/../data/catalog.json'), true) ?: []);
+                        $catalogItem = array_filter($catalog, fn($i) => strtolower($i['name'] ?? '') === $name && strtolower($i['type'] ?? '') === 'plugin');
+                        $catalogItem = array_values($catalogItem);
+                        if (empty($catalogItem)) {
+                            $adminPluginError = 'Catalog-only mode: this entry is not present in the catalog.';
+                            goto skip_catalog_install;
+                        }
+                        if (($catalogItem[0]['author_type'] ?? '') === 'third_party') {
+                            $adminPluginError = 'Catalog-only mode: third-party plugins cannot be installed. Only bulletinbored team plugins are allowed.';
+                            goto skip_catalog_install;
+                        }
+                    }
+                    skip_catalog_install:
                     if ($repo === '' || $name === '') {
                         $adminPluginError = 'Invalid catalog item';
                     } else {
@@ -1565,6 +1607,24 @@ elseif ($action === 'admin_users') {
                     $repo = $_POST['repo'] ?? '';
                     $tag = $_POST['tag'] ?? null;
                     $name = strtolower($_POST['theme_name'] ?? '');
+                    // Check allow_catalog_only flag
+                    if (!empty($config['allow_catalog_only'])) {
+                        $catalogMirrorBase = !empty($config['update_mirror']) ? rtrim($config['update_mirror'], '/') : 'https://extend.bulletinbored.net';
+                        $remoteCatalogRaw = @file_get_contents($catalogMirrorBase . '/catalog.json');
+                        $remoteCatalog = is_string($remoteCatalogRaw) ? json_decode($remoteCatalogRaw, true) : null;
+                        $catalog = is_array($remoteCatalog) ? $remoteCatalog : (json_decode(file_get_contents(__DIR__ . '/../data/catalog.json'), true) ?: []);
+                        $catalogItem = array_filter($catalog, fn($i) => strtolower($i['name'] ?? '') === $name && strtolower($i['type'] ?? '') === 'theme');
+                        $catalogItem = array_values($catalogItem);
+                        if (empty($catalogItem)) {
+                            $adminThemeError = 'Catalog-only mode: this entry is not present in the catalog.';
+                            goto skip_catalog_install_theme;
+                        }
+                        if (($catalogItem[0]['author_type'] ?? '') === 'third_party') {
+                            $adminThemeError = 'Catalog-only mode: third-party themes cannot be installed. Only bulletinbored team themes are allowed.';
+                            goto skip_catalog_install_theme;
+                        }
+                    }
+                    skip_catalog_install_theme:
                     if ($repo === '' || $name === '') {
                         $adminThemeError = 'Invalid catalog item';
                     } else {
@@ -1626,8 +1686,8 @@ elseif ($action === 'admin_users') {
                 $baseDir = $type === 'plugin' ? __DIR__ . '/../plugins' : __DIR__ . '/../themes';
                 $target = $baseDir.'/'.$name;
                 if (is_dir($target)) {
-                    require_once __DIR__.'/lib/PluginManager.php';
-                    require_once __DIR__.'/lib/ThemeManager.php';
+                    require_once __DIR__ . '/../lib/PluginManager.php';
+                    require_once __DIR__ . '/../lib/ThemeManager.php';
                     if ($type === 'plugin') {
                         $pm = new PluginManager(__DIR__ . '/../plugins', __DIR__ . '/../data/plugins.json');
                         $pm->delete($name);
@@ -1645,18 +1705,18 @@ elseif ($action === 'admin_users') {
             } elseif (isset($_POST['install_from_catalog'])) {
                 $name = strtolower(trim($_POST['name'] ?? ''));
                 $type = strtolower(trim($_POST['type'] ?? ''));
-                $repo = trim($_POST['repo'] ?? '');
-                $tag = $_POST['tag'] ?? null;
-                if ($repo === '' || $name === '' || !in_array($type, ['plugin', 'theme'])) {
-                    $adminCatalogError = 'Invalid request';
-                } else {
-                    if ($type === 'plugin') {
-                        $pluginManager = new PluginManager(__DIR__ . '/../plugins', __DIR__ . '/../data/plugins.json');
-                        $result = $pluginManager->installFromRepo($repo, $tag, $name);
+                    $repo = trim($_POST['repo'] ?? '');
+                    $tag = $_POST['tag'] ?? null;
+                    if ($repo === '' || $name === '' || !in_array($type, ['plugin', 'theme'])) {
+                        $adminCatalogError = 'Invalid request';
                     } else {
-                        $themeManager = new ThemeManager(__DIR__ . '/../themes', __DIR__ . '/../data/themes.json', 'freshbored');
-                        $result = $themeManager->installFromRepo($repo, $tag, $name);
-                    }
+                        if ($type === 'plugin') {
+                            $pluginManager = new PluginManager(__DIR__ . '/../plugins', __DIR__ . '/../data/plugins.json');
+                            $result = $pluginManager->installFromRepo($repo, $tag, $name);
+                        } else {
+                            $themeManager = new ThemeManager(__DIR__ . '/../themes', __DIR__ . '/../data/themes.json', 'freshbored');
+                            $result = $themeManager->installFromRepo($repo, $tag, $name);
+                        }
                     if ($result['success']) {
                         $installedPath = __DIR__.'/../data/installed.json';
                         $installed = file_exists($installedPath) ? json_decode(file_get_contents($installedPath), true) : ['plugins'=>[], 'themes'=>[]];
@@ -2091,6 +2151,27 @@ elseif ($action === 'admin_users') {
                          OR (pm2.recipient_id = :uid AND pm2.sender_id = CASE WHEN pm.sender_id = :uid THEN pm.recipient_id ELSE pm.sender_id END))
                      ORDER BY pm2.created_at DESC LIMIT 1) as last_message,
                     (SELECT username FROM users u WHERE u.id = CASE WHEN pm.sender_id = :uid THEN pm.recipient_id ELSE pm.sender_id END) as other_username,
+                    SUM(CASE WHEN recipient_id = :uid AND is_read = 0 THEN 1 ELSE 0 END) as unread_count
+                FROM private_messages pm
+                WHERE sender_id = :uid OR recipient_id = :uid
+                GROUP BY other_user_id
+                ORDER BY last_message_at DESC
+            ");
+            // MySQL runs in ONLY_FULL_GROUP_BY mode by default (5.7+). The
+            // dependent subqueries (last_message / other_username) are not
+            // part of the GROUP BY and are not aggregates, so the query above
+            // is rewritten below in a MySQL-safe way using ANY_VALUE() on the
+            // non-aggregated derived columns.
+            $conversations = $pdo->prepare("
+                SELECT
+                    CASE WHEN sender_id = :uid THEN recipient_id ELSE sender_id END as other_user_id,
+                    MAX(created_at) as last_message_at,
+                    MAX(is_read) as last_read,
+                    ANY_VALUE((SELECT content FROM private_messages pm2
+                     WHERE ((pm2.sender_id = :uid AND pm2.recipient_id = CASE WHEN pm.sender_id = :uid THEN pm.recipient_id ELSE pm.sender_id END)
+                         OR (pm2.recipient_id = :uid AND pm2.sender_id = CASE WHEN pm.sender_id = :uid THEN pm.recipient_id ELSE pm.sender_id END))
+                     ORDER BY pm2.created_at DESC LIMIT 1)) as last_message,
+                    ANY_VALUE((SELECT username FROM users u WHERE u.id = CASE WHEN pm.sender_id = :uid THEN pm.recipient_id ELSE pm.sender_id END)) as other_username,
                     SUM(CASE WHEN recipient_id = :uid AND is_read = 0 THEN 1 ELSE 0 END) as unread_count
                 FROM private_messages pm
                 WHERE sender_id = :uid OR recipient_id = :uid

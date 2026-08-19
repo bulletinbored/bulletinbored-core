@@ -62,6 +62,11 @@
                         <input type="text" name="mail_from_name" class="form-control" value="<?= escape($config['mail_from_name'] ?? '') ?>" placeholder="<?= escape($config['site_name'] ?? 'bulletinbored') ?>">
                         <div class="form-text"><?= t('mail_from_name_hint') ?></div>
                     </div>
+                    <div class="col-md-6">
+                        <label class="form-label"><?= t('notify_admin_email') ?></label>
+                        <input type="email" name="notify_admin_email" class="form-control" value="<?= escape($config['notify_admin_email'] ?? '') ?>" placeholder="<?= escape($config['mail_from'] ?? '') ?>">
+                        <div class="form-text"><?= t('notify_admin_email_hint') ?></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -126,11 +131,27 @@
             </div>
         </div>
 
-        <div class="d-flex justify-content-end mb-4">
-            <button type="submit" class="btn btn-primary px-4">
-                <i class="fas fa-save me-1"></i><?= t('save_settings') ?>
-            </button>
-        </div>
-    </form>
-</div>
-<?php unset($_SESSION['settings_saved']); include __DIR__.'/admin_footer.php'; ?>
+        <!-- Catalog Settings -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header d-flex align-items-center">
+                <i class="fas fa-folder me-2"></i> <?= t('catalog_settings') ?>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label"><?= t('allow_catalog_only') ?></label>
+                        <select name="allow_catalog_only" class="form-select">
+                            <option value="1" <?= ($config['allow_catalog_only'] ?? true) ? 'selected' : '' ?>><?= t('yes') ?></option>
+                            <option value="0" <?= (!($config['allow_catalog_only'] ?? true)) ? 'selected' : '' ?>><?= t('no') ?></option>
+                        </select>
+                        <div class="form-text"><?= t('allow_catalog_only_hint') ?></div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label"><?= t('plugin_verify_files') ?></label>
+                        <select name="plugin_verify_files" class="form-select">
+                            <option value="1" <?= ($config['plugin_verify_files'] ?? true) ? 'selected' : '' ?>><?= t('enabled') ?></option>
+                            <option value="0" <?= (!($config['plugin_verify_files'] ?? true)) ? 'selected' : '' ?>><?= t('disabled') ?></option>
+                        </select>
+                        <div class="form-text"><?= t('plugin_verify_files_hint') ?></div>
+                    </div>
+                    <div class="col from

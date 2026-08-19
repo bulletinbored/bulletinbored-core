@@ -42,6 +42,14 @@
                     <h6 class="m-0 font-weight-bold text-primary"><?= t('install_theme') ?></h6>
                 </div>
                 <div class="card-body">
+                    <p class="mb-0">
+                        <button type="button" class="btn btn-link text-warning p-0 text-start" onclick="var e=document.getElementById('themeWarning');var o=e.classList.toggle('d-none');this.setAttribute('aria-expanded', o?'true':'false');" aria-expanded="false">
+                            <i class="fas fa-exclamation-triangle"></i> Notice
+                        </button>
+                    </p>
+                    <div class="mt-2 d-none" id="themeWarning">
+                        <p class="text-warning small mb-0">Third-party themes are not developed by the bulletinbored team. Install at your own risk and report malicious themes at <a href="https://www.bulletinbored.net/forum" target="_blank" rel="noopener" class="text-warning">www.bulletinbored.net/forum</a>.</p>
+                    </div>
                     <form method="POST" enctype="multipart/form-data">
                         <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                         <div class="mb-3">

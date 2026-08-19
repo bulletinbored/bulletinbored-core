@@ -188,10 +188,13 @@ function sanitize_html($html) {
     // Decode entities so we can match real tag boundaries, then re-scan.
     $decoded = html_entity_decode($html, ENT_QUOTES | ENT_HTML5, 'UTF-8');
 
-    // Strip any tag that is not in the allow-list.
+    // External social embeds (YouTube/Twitter/X iframes, Instagram/Facebook
+    // containers) are produced by the editbored editor's link-preview system.
+    // These hosts are restrictively allowed so third-party players can render.
     $allowedTags = '<p><br><a><strong><em><b><i><u><s><strike><ul><ol><li>'
         . '<blockquote><code><pre><h1><h2><h3><h4><h5><h6><hr><table><thead>'
-        . '<tbody><tr><th><td><img><span><div><sub><sup><del><ins><mark><abbr>';
+        . '<tbody><tr><th><td><img><span><div><sub><sup><del><ins><mark><abbr>'
+        . '<iframe>';
     $decoded = strip_tags($decoded, $allowedTags);
 
     // Remove every attribute except a small safe set; kill event handlers and
@@ -208,8 +211,9 @@ function sanitize_html($html) {
                     $name = strtolower($a[1]);
                     $val  = $a[3] ?? ($a[4] ?? ($a[5] ?? ''));
 
-                    // Drop every event handler and non-standard attribute.
-                    if (str_starts_with($name, 'on') || $name === 'style' || $name === 'id') {
+                    // Drop every event handler. (style/id/data-* are allowed for
+                    // social-embed containers, but data:* URIs are still banned.)
+                    if (str_starts_with($name, 'on')) {
                         continue;
                     }
                     if (in_array($name, ['href', 'src'], true)) {
@@ -218,9 +222,23 @@ function sanitize_html($html) {
                             continue;
                         }
                     }
+                    if ($tag === 'iframe' && $name === 'src') {
+                        // Only permit players from well-known embed hosts.
+                        $host = parse_url($val, PHP_URL_HOST) ?: '';
+                        $host = strtolower($host);
+                        $okHosts = ['www.youtube.com', 'youtube.com', 'www.youtube-nocookie.com',
+                                    'youtube-nocookie.com', 'platform.twitter.com',
+                                    'www.facebook.com', 'facebook.com', 'www.instagram.com', 'instagram.com'];
+                        if (!in_array($host, $okHosts, true)) {
+                            continue;
+                        }
+                    }
                     if ($name === 'href' || $name === 'src') {
                         $safeAttrs[] = $name . '="' . escape($val) . '"';
-                    } elseif (in_array($name, ['alt', 'title', 'class', 'target', 'rel', 'width', 'height', 'colspan', 'rowspan', 'start', 'cite'])) {
+                    } elseif (in_array($name, ['alt', 'title', 'class', 'target', 'rel', 'width', 'height', 'colspan', 'rowspan', 'start', 'cite', 'style', 'id'])) {
+                        $safeAttrs[] = $name . '="' . escape($val) . '"';
+                    } elseif (str_starts_with($name, 'data-')) {
+                        // Allow data-* attributes used by Instagram/Facebook embeds.
                         $safeAttrs[] = $name . '="' . escape($val) . '"';
                     }
                 }
@@ -235,6 +253,11 @@ function sanitize_html($html) {
         },
         $decoded
     );
+
+    // Remove the stray "✕" glyph left inside link-preview wrappers by older
+    // versions of the editor (it was appended as a remove-control and saved
+    // into post HTML). It is plain text, not a tag, so strip_tags misses it.
+    $decoded = preg_replace('/✕/', '', $decoded);
 
     return $decoded;
 }
@@ -730,4 +753,50 @@ function send_email($to, $subject, $body) {
         return true;
     }
     return mail($to, '=?UTF-8?B?'.base64_encode($subject).'?=', $htmlBody, $headers, $envelope);
+}
+
+// Notify the administrator about a new user registration (cases 6).
+function notify_admin_new_user($username, $email = '') {
+    global $config;
+    $recipient = !empty($config['notify_admin_email']) ? $config['notify_admin_email'] : ($config['mail_from'] ?? '');
+    if (empty($recipient)) {
+        return false;
+    }
+    $subject = t('new_user_subject', ['username' => $username]);
+    $body = t('new_user_body', [
+        'site' => $config['site_name'] ?? 'bulletinbored',
+        'username' => escape($username),
+        'email' => $email !== '' ? escape($email) : '-',
+        'link' => url('admin_users', [], true),
+    ]);
+    return send_email($recipient, $subject, $body);
+}
+
+// Notify mentioned users about a new post (case 7). Returns count of emails sent.
+function notify_mentioned_users($pdo, $content, $threadId, $threadTitle, $authorName) {
+    if (!preg_match_all('/@([a-zA-Z0-9_]+)/', $content, $matches)) {
+        return 0;
+    }
+    $usernames = array_unique($matches[1]);
+    $sent = 0;
+    $threadLink = url('thread', ['id' => $threadId, 'slug' => slugify($threadTitle)], true);
+    foreach ($usernames as $username) {
+        $stmt = $pdo->prepare("SELECT id, email FROM users WHERE username = ? AND email IS NOT NULL AND email <> ''");
+        $stmt->execute([$username]);
+        $user = $stmt->fetch();
+        if (!$user) {
+            continue;
+        }
+        $subject = t('mentioned_subject', ['title' => $threadTitle]);
+        $body = t('mentioned_body', [
+            'username' => escape($user['username'] ?? $username),
+            'author' => escape($authorName),
+            'title' => escape($threadTitle),
+            'link' => $threadLink,
+        ]);
+        if (send_email($user['email'], $subject, $body)) {
+            $sent++;
+        }
+    }
+    return $sent;
 }

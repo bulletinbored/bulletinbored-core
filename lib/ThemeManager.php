@@ -221,7 +221,78 @@ class ThemeManager
         $this->themes = [];
         $this->discover();
 
+        // Optional integrity check: when the theme declares a "files" list in
+        // manifest.json, reject the install if any declared file is missing or
+        // if extra undeclared files are present (potential backdoor). This can
+        // be disabled by the admin via config: theme_verify_files = false.
+        if ($this->verifyFilesEnabled()) {
+            $check = $this->verifyInstalledFiles();
+            if (!$check['success']) {
+                $this->deleteDir(rtrim($this->themesDir, '/'));
+                $this->themes = [];
+                $this->discover();
+                return $check;
+            }
+        }
+
         return ['success' => true, 'message' => 'Theme installed'];
+    }
+
+    /**
+     * Verify that every extracted theme folder honours the "files" list in its
+     * manifest.json: no declared file missing, no undeclared file present.
+     * Themes without a manifest.json or without a "files" key are skipped.
+     */
+    private function verifyInstalledFiles(): array
+    {
+        $pending = [];
+        foreach (glob($this->themesDir . '/*', GLOB_ONLYDIR) as $dir) {
+            $manifestFile = $dir . '/manifest.json';
+            if (!file_exists($manifestFile)) {
+                continue;
+            }
+            $manifest = json_decode(file_get_contents($manifestFile), true);
+            if (!is_array($manifest) || empty($manifest['files']) || !is_array($manifest['files'])) {
+                continue;
+            }
+            $expected = array_map(function ($f) {
+                return ltrim(str_replace('\\', '/', (string)$f), '/');
+            }, $manifest['files']);
+
+            // Collect all actual files below the theme folder.
+            $actual = [];
+            foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS)) as $item) {
+                if ($item->isFile()) {
+                    $actual[] = ltrim(str_replace('\\', '/', substr($item->getPathname(), strlen($dir) + 1)), '/');
+                }
+            }
+
+            $missing = array_diff($expected, $actual);
+            $extra = array_diff($actual, $expected);
+            if (!empty($missing) || !empty($extra)) {
+                $pending[] = [
+                    'theme' => basename($dir),
+                    'missing' => array_values($missing),
+                    'extra' => array_values($extra),
+                ];
+            }
+        }
+
+        if (!empty($pending)) {
+            $detail = '';
+            foreach ($pending as $p) {
+                $detail .= "\n- " . $p['theme'];
+                if (!empty($p['missing'])) {
+                    $detail .= "\n  missing: " . implode(', ', $p['missing']);
+                }
+                if (!empty($p['extra'])) {
+                    $detail .= "\n  undeclared: " . implode(', ', $p['extra']);
+                }
+            }
+            return ['success' => false, 'message' => 'Theme integrity check failed. The archive contains files not declared in manifest.json (or is missing declared files). This may indicate a tampered package:' . $detail . "\n\nYou can disable this check by setting \$config['theme_verify_files'] = false; in config.php."];
+        }
+
+        return ['success' => true, 'message' => 'ok'];
     }
 
     public function delete(string $name): array
@@ -293,7 +364,13 @@ class ThemeManager
         }
         @rmdir($dir);
         if (is_dir($dir)) {
-            exec('cmd /c rmdir /s /q ' . escapeshellarg($dir) . ' 2>&1', $out, $code);
+            if (stripos(PHP_OS, 'WIN') === 0 && function_exists('exec')) {
+                exec('takeown /f ' . escapeshellarg($dir) . ' /r /d y 2>nul');
+                exec('icacls ' . escapeshellarg($dir) . ' /grant administrators:F /t 2>nul');
+                exec('cmd /c rmdir /s /q ' . escapeshellarg($dir) . ' 2>nul');
+            } else {
+                exec('cmd /c rmdir /s /q ' . escapeshellarg($dir) . ' 2>&1', $out, $code);
+            }
             clearstatcache();
         }
     }
@@ -305,14 +382,16 @@ class ThemeManager
         $repoName = basename(str_replace(['\\', '.git'], ['', ''], $repo));
         $targetDir = $dest . ($expectedName ?: $repoName);
 
+        if (is_dir($targetDir)) {
+            $this->deleteDir($targetDir);
+        }
+
         require_once __DIR__ . '/repo_install.php';
         $result = install_repo_package($repoUrl, $targetDir, $tag, $expectedName ?: $repoName);
         if (!$result['success']) {
             return $result;
         }
 
-        // Normalise the extracted layout: only "un-nest" when there is no
-        // style.css (or manifest.json) directly at the target root.
         $hasRootAsset = file_exists($targetDir . '/style.css') || file_exists($targetDir . '/manifest.json');
         if (is_dir($targetDir) && !$hasRootAsset) {
             $nested = null;
@@ -335,17 +414,23 @@ class ThemeManager
             }
         }
 
-        $this->themes = [];
-        $this->discover();
-
         $name = $expectedName ?: $repoName;
-        if (!isset($this->themes[$name])) {
-            foreach ($this->themes as $themeName => $theme) {
-                if ($theme['dir'] === $targetDir) {
-                    $name = $themeName;
-                    break;
+        for ($i = 0; $i < 10; $i++) {
+            $this->themes = [];
+            $this->discover();
+            if (!isset($this->themes[$name])) {
+                foreach ($this->themes as $themeName => $theme) {
+                    if ($theme['dir'] === $targetDir) {
+                        $name = $themeName;
+                        break;
+                    }
                 }
             }
+            if (isset($this->themes[$name])) {
+                break;
+            }
+            clearstatcache();
+            usleep(200000);
         }
 
         if (!isset($this->themes[$name])) {

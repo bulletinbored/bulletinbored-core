@@ -18,3 +18,7 @@ data/ratelimit/
 /themes/*
 !/themes/freshbored
 /themes/*/
+
+RELEASE_NOTES.md
+
+EMAIL_INVIE.md

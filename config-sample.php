@@ -50,3 +50,7 @@ $config['theme_manifest'] = __DIR__.'/data/themes.json';
 $config['update_manifest'] = __DIR__.'/data/updates.json';
 $config['update_server'] = 'https://github.com/bulletinbored/bulletinbored-core';
 $config['update_mirror'] = 'https://extend.bulletinbored.net';
+$config['plugin_verify_files'] = true; // Set false to skip file integrity check on install
+$config['theme_verify_files'] = true; // Set false to skip file integrity check on install
+$config['allow_catalog_only'] = true; // When true, only install plugins/themes with official: true from catalog
+// Admin can disable this from admin panel: set to false to allow install from any repo

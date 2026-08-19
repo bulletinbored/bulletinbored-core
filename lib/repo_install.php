@@ -91,9 +91,13 @@ function download_repo_archive(string $repoUrl, string $targetDir, ?string $tag 
             $base = basename($item);
             $destItem = $targetDir . '/' . $base;
             if (file_exists($destItem)) {
-                continue;
+                if (is_dir($destItem)) {
+                    @rmdir($destItem);
+                } else {
+                    @unlink($destItem);
+                }
             }
-            rename($item, $destItem);
+            @rename($item, $destItem);
         }
         @rmdir($nested);
     }
