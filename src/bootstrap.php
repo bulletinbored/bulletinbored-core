@@ -41,26 +41,15 @@ if ((!$defaultSessionPath || !is_dir($defaultSessionPath) || !is_writable($defau
 
 // --- Session hardening ------------------------------------------------------
 // Configure the session cookie before starting the session so the flags are
-// applied on the very first Set-Cookie. Secure is enabled only when we are
-// actually on HTTPS, to avoid breaking local HTTP dev installs. The cookie
-// domain is derived from the current host (with a leading dot) so it is valid
-// for both www. and non-www. variants, preventing CSRF/session loss across
-// redirects between them.
+// applied on the very first Set-Cookie. Secure and domain are delegated to
+// .user.ini (or left to PHP defaults) on purpose: deriving the domain in code
+// caused silent login failures when the computed value did not match the host.
 $sessionSecure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
     || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
-$cookieDomain = '';
-if (!empty($_SERVER['HTTP_HOST'])) {
-    $host = preg_replace('/:\d+$/', '', $_SERVER['HTTP_HOST']);
-    if (substr_count($host, '.') >= 2) {
-        $cookieDomain = '.' . $host;
-    } elseif (substr_count($host, '.') === 1) {
-        $cookieDomain = $host;
-    }
-}
 session_set_cookie_params([
     'lifetime' => 0,
     'path'     => '/',
-    'domain'   => $cookieDomain,
+    'domain'   => '',
     'secure'   => $sessionSecure,
     'httponly' => true,
     'samesite' => 'Lax',
