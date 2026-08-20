@@ -577,7 +577,6 @@ hr { border-color: var(--fb-border); opacity: 1; }
     border: 1px solid var(--fb-border);
     border-radius: var(--fb-radius);
     box-shadow: var(--fb-shadow);
-    overflow: hidden;
 }
 .post-op { border-color: #d4b3e8; }
 
@@ -865,6 +864,22 @@ hr { border-color: var(--fb-border); opacity: 1; }
     .topbar-search { flex: 1 1 auto; margin: .75rem 0; }
     .navbar-forum .topbar-user { flex-direction: row; flex-wrap: wrap; gap: .25rem; align-items: center; }
     .page-head { flex-direction: column; }
+
+    /* Burger menu: solid, readable background. The user icons are plain
+       links on mobile (badges stay); dropdowns are disabled there. */
+    .navbar-forum .navbar-collapse {
+        background: var(--fb-surface);
+        border: 1px solid var(--fb-border);
+        border-radius: var(--fb-radius);
+        padding: 1rem;
+        margin-top: .5rem;
+        box-shadow: var(--fb-shadow-lg);
+    }
+    .navbar-forum .topbar-links .nav-link {
+        padding: .6rem .25rem;
+        border-bottom: 1px solid var(--fb-border-soft);
+    }
+    .navbar-forum .navbar-toggler { color: var(--fb-text); }
 }
 
 @media (max-width: 767.98px) {

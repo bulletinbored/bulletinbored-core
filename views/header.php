@@ -86,7 +86,7 @@ function render_header($title = 'bulletinbored', $options = []) {
                                 <?php if ($navUnreadNotif > 0): ?><span class="nav-badge"><?= $navUnreadNotif > 99 ? '99+' : $navUnreadNotif ?></span><?php endif; ?>
                             </a>
                         </li>
-                        <li class="nav-item dropdown">
+                        <li class="nav-item dropdown d-none d-lg-block">
                             <a class="nav-link dropdown-toggle d-flex align-items-center gap-2" href="#" data-bs-toggle="dropdown">
                                 <?= render_avatar($_SESSION['username'] ?? '', $_SESSION['avatar'] ?? '', 28) ?>
                                 <span class="d-none d-lg-inline"><?= escape($_SESSION['username'] ?? '') ?></span>
@@ -102,6 +102,11 @@ function render_header($title = 'bulletinbored', $options = []) {
                                 <li><hr class="dropdown-divider"></li>
                                 <li><a class="dropdown-item" href="<?= url('logout') ?>"><i class="fas fa-sign-out-alt me-2"></i><?= t('logout') ?></a></li>
                             </ul>
+                        </li>
+                        <li class="nav-item d-lg-none">
+                            <a class="nav-link" href="<?= url('profile', ['user' => $_SESSION['username'] ?? '']) ?>" title="<?= t('profile') ?>">
+                                <?= render_avatar($_SESSION['username'] ?? '', $_SESSION['avatar'] ?? '', 28) ?>
+                            </a>
                         </li>
                     <?php else: ?>
                         <li class="nav-item"><a class="nav-link" href="<?= url('login') ?>"><?= t('login') ?></a></li>

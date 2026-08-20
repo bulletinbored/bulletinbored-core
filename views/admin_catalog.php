@@ -67,9 +67,9 @@
                                     <td>
                                         <?= escape($item['name']) ?>
                                         <?php if (($item['author_type'] ?? '') === 'first_party'): ?>
-                                            <span class="badge bg-info ms-1">Developed by bulletinbored team</span>
+                                            <span class="badge bg-info ms-1">bulletinbored</span>
                                         <?php elseif (($item['author_type'] ?? '') === 'third_party'): ?>
-                                            <span class="badge bg-warning ms-1">Developed by third party</span>
+                                            <span class="badge bg-warning ms-1">third-party</span>
                                         <?php endif; ?>
                                     </td>
                                     <td><?= escape($item['description']) ?></td>

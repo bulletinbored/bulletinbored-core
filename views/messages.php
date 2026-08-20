@@ -17,6 +17,36 @@
         <?php if (!empty($otherUsername ?? '')): ?>
             <a href="<?= url('messages') ?>" class="btn btn-sm btn-outline-secondary mb-3"><i class="fas fa-arrow-left me-1"></i>Back to conversations</a>
         <?php endif; ?>
+
+        <?php
+        $otherId = 0;
+        $otherAvatar = '';
+        if (!empty($messages)) {
+            foreach ($messages as $m) {
+                if (($m['sender_id'] ?? 0) != ($_SESSION['user_id'] ?? 0)) {
+                    $otherId = (int)($m['sender_id'] ?? 0);
+                    break;
+                }
+            }
+            if (!$otherId && !empty($messages[0])) {
+                $otherId = (int)($messages[0]['sender_id'] ?? 0);
+            }
+            if ($otherId && !empty($GLOBALS['pdo'])) {
+                try {
+                    $stmt = $GLOBALS['pdo']->prepare("SELECT avatar FROM users WHERE id = ?");
+                    $stmt->execute([$otherId]);
+                    $otherAvatar = $stmt->fetchColumn() ?: '';
+                } catch (Throwable $e) {}
+            }
+        }
+        ?>
+        <div class="d-flex align-items-center gap-2 mb-3">
+            <a href="<?= url('profile', ['user' => $otherUsername ?? '']) ?>" class="post-side-avatar">
+                <?= render_avatar($otherUsername ?? '', $otherAvatar, 44) ?>
+            </a>
+            <a href="<?= url('profile', ['user' => $otherUsername ?? '']) ?>" class="fw-semibold"><?= escape($otherUsername ?? 'Conversation') ?></a>
+        </div>
+
         <div class="card mb-3">
             <div class="card-body">
                 <?php foreach ($messages as $m): 

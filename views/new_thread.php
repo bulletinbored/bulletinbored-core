@@ -21,21 +21,20 @@ $preselected = (int)($_GET['category'] ?? 0);
         <form method="POST" action="<?= url('create_thread') ?>" enctype="multipart/form-data">
             <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
 
-            <div class="row g-3">
-                <div class="col-md-5">
-                    <label class="form-label"><?= t('category') ?></label>
-                    <select name="category_id" class="form-select" required>
-                        <?php foreach (sidebar_categories() as $cat): ?>
-                            <option value="<?= (int)$cat['id'] ?>" <?= $preselected === (int)$cat['id'] ? 'selected' : '' ?>>
-                                <?= escape($cat['name']) ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                <div class="col-md-7">
-                    <label class="form-label"><?= t('title') ?></label>
-                    <input type="text" name="title" class="form-control" placeholder="<?= t('title_placeholder') ?>" required>
-                </div>
+            <div class="mb-3">
+                <label class="form-label"><?= t('category') ?></label>
+                <select name="category_id" class="form-select" required>
+                    <?php foreach (sidebar_categories() as $cat): ?>
+                        <option value="<?= (int)$cat['id'] ?>" <?= $preselected === (int)$cat['id'] ? 'selected' : '' ?>>
+                            <?= escape($cat['name']) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label"><?= t('title') ?></label>
+                <input type="text" name="title" class="form-control" placeholder="<?= t('title_placeholder') ?>" required>
             </div>
 
             <div class="mt-3">

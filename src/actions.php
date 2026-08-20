@@ -798,19 +798,16 @@ elseif ($action === 'moderate' && $method === 'POST' && is_admin()) {
          
          if ($action === 'approve') {
              $pdo->prepare("UPDATE threads SET status = 'visible' WHERE id = ?")->execute([$threadId]);
-         } elseif ($action === 'delete') {
-             $pdo->prepare("DELETE FROM threads WHERE id = ?")->execute([$threadId]);
-         } elseif ($action === 'lock') {
-             $pdo->prepare("UPDATE threads SET status = 'locked' WHERE id = ?")->execute([$threadId]);
-         } elseif ($action === 'unlock') {
-             $pdo->prepare("UPDATE threads SET status = 'visible' WHERE id = ?")->execute([$threadId]);
-         } elseif ($action === 'sticky') {
-             $pdo->prepare("UPDATE threads SET status = 'sticky' WHERE id = ?")->execute([$threadId]);
-         } elseif ($action === 'unsticky') {
-             $pdo->prepare("UPDATE threads SET status = 'visible' WHERE id = ?")->execute([$threadId]);
-         } elseif ($action === 'hide') {
-             $pdo->prepare("UPDATE threads SET status = 'hidden' WHERE id = ?")->execute([$threadId]);
-         }
+          } elseif ($action === 'delete') {
+              $catIdStmt = $pdo->prepare("SELECT category_id FROM threads WHERE id = ?");
+              $catIdStmt->execute([$threadId]);
+              $catId = (int)($catIdStmt->fetchColumn() ?: 0);
+              $pdo->prepare("DELETE FROM threads WHERE id = ?")->execute([$threadId]);
+              if ($catId > 0) {
+                  redirect(url('category', ['id' => $catId]));
+              }
+              redirect(url('home'));
+          }
          
 redirect(url('admin_moderation'));
       }
@@ -837,19 +834,23 @@ redirect(url('admin_moderation'));
               $pdo->prepare("UPDATE threads SET status = 'sticky' WHERE id = ?")->execute([$threadId]);
           } elseif ($modAction === 'unsticky') {
               $pdo->prepare("UPDATE threads SET status = 'visible' WHERE id = ?")->execute([$threadId]);
-          } elseif ($modAction === 'hide') {
-              $pdo->prepare("UPDATE threads SET status = 'hidden' WHERE id = ?")->execute([$threadId]);
-          } elseif ($modAction === 'delete') {
-              $pdo->prepare("DELETE FROM threads WHERE id = ?")->execute([$threadId]);
-              redirect(url('admin_moderation'));
-          } elseif ($modAction === 'approve') {
-              $pdo->prepare("UPDATE threads SET status = 'visible' WHERE id = ?")->execute([$threadId]);
-          } elseif ($modAction === 'move') {
-              $targetCat = (int)($_POST['category_id'] ?? 0);
-              if ($targetCat > 0) {
-                  $pdo->prepare("UPDATE threads SET category_id = ? WHERE id = ?")->execute([$targetCat, $threadId]);
-              }
-          } elseif ($modAction === 'copy') {
+           } elseif ($modAction === 'hide') {
+               $pdo->prepare("UPDATE threads SET status = 'hidden' WHERE id = ?")->execute([$threadId]);
+           } elseif ($modAction === 'delete') {
+               $catIdStmt = $pdo->prepare("SELECT category_id FROM threads WHERE id = ?");
+               $catIdStmt->execute([$threadId]);
+               $catId = (int)($catIdStmt->fetchColumn() ?: 0);
+               $pdo->prepare("DELETE FROM threads WHERE id = ?")->execute([$threadId]);
+               if ($catId > 0) {
+                   redirect(url('category', ['id' => $catId]));
+               }
+               redirect(url('home'));
+           } elseif ($modAction === 'move') {
+               $targetCat = (int)($_POST['category_id'] ?? 0);
+               if ($targetCat > 0) {
+                   $pdo->prepare("UPDATE threads SET category_id = ? WHERE id = ?")->execute([$targetCat, $threadId]);
+               }
+           } elseif ($modAction === 'copy') {
               $targetCat = (int)($_POST['category_id'] ?? 0);
               if ($targetCat > 0) {
                   $src = $pdo->prepare("SELECT * FROM threads WHERE id = ?");
