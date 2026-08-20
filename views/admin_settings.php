@@ -13,6 +13,20 @@
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
     <?php endif; ?>
+    <?php if (!empty($_SESSION['email_test_success'])): ?>
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="fas fa-check-circle me-1"></i> <?= t('email_test_success', ['email' => escape($_SESSION['email_test_success'])]) ?>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        <?php unset($_SESSION['email_test_success']); ?>
+    <?php endif; ?>
+    <?php if (!empty($_SESSION['email_test_error'])): ?>
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="fas fa-exclamation-circle me-1"></i> <?= t('email_test_error', ['error' => escape($_SESSION['email_test_error'])]) ?>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        <?php unset($_SESSION['email_test_error']); ?>
+    <?php endif; ?>
 
     <form method="POST">
         <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
@@ -66,6 +80,16 @@
                         <label class="form-label"><?= t('notify_admin_email') ?></label>
                         <input type="email" name="notify_admin_email" class="form-control" value="<?= escape($config['notify_admin_email'] ?? '') ?>" placeholder="<?= escape($config['mail_from'] ?? '') ?>">
                         <div class="form-text"><?= t('notify_admin_email_hint') ?></div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label"><?= t('test_email_address') ?></label>
+                        <input type="email" name="test_email_address" class="form-control" value="<?= escape($config['notify_admin_email'] ?? $config['mail_from'] ?? '') ?>" placeholder="test@example.com">
+                        <div class="form-text"><?= t('test_email_hint') ?></div>
+                    </div>
+                    <div class="col-md-6 d-flex align-items-end">
+                        <button type="submit" name="send_test_email" value="1" class="btn btn-outline-primary">
+                            <i class="fas fa-paper-plane me-1"></i> <?= t('send_test_email') ?>
+                        </button>
                     </div>
                 </div>
             </div>
@@ -147,11 +171,16 @@
                         <div class="form-text"><?= t('allow_catalog_only_hint') ?></div>
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label"><?= t('plugin_verify_files') ?></label>
-                        <select name="plugin_verify_files" class="form-select">
-                            <option value="1" <?= ($config['plugin_verify_files'] ?? true) ? 'selected' : '' ?>><?= t('enabled') ?></option>
-                            <option value="0" <?= (!($config['plugin_verify_files'] ?? true)) ? 'selected' : '' ?>><?= t('disabled') ?></option>
-                        </select>
                         <div class="form-text"><?= t('plugin_verify_files_hint') ?></div>
                     </div>
-                    <div class="col from
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center">
+        <button type="submit" name="save_settings" value="1" class="btn btn-primary">
+            <i class="fas fa-save me-1"></i> <?= t('save_settings') ?>
+        </button>
+    </div>
+</form>

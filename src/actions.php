@@ -1099,6 +1099,26 @@ elseif ($action === 'unban_user' && $method === 'POST' && is_admin()) {
         if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
             die('CSRF token invalid');
         }
+
+        if (isset($_POST['send_test_email'])) {
+            $testEmail = trim($_POST['test_email_address'] ?? '');
+            if (empty($testEmail) || !filter_var($testEmail, FILTER_VALIDATE_EMAIL)) {
+                $_SESSION['email_test_error'] = t('invalid_email_address');
+            } else {
+                $subject = 'Test email from ' . ($config['site_name'] ?? 'bulletinbored');
+                $body = '<p>This is a test email sent from your forum\'s admin panel.</p>'
+                      . '<p>If you received this, email sending is configured correctly.</p>';
+                $sent = send_email($testEmail, $subject, $body);
+                if ($sent) {
+                    $_SESSION['email_test_success'] = $testEmail;
+                } else {
+                    $err = error_get_last();
+                    $_SESSION['email_test_error'] = $err['message'] ?? 'Unknown error';
+                }
+            }
+            redirect(url('admin_settings'));
+        }
+
         $siteName = trim($_POST['site_name'] ?? $config['site_name']);
         $siteTagline = trim($_POST['site_tagline'] ?? $config['site_tagline']);
         $siteIcon = trim($_POST['site_icon'] ?? $config['site_icon']);

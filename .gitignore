@@ -5,6 +5,7 @@ data/plugins.json
 data/installed.json
 data/updates.json
 data/ratelimit/
+data/sessions/
 
 .kilo/
 

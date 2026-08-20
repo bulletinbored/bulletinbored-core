@@ -28,7 +28,11 @@ if ($dbDriver === 'mysql') {
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     $pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
 
-    // MySQL tables
+    // MySQL tables. Every table is explicitly created with utf8mb4 so that
+    // special characters (em dash, curly quotes, emoji, etc.) are stored
+    // correctly. Without this, MySQL falls back to the server default charset
+    // and rejects such bytes with error 1366 on TEXT columns.
+    $charset = "CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci";
     $tables = [
         "users" => "id INT AUTO_INCREMENT PRIMARY KEY, username VARCHAR(255) UNIQUE NOT NULL, password VARCHAR(255) NOT NULL, email VARCHAR(255), role VARCHAR(50) DEFAULT 'user', avatar VARCHAR(255), status VARCHAR(50) DEFAULT 'active', email_verified INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
         "categories" => "id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255) NOT NULL UNIQUE, description TEXT, position INT DEFAULT 0, allowed_roles TEXT DEFAULT NULL",
@@ -43,8 +47,14 @@ if ($dbDriver === 'mysql') {
     ];
 
     foreach ($tables as $name => $schema) {
-        $pdo->exec("CREATE TABLE IF NOT EXISTS $name ($schema)");
+        $pdo->exec("CREATE TABLE IF NOT EXISTS $name ($schema) $charset");
     }
+
+    // Force the database default to utf8mb4 as well, so any future table
+    // created without an explicit charset still inherits the correct one.
+    try {
+        $pdo->exec("ALTER DATABASE `{$config['db_name']}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+    } catch (PDOException $e) {}
 
     // Relax ONLY_FULL_GROUP_BY so GROUP BY queries written for SQLite
     // (dependent subqueries in the SELECT list) also run on MySQL 5.7+.
