@@ -6,6 +6,7 @@ data/installed.json
 data/updates.json
 data/ratelimit/
 data/sessions/
+.user.ini
 
 .kilo/
 

@@ -26,25 +26,41 @@ if (!headers_sent()) {
 // Use an app-owned, writable directory for session files. The system default
 // (/var/lib/php/sessions) is frequently not writable for the site user on
 // shared hosting, which makes every request start a fresh session and breaks
-// CSRF validation (login, posting, etc.). Must run before session_start().
+// CSRF validation (login, posting, etc.). Fall back to data/sessions whenever
+// the PHP default is not usable, so this works out of the box on new installs.
+// Must run before session_start().
 $sessionDir = __DIR__ . '/../data/sessions';
 if (!is_dir($sessionDir)) {
     @mkdir($sessionDir, 0755, true);
 }
-if (is_dir($sessionDir) && is_writable($sessionDir)) {
+$defaultSessionPath = session_save_path() ?: (@ini_get('session.save_path') ?: '');
+if ((!$defaultSessionPath || !is_dir($defaultSessionPath) || !is_writable($defaultSessionPath))
+    && is_dir($sessionDir) && is_writable($sessionDir)) {
     session_save_path($sessionDir);
 }
 
 // --- Session hardening ------------------------------------------------------
 // Configure the session cookie before starting the session so the flags are
 // applied on the very first Set-Cookie. Secure is enabled only when we are
-// actually on HTTPS, to avoid breaking local HTTP dev installs.
+// actually on HTTPS, to avoid breaking local HTTP dev installs. The cookie
+// domain is derived from the current host (with a leading dot) so it is valid
+// for both www. and non-www. variants, preventing CSRF/session loss across
+// redirects between them.
 $sessionSecure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
     || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
+$cookieDomain = '';
+if (!empty($_SERVER['HTTP_HOST'])) {
+    $host = preg_replace('/:\d+$/', '', $_SERVER['HTTP_HOST']);
+    if (substr_count($host, '.') >= 2) {
+        $cookieDomain = '.' . $host;
+    } elseif (substr_count($host, '.') === 1) {
+        $cookieDomain = $host;
+    }
+}
 session_set_cookie_params([
     'lifetime' => 0,
     'path'     => '/',
-    'domain'   => '',
+    'domain'   => $cookieDomain,
     'secure'   => $sessionSecure,
     'httponly' => true,
     'samesite' => 'Lax',
