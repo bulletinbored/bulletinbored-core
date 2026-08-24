@@ -43,7 +43,7 @@
                 </div>
                 <div class="card-body">
                     <p class="mb-0">
-                        <button type="button" class="btn btn-link text-warning p-0 text-start" onclick="var e=document.getElementById('pluginWarning');var o=e.classList.toggle('d-none');this.setAttribute('aria-expanded', o?'true':'false');" aria-expanded="false">
+                        <button type="button" class="btn btn-link text-warning p-0 text-start" data-warning-toggle="pluginWarning" aria-expanded="false">
                             <i class="fas fa-exclamation-triangle"></i> Notice
                         </button>
                     </p>
@@ -111,7 +111,7 @@
                                             </td>
                                             <td>
                                                 <div class="d-inline-flex gap-2">
-                                                    <form method="POST" onsubmit="return confirm('<?= t($plugin['enabled'] ? 'disable' : 'enable') ?> <?= t('plugin') ?> <?= escape($plugin['name']) ?>?')">
+                                                    <form method="POST" data-confirm="<?= t($plugin['enabled'] ? 'disable' : 'enable') ?> <?= t('plugin') ?> <?= escape($plugin['name']) ?>?">
                                                         <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                                                         <input type="hidden" name="plugin_name" value="<?= escape($plugin['name']) ?>">
                                                         <?php if ($plugin['enabled']): ?>
@@ -124,7 +124,7 @@
                                                             </button>
                                                         <?php endif; ?>
                                                     </form>
-                                                    <form method="POST" onsubmit="return confirm('<?= t('delete') ?> <?= t('plugin') ?> <?= escape($plugin['name']) ?>?');">
+                                                    <form method="POST" data-confirm="<?= t('delete') ?> <?= t('plugin') ?> <?= escape($plugin['name']) ?>?">
                                                         <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                                                         <input type="hidden" name="plugin_name" value="<?= escape($plugin['name']) ?>">
                                                         <button type="submit" name="delete_plugin" value="1" class="btn btn-sm btn-outline-danger" title="<?= t('delete') ?>">

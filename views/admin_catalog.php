@@ -99,7 +99,7 @@
                                                 <?php if ($updateAvailable): ?>
                                                     <?php if ($isThird): ?>
                                                         <p class="mb-0">
-                                                            <button type="button" class="btn btn-link text-warning p-0 text-start" onclick="var e=document.getElementById('catalogWarning<?= escape($itemName) ?>_update');var o=e.classList.toggle('d-none');this.setAttribute('aria-expanded', o?'true':'false');" aria-expanded="false">
+                                                            <button type="button" class="btn btn-link text-warning p-0 text-start" data-warning-toggle="catalogWarning<?= escape($itemName) ?>_update" aria-expanded="false">
                                                                 <i class="fas fa-exclamation-triangle"></i> Notice
                                                             </button>
                                                         </p>
@@ -107,13 +107,13 @@
 <p class="text-warning small mb-2">Third-party <?= $type ?>s are not developed by the bulletinbored team. Install at your own risk and report malicious <?= $type ?>s at <a href="https://www.bulletinbored.net/forum" target="_blank" rel="noopener" class="text-warning">www.bulletinbored.net/forum</a>.</p>
                                                         </div>
                                                     <?php endif; ?>
-                                                    <button type="submit" name="install_from_catalog" value="1" class="btn btn-sm btn-primary"<?= $isThird ? ' onclick="return confirm(\'Warning: this is a third-party ' . $type . ' not developed by the bulletinbored team. We do not assume responsibility. Continue?\')"' : '' ?>><?= t('update') ?></button>
+                                                    <button type="submit" name="install_from_catalog" value="1" class="btn btn-sm btn-primary"<?= $isThird ? ' data-confirm="Warning: this is a third-party ' . $type . ' not developed by the bulletinbored team. We do not assume responsibility. Continue?"' : '' ?>><?= t('update') ?></button>
                                                 <?php endif; ?>
-                                                <button type="submit" name="uninstall_from_catalog" value="1" class="btn btn-sm btn-outline-danger" onclick="return confirm('<?= t('delete') ?> <?= escape($item['name']) ?>?')"><?= t('uninstall') ?></button>
+                                                <button type="submit" name="uninstall_from_catalog" value="1" class="btn btn-sm btn-outline-danger" data-confirm="<?= t('delete') ?> <?= escape($item['name']) ?>?"><?= t('uninstall') ?></button>
                                             <?php else: ?>
                                                 <?php if ($isThird): ?>
                                                     <p class="mb-0">
-                                                        <button type="button" class="btn btn-link text-warning p-0 text-start" onclick="var e=document.getElementById('catalogWarning<?= escape($itemName) ?>_install');var o=e.classList.toggle('d-none');this.setAttribute('aria-expanded', o?'true':'false');" aria-expanded="false">
+                                                        <button type="button" class="btn btn-link text-warning p-0 text-start" data-warning-toggle="catalogWarning<?= escape($itemName) ?>_install" aria-expanded="false">
                                                             <i class="fas fa-exclamation-triangle"></i> Notice
                                                         </button>
                                                     </p>
@@ -121,7 +121,7 @@
                                                         <p class="text-warning small mb-2"><?= ucfirst($type) ?>s from third parties are not developed by bulletinbored team. Install at your own risk and report malicious <?= $type ?>s at www.bulletinbored.net/forum.</p>
                                                     </div>
                                                 <?php endif; ?>
-                                                <button type="submit" name="install_from_catalog" value="1" class="btn btn-sm btn-primary"<?= $isThird ? ' onclick="return confirm(\'Warning: this is a third-party ' . $type . ' not developed by the bulletinbored team. We do not assume responsibility. Continue?\')"' : '' ?>><?= t('install') ?></button>
+                                                <button type="submit" name="install_from_catalog" value="1" class="btn btn-sm btn-primary"<?= $isThird ? ' data-confirm="Warning: this is a third-party ' . $type . ' not developed by the bulletinbored team. We do not assume responsibility. Continue?"' : '' ?>><?= t('install') ?></button>
                                             <?php endif; ?>
                                         </form>
                                     </td>

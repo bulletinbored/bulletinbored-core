@@ -42,7 +42,7 @@ $pendingThreads = $pdo->query("
                                 <input type="hidden" name="id" value="<?= $thread['id'] ?>">
                                 <button class="btn btn-success btn-sm"><i class="fas fa-check me-1"></i><?= t('approve') ?></button>
                             </form>
-                                <form method="POST" action="<?= url('moderate') ?>" class="d-inline ms-1" onsubmit="return confirm('<?= t('delete_confirm') ?>')">
+                                <form method="POST" action="<?= url('moderate') ?>" class="d-inline ms-1" data-confirm="<?= t('delete_confirm') ?>">
                                 <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                                 <input type="hidden" name="do" value="delete">
                                 <input type="hidden" name="id" value="<?= $thread['id'] ?>">

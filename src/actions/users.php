@@ -70,14 +70,7 @@ function handle_login(string $method): bool
                     $_SESSION['user_status'] = 'active';
                     $_SESSION['user_suspension_time'] = 0;
                 }
-                // DEBUG: log session write
-                error_log('LOGIN: session_id=' . session_id() . ' user_id=' . ($_SESSION['user_id'] ?? 'none') . ' save_path=' . session_save_path());
                 session_write_close();
-                if (file_exists(session_save_path() . '/sess_' . session_id())) {
-                    error_log('LOGIN: session file size after write: ' . filesize(session_save_path() . '/sess_' . session_id()));
-                } else {
-                    error_log('LOGIN: session file NOT FOUND after write');
-                }
                 redirect(url('home'));
             }
         } else {

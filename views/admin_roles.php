@@ -65,11 +65,11 @@ $allPermissions = [
                                     </td>
                                     <td class="text-end">
                                         <div class="d-inline-flex gap-2">
-                                            <button class="btn btn-sm btn-outline-primary" onclick="document.getElementById('edit-form-<?= $role['id'] ?>').classList.toggle('d-none')">
+                                            <button class="btn btn-sm btn-outline-primary" data-toggle-target="edit-form-<?= $role['id'] ?>">
                                                 <i class="fas fa-edit"></i>
                                             </button>
                                             <?php if ($role['name'] !== 'admin'): ?>
-                                            <form method="POST" action="<?= url('admin_roles_action') ?>" onsubmit="return confirm('<?= t('delete_confirm') ?>')">
+                                            <form method="POST" action="<?= url('admin_roles_action') ?>" data-confirm="<?= t('delete_confirm') ?>">
                                                 <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                                                 <input type="hidden" name="do" value="delete">
                                                 <input type="hidden" name="role_id" value="<?= $role['id'] ?>">
@@ -98,7 +98,7 @@ $allPermissions = [
                                             </div>
                                             <div class="col-12">
                                                 <button type="submit" class="btn btn-sm btn-primary"><i class="fas fa-save me-1"></i><?= t('save_permissions') ?></button>
-                                                <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('edit-form-<?= $role['id'] ?>').classList.add('d-none')"><?= t('cancel') ?></button>
+                                                <button type="button" class="btn btn-sm btn-secondary" data-close-target="edit-form-<?= $role['id'] ?>"><?= t('cancel') ?></button>
                                             </div>
                                         </form>
                                     </td>

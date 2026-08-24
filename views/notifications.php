@@ -41,7 +41,7 @@
                                 <a href="<?= escape($n['link']) ?>" class="btn btn-sm btn-outline-primary"><i class="fas fa-external-link-alt me-1"></i>View</a>
                             <?php endif; ?>
                             <?php if (!$n['is_read']): ?>
-                                <form method="POST" action="<?= url('notifications', ['do' => 'mark_read', 'id' => $n['id']]) ?>" class="d-inline" onsubmit="return confirm('Mark as read?')">
+                                <form method="POST" action="<?= url('notifications', ['do' => 'mark_read', 'id' => $n['id']]) ?>" class="d-inline" data-confirm="Mark as read?">
                                     <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                                     <button type="submit" class="btn btn-sm btn-outline-success"><i class="fas fa-check me-1"></i>Mark read</button>
                                 </form>

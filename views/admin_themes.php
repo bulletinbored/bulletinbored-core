@@ -43,7 +43,7 @@
                 </div>
                 <div class="card-body">
                     <p class="mb-0">
-                        <button type="button" class="btn btn-link text-warning p-0 text-start" onclick="var e=document.getElementById('themeWarning');var o=e.classList.toggle('d-none');this.setAttribute('aria-expanded', o?'true':'false');" aria-expanded="false">
+                        <button type="button" class="btn btn-link text-warning p-0 text-start" data-warning-toggle="themeWarning" aria-expanded="false">
                             <i class="fas fa-exclamation-triangle"></i> Notice
                         </button>
                     </p>
@@ -118,7 +118,7 @@
                                                     </form>
                                                 <?php endif; ?>
                                                 <?php if ($theme['name'] !== 'freshbored'): ?>
-                                                        <form method="POST" class="d-inline" onsubmit="return confirm('<?= t('delete') ?> <?= t('theme') ?> <?= escape($theme['name']) ?>?');">
+                                                        <form method="POST" class="d-inline" data-confirm="<?= t('delete') ?> <?= t('theme') ?> <?= escape($theme['name']) ?>?">
                                                         <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                                                         <input type="hidden" name="theme_name" value="<?= escape($theme['name']) ?>">
                                                             <button type="submit" name="delete_theme" value="1" class="btn btn-sm btn-danger"><?= t('delete') ?></button>

@@ -20,6 +20,54 @@ require_once __DIR__ . '/csp.php';
 $cspNonce = generate_csp_nonce();
 send_security_headers($cspNonce);
 
+// --- Force HTTPS ------------------------------------------------------------
+// If the deployment is HTTPS-only (cookie_secure enabled), redirect any plain
+// HTTP request to the equivalent HTTPS URL before starting the session, so the
+// Secure session cookie is never emitted over an unencrypted channel. This keeps
+// login/sessions working while upgrading every visitor to HTTPS automatically.
+if (!isset($config) || !is_array($config)) {
+    $cfgPath = __DIR__ . '/../config.json';
+    $legacyPath = __DIR__ . '/../config.php';
+    if (file_exists($cfgPath)) {
+        $config = json_decode(file_get_contents($cfgPath), true) ?: [];
+    } elseif (file_exists($legacyPath)) {
+        $config = [];
+        @include $legacyPath;
+        if (!is_array($config)) { $config = []; }
+    } else {
+        $config = [];
+    }
+}
+$isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+    || (isset($_SERVER['SERVER_PORT']) && (int) $_SERVER['SERVER_PORT'] === 443)
+    || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower($_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https')
+    || (!empty($_SERVER['HTTP_X_FORWARDED_SSL']) && strtolower($_SERVER['HTTP_X_FORWARDED_SSL']) === 'on');
+$redirectHttps = !$isHttps;
+@file_put_contents(
+    __DIR__ . '/../data/debug_redirect.log',
+    sprintf(
+        "[%s] cookie_secure=%s isHttps=%s redirect=%s port=%s https=%s proto=%s host=%s uri=%s\n",
+        date('c'),
+        var_export(!empty($config['cookie_secure']), true),
+        var_export($isHttps, true),
+        var_export($redirectHttps, true),
+        $_SERVER['SERVER_PORT'] ?? 'none',
+        $_SERVER['HTTPS'] ?? 'none',
+        $_SERVER['HTTP_X_FORWARDED_PROTO'] ?? 'none',
+        $_SERVER['HTTP_HOST'] ?? 'none',
+        $_SERVER['REQUEST_URI'] ?? 'none'
+    ),
+    FILE_APPEND | LOCK_EX
+);
+if ($redirectHttps) {
+    $host = $_SERVER['HTTP_HOST'] ?? ($_SERVER['SERVER_NAME'] ?? '');
+    $reqUri = $_SERVER['REQUEST_URI'] ?? '/';
+    if ($host !== '') {
+        header('Location: https://' . $host . $reqUri, true, 301);
+        exit;
+    }
+}
+
 // --- Session storage --------------------------------------------------------
 // Use an app-owned, writable directory for session files. The system default
 // (/var/lib/php/sessions) is frequently not writable for the site user on
@@ -36,17 +84,27 @@ if (is_dir($sessionDir) && is_writable($sessionDir)) {
 }
 
 // --- Session hardening ------------------------------------------------------
-// Configure the session cookie before starting the session so the flags are
-// applied on the very first Set-Cookie. Secure and domain are delegated to
-// .user.ini (or left to PHP defaults) on purpose: deriving the domain in code
-// caused silent login failures when the computed value did not match the host.
-$sessionSecure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-    || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
+// Use a dedicated session cookie name (BBSESSID) instead of the PHP default
+// PHPSESSID. On shared/legacy deployments an old non-secure PHPSESSID cookie
+// can linger on the domain; when we then try to set a Secure PHPSESSID the
+// browser rejects it ("cookie rejected because a secure cookie already exists"
+// reversed), which silently breaks the session and every CSRF check. A new
+// name sidesteps that stale-cookie conflict without manual browser cleanup.
+// The Secure flag is taken from config so it is deterministic per deployment
+// (no flaky HTTPS detection behind proxies), defaulting to on when the site
+// is served over HTTPS.
+session_name('BBSESSID');
+
+$configIsHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+    || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower($_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https')
+    || (!empty($_SERVER['HTTP_X_FORWARDED_SSL']) && strtolower($_SERVER['HTTP_X_FORWARDED_SSL']) === 'on');
+$sessionSecure = $config['cookie_secure'] ?? $configIsHttps;
+
 session_set_cookie_params([
     'lifetime' => 0,
     'path'     => '/',
     'domain'   => '',
-    'secure'   => $sessionSecure,
+    'secure'   => (bool) $sessionSecure,
     'httponly' => true,
     'samesite' => 'Lax',
 ]);

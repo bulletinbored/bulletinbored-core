@@ -1,5 +1,10 @@
 <?php
 header('Content-Type: application/json');
+session_name('BBSESSID');
+$sessionDir = realpath(__DIR__ . '/../data/sessions') ?: (__DIR__ . '/../data/sessions');
+if (is_dir($sessionDir) && is_writable($sessionDir)) {
+    session_save_path($sessionDir);
+}
 session_start();
 
 if (empty($config)) {

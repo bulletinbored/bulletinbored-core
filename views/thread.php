@@ -48,8 +48,8 @@ if ($replyCount > 0 && !empty($posts)) {
 
 /** Renders one moderation button as a self contained form. */
 function mod_button($threadId, $do, $icon, $label, $variant = 'ghost', $confirm = '') {
-    $onsubmit = $confirm !== '' ? ' onsubmit="return confirm(\''.escape($confirm).'\')"' : '';
-    echo '<form method="POST" action="'.url('frontend_moderate').'" class="d-inline"'.$onsubmit.'>'
+    $dataConfirm = $confirm !== '' ? ' data-confirm="'.escape($confirm).'"' : '';
+    echo '<form method="POST" action="'.url('frontend_moderate').'" class="d-inline"'.$dataConfirm.'>'
        . '<input type="hidden" name="csrf_token" value="'.generate_csrf_token().'">'
        . '<input type="hidden" name="do" value="'.escape($do).'">'
        . '<input type="hidden" name="id" value="'.(int)$threadId.'">'
@@ -176,28 +176,28 @@ function render_post($data, $number, $threadId, $threadUrl, $opts = []) {
                                     </li>
                                     <li><hr class="dropdown-divider"></li>
                                     <li>
-                                        <button type="button" class="dropdown-item" onclick="document.getElementById('move-modal').showModal()">
+                                        <button type="button" class="dropdown-item" data-modal-open="move-modal">
                                             <i class="fas fa-arrows-alt"></i> <?= t('move_thread') ?>
                                         </button>
                                     </li>
                                     <li>
-                                        <button type="button" class="dropdown-item" onclick="document.getElementById('copy-modal').showModal()">
+                                        <button type="button" class="dropdown-item" data-modal-open="copy-modal">
                                             <i class="fas fa-copy"></i> <?= t('copy_thread') ?>
                                         </button>
                                     </li>
                                     <li>
-                                        <button type="button" class="dropdown-item" onclick="document.getElementById('merge-modal').showModal()">
+                                        <button type="button" class="dropdown-item" data-modal-open="merge-modal">
                                             <i class="fas fa-code-branch"></i> <?= t('merge_thread') ?>
                                         </button>
                                     </li>
                                     <li>
-                                        <button type="button" class="dropdown-item" onclick="document.getElementById('split-modal').showModal()">
+                                        <button type="button" class="dropdown-item" data-modal-open="split-modal">
                                             <i class="fas fa-scissors"></i> <?= t('split_thread') ?>
                                         </button>
                                     </li>
                                     <li><hr class="dropdown-divider"></li>
                                     <li>
-                                        <form method="POST" action="<?= url('frontend_moderate') ?>" class="px-3 py-1" onsubmit="return confirm('<?= t('delete_thread_confirm') ?>')">
+                                        <form method="POST" action="<?= url('frontend_moderate') ?>" class="px-3 py-1" data-confirm="<?= t('delete_thread_confirm') ?>">
                                             <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                                             <input type="hidden" name="do" value="delete">
                                             <input type="hidden" name="id" value="<?= (int)$threadId ?>">
@@ -224,7 +224,7 @@ function render_post($data, $number, $threadId, $threadUrl, $opts = []) {
                     <?php if ($canEdit): ?>
                         <a class="post-action" href="<?= url('edit_post', ['id' => !empty($opts['is_op']) ? $threadId : $data['id']]) ?>" title="<?= t('edit') ?>"><i class="fas fa-pen"></i></a>
                         <form method="POST" action="<?= url('delete_post', ['id' => !empty($opts['is_op']) ? $threadId : $data['id']]) ?>" class="d-inline"
-                              onsubmit="return confirm('<?= t('delete_confirm') ?>')">
+                              data-confirm="<?= t('delete_confirm') ?>">
                             <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                             <button type="submit" class="post-action post-action-danger" title="<?= t('delete') ?>"><i class="fas fa-trash"></i></button>
                         </form>
@@ -284,7 +284,7 @@ render_header($thread['title'] ?? 'Thread', ['info' => $sidebarInfo]);
                         </select>
                     </div>
                     <div class="d-flex justify-content-end gap-2">
-                        <button type="button" class="btn btn-secondary" onclick="document.getElementById('move-modal').close()"><?= t('cancel') ?></button>
+                        <button type="button" class="btn btn-secondary" data-modal-close="move-modal"><?= t('cancel') ?></button>
                         <button type="submit" class="btn btn-brand"><?= t('move_thread') ?></button>
                     </div>
                 </form>
@@ -307,7 +307,7 @@ render_header($thread['title'] ?? 'Thread', ['info' => $sidebarInfo]);
                         </select>
                     </div>
                     <div class="d-flex justify-content-end gap-2">
-                        <button type="button" class="btn btn-secondary" onclick="document.getElementById('copy-modal').close()"><?= t('cancel') ?></button>
+                        <button type="button" class="btn btn-secondary" data-modal-close="copy-modal"><?= t('cancel') ?></button>
                         <button type="submit" class="btn btn-brand"><?= t('copy_thread') ?></button>
                     </div>
                 </form>
@@ -332,7 +332,7 @@ render_header($thread['title'] ?? 'Thread', ['info' => $sidebarInfo]);
                         <div class="form-text"><?= t('merge_thread_confirm') ?></div>
                     </div>
                     <div class="d-flex justify-content-end gap-2">
-                        <button type="button" class="btn btn-secondary" onclick="document.getElementById('merge-modal').close()"><?= t('cancel') ?></button>
+                        <button type="button" class="btn btn-secondary" data-modal-close="merge-modal"><?= t('cancel') ?></button>
                         <button type="submit" class="btn btn-brand"><?= t('merge_thread') ?></button>
                     </div>
                 </form>
@@ -341,7 +341,7 @@ render_header($thread['title'] ?? 'Thread', ['info' => $sidebarInfo]);
 
         <dialog id="split-modal" class="bb-modal">
             <div class="modal-content">
-                <form method="POST" action="<?= url('split_thread') ?>" onsubmit="document.getElementById('split-post-ids').value = Array.from(document.querySelectorAll('.split-post-check:checked')).map(c => c.value).join(',');">
+                <form method="POST" action="<?= url('split_thread') ?>" id="split-form">
                     <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                     <input type="hidden" name="thread_id" value="<?= (int)$threadId ?>">
                     <input type="hidden" name="post_ids" id="split-post-ids" value="">
@@ -365,7 +365,7 @@ render_header($thread['title'] ?? 'Thread', ['info' => $sidebarInfo]);
                         </div>
                     <?php endif; ?>
                     <div class="d-flex justify-content-end gap-2">
-                        <button type="button" class="btn btn-secondary" onclick="document.getElementById('split-modal').close()"><?= t('cancel') ?></button>
+                        <button type="button" class="btn btn-secondary" data-modal-close="split-modal"><?= t('cancel') ?></button>
                         <button type="submit" class="btn btn-brand"><?= t('split_thread') ?></button>
                     </div>
                 </form>
@@ -446,3 +446,4 @@ render_header($thread['title'] ?? 'Thread', ['info' => $sidebarInfo]);
         </section>
     <?php endif; ?>
 <?php render_footer(); ?>
+<script src="<?= htmlspecialchars(base_url() . '/assets/js/thread-mod.js', ENT_QUOTES, 'UTF-8') ?>" nonce="<?= htmlspecialchars(csp_nonce(), ENT_QUOTES, 'UTF-8') ?>"></script>

@@ -62,6 +62,8 @@ class Router
             '#^reset-password$#'                        => fn()   => ['action' => 'reset_password'],
             '#^verify-email$#'                          => fn()   => ['action' => 'verify_email'],
             '#^new-thread$#'                            => fn()   => ['action' => 'new_thread'],
+            '#^messages$#'                              => fn()   => ['action' => 'messages'],
+            '#^notifications$#'                        => fn()   => ['action' => 'notifications'],
         ];
 
         foreach ($map as $pattern => $apply) {

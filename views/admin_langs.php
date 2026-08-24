@@ -106,7 +106,7 @@
                                             <?php if ($code === ($config['default_lang'] ?? 'en')): ?>
                                                 <span class="badge bg-success"><?= t('default') ?></span>
                                             <?php else: ?>
-                                                <form method="POST" class="d-inline" onsubmit="return confirm('<?= t('delete_confirm') ?> <?= escape($code) ?>?');">
+                                                <form method="POST" class="d-inline" data-confirm="<?= t('delete_confirm') ?> <?= escape($code) ?>?">
                                                     <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                                                     <input type="hidden" name="lang_code" value="<?= escape($code) ?>">
                                                     <button type="submit" name="delete_lang" value="1" class="btn btn-sm btn-danger"><?= t('delete') ?></button>

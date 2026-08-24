@@ -46,7 +46,9 @@ $stats       = $profileStats ?? ['threads' => 0, 'posts' => 0];
             <?php if ($isSelf): ?>
                 <a href="<?= url('edit_profile') ?>" class="btn btn-brand btn-sm"><i class="fas fa-pen me-2"></i><?= t('edit_profile') ?></a>
             <?php elseif (function_exists('is_logged_in') && is_logged_in()): ?>
-                <button class="btn btn-outline-soft btn-sm" onclick="if(window.textmebored&&window.textmebored.openConversation){window.textmebored.openConversation(<?= (int)$profileUser['id'] ?>,'<?= escape(addslashes($profileUser['username'])) ?>');}">
+                <button class="btn btn-outline-soft btn-sm textmebored-send-msg-btn"
+                        data-user-id="<?= (int)$profileUser['id'] ?>"
+                        data-username="<?= escape(addslashes($profileUser['username'])) ?>">
                     <i class="fas fa-envelope me-2"></i><?= t('send_message') ?>
                 </button>
             <?php endif; ?>
@@ -57,19 +59,19 @@ $stats       = $profileStats ?? ['threads' => 0, 'posts' => 0];
         <div class="mod-bar">
             <span class="mod-bar-label"><i class="fas fa-shield-halved me-1"></i><?= t('moderation') ?></span>
             <?php if ($isBanned || $isSuspended): ?>
-                <form method="POST" action="<?= url('unban_user', ['id' => $profileUser['id']]) ?>" class="d-inline" onsubmit="return confirm('<?= t('unban_user') ?>?')">
+                <form method="POST" action="<?= url('unban_user', ['id' => $profileUser['id']]) ?>" class="d-inline" data-confirm="<?= t('unban_user') ?>?">
                     <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                     <input type="hidden" name="redirect" value="/u/<?= urlencode($profileUser['username']) ?>">
                     <button class="btn btn-outline-soft btn-sm"><i class="fas fa-unlock me-1"></i><?= t('unban_user') ?></button>
                 </form>
             <?php else: ?>
-                <form method="POST" action="<?= url('ban_user', ['id' => $profileUser['id']]) ?>" class="d-inline" onsubmit="return confirm('<?= t('ban_user') ?>?')">
+                <form method="POST" action="<?= url('ban_user', ['id' => $profileUser['id']]) ?>" class="d-inline" data-confirm="<?= t('ban_user') ?>?">
                     <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                     <input type="hidden" name="redirect" value="/u/<?= urlencode($profileUser['username']) ?>">
                     <button class="btn btn-outline-danger btn-sm"><i class="fas fa-ban me-1"></i><?= t('ban_user') ?></button>
                 </form>
                 <form method="POST" action="<?= url('suspend_user', ['id' => $profileUser['id']]) ?>" class="d-inline"
-                      onsubmit="var d=prompt('<?= t('suspend_days') ?>');if(d){this.querySelector('input[name=days]').value=d;this.submit();}return false;">
+                      data-suspend-form data-suspend-prompt="<?= t('suspend_days') ?>">
                     <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                     <input type="hidden" name="days" value="7">
                     <input type="hidden" name="redirect" value="/u/<?= urlencode($profileUser['username']) ?>">
@@ -109,3 +111,15 @@ $stats       = $profileStats ?? ['threads' => 0, 'posts' => 0];
         </div>
     <?php endif; ?>
 <?php render_footer(); ?>
+<script nonce="<?= htmlspecialchars(csp_nonce(), ENT_QUOTES, 'UTF-8') ?>">
+    document.querySelectorAll('.textmebored-send-msg-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            if (window.textmebored && window.textmebored.openConversation) {
+                window.textmebored.openConversation(
+                    parseInt(btn.getAttribute('data-user-id'), 10),
+                    btn.getAttribute('data-username')
+                );
+            }
+        });
+    });
+</script>

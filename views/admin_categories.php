@@ -58,10 +58,10 @@ $csrf = generate_csrf_token();
                                     ?></td>
                                     <td class="text-end">
                                         <button class="btn btn-sm btn-warning"
-                                            onclick="document.getElementById('edit-form-<?= $cat['id'] ?>').classList.toggle('d-none')">
+                                            data-toggle-target="edit-form-<?= $cat['id'] ?>">
                                             <i class="fas fa-pen"></i>
                                         </button>
-                                        <form method="POST" action="<?= url('delete_category', ['id' => $cat['id']]) ?>" class="d-inline" onsubmit="return confirm('<?= t('delete_confirm') ?>')">
+                                        <form method="POST" action="<?= url('delete_category', ['id' => $cat['id']]) ?>" class="d-inline" data-confirm="<?= t('delete_confirm') ?>">
                                             <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                                             <button class="btn btn-danger btn-sm"><i class="fas fa-trash"></i></button>
                                         </form>
@@ -91,7 +91,7 @@ $csrf = generate_csrf_token();
                                             <div class="col-md-3 d-flex align-items-end">
                                                 <div class="w-100">
                                                     <button type="submit" class="btn btn-sm btn-primary"><i class="fas fa-save me-1"></i><?= t('save') ?></button>
-                                                    <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('edit-form-<?= $cat['id'] ?>').classList.add('d-none')"><?= t('cancel') ?></button>
+                                                    <button type="button" class="btn btn-sm btn-secondary" data-close-target="edit-form-<?= $cat['id'] ?>"><?= t('cancel') ?></button>
                                                 </div>
                                             </div>
                                         </form>

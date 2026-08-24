@@ -112,6 +112,11 @@ return [
     'pagination' => 'Pagination',
     'notifications' => 'Notifications',
     'messages' => 'Messages',
+    'view_all' => 'View all',
+    'no_messages' => 'No messages yet',
+    'open_messages' => 'Open messages',
+    'no_notifications' => 'No notifications',
+    'open_notifications' => 'Open notifications',
 
     // --- discussion listing ---
     'discussions_count' => '{n} discussions',
