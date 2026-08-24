@@ -123,7 +123,7 @@
         </div>
     </div>
 </div>
-<script>
+<script nonce="<?= htmlspecialchars(csp_nonce(), ENT_QUOTES, 'UTF-8') ?>">
 (function() {
     const list = document.getElementById('github-langs-list');
     const errorBox = document.getElementById('github-langs-error');

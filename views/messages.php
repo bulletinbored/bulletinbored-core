@@ -95,15 +95,24 @@
             <?php endforeach; ?>
 </div>
                      <div class="mt-3">
-                         <button class="btn btn-brand btn-sm" onclick="if(window.textmebored && window.textmebored.newConversation){window.textmebored.newConversation();}"><i class="fas fa-envelope me-1"></i>New message</button>
-                     </div>
-                 <?php else: ?>
+                         <button class="btn btn-brand btn-sm textmebored-new-msg-btn"><i class="fas fa-envelope me-1"></i>New message</button>
+                      </div>
+                  <?php else: ?>
         <div class="card">
             <div class="card-body text-center py-5 text-muted">
                 <i class="fas fa-inbox fa-2x mb-3"></i>
                 <p class="mb-0">No messages yet. Click "New message" to start a conversation.</p>
-                <button class="btn btn-brand btn-sm mt-3" onclick="if(window.textmebored && window.textmebored.newConversation){window.textmebored.newConversation();}"><i class="fas fa-envelope me-1"></i>New message</button>
+                <button class="btn btn-brand btn-sm mt-3 textmebored-new-msg-btn"><i class="fas fa-envelope me-1"></i>New message</button>
             </div>
         </div>
     <?php endif; ?>
+    <script nonce="<?= htmlspecialchars(csp_nonce(), ENT_QUOTES, 'UTF-8') ?>">
+        document.querySelectorAll('.textmebored-new-msg-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                if (window.textmebored && window.textmebored.newConversation) {
+                    window.textmebored.newConversation();
+                }
+            });
+        });
+    </script>
 <?php render_footer(); ?>

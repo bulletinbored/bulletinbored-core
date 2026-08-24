@@ -179,6 +179,33 @@ function extract_zip(string $zipPath, string $targetDir): bool
     if ($zip->open($zipPath) !== true) {
         return false;
     }
+
+    $targetDir = rtrim($targetDir, '/');
+    $realDest = realpath($targetDir);
+    if ($realDest === false) {
+        $zip->close();
+        return false;
+    }
+
+    for ($i = 0; $i < $zip->numFiles; $i++) {
+        $name = $zip->getNameIndex($i);
+        if ($name === false) {
+            continue;
+        }
+
+        $name = str_replace('\\', '/', $name);
+        if (str_starts_with($name, '/') || str_contains($name, '..')) {
+            $zip->close();
+            return false;
+        }
+
+        $target = $targetDir . '/' . $name;
+        if (!str_starts_with($target, $realDest . '/')) {
+            $zip->close();
+            return false;
+        }
+    }
+
     $ok = $zip->extractTo($targetDir);
     $zip->close();
     return (bool)$ok;

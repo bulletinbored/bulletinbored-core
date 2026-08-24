@@ -3,7 +3,16 @@ header('Content-Type: application/json');
 session_start();
 
 if (empty($config)) {
-    require __DIR__ . '/../config.php';
+    $configPath = __DIR__ . '/../config.json';
+    $legacyPath = __DIR__ . '/../config.php';
+    if (file_exists($configPath)) {
+        $config = json_decode(file_get_contents($configPath), true);
+        if (!is_array($config)) { $config = []; }
+    } elseif (file_exists($legacyPath)) {
+        $config = [];
+        @include $legacyPath;
+        if (!is_array($config)) { $config = []; }
+    }
 }
 
 if (empty($_SESSION['user_role']) || $_SESSION['user_role'] !== 'admin') {

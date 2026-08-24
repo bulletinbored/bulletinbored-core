@@ -1,13 +1,56 @@
 <?php
 session_start();
 
-function escape($s) {
-    return htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
+require_once __DIR__ . '/src/csp.php';
+$cspNonce = generate_csp_nonce();
+send_security_headers($cspNonce);
+
+function is_installed() {
+    $configPath = __DIR__ . '/config.json';
+    $legacyPath = __DIR__ . '/config.php';
+    if (!file_exists($configPath) && !file_exists($legacyPath)) {
+        return false;
+    }
+    $config = [];
+    if (file_exists($configPath)) {
+        $config = json_decode(file_get_contents($configPath), true);
+    } else {
+        @include $legacyPath;
+    }
+    if (empty($config['db_driver'] ?? '')) {
+        return false;
+    }
+    try {
+        if (($config['db_driver'] ?? 'sqlite') === 'mysql') {
+            $pdo = new PDO(
+                "mysql:host={$config['db_host']};dbname={$config['db_name']};charset=utf8mb4",
+                $config['db_user'],
+                $config['db_pass']
+            );
+        } else {
+            $pdo = new PDO('sqlite:' . ($config['db_path'] ?? __DIR__ . '/data/database.sqlite'));
+        }
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $stmt = $pdo->query("SELECT COUNT(*) FROM users");
+        return $stmt->fetchColumn() > 0;
+    } catch (PDOException $e) {
+        return false;
+    }
+}
+
+if (is_installed()) {
+    log_security_event('installer_access_denied', ['script' => 'install2.php']);
+    http_response_code(403);
+    die('<h1>Already Installed</h1><p>bulletinbored is already installed. Delete <code>config.json</code> to reinstall.</p>');
 }
 
 if (empty($_SESSION['install_db_driver'])) {
     header('Location: install.php');
     exit;
+}
+
+function escape($s) {
+    return htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
 }
 
 $error = '';
@@ -28,7 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Password must be at least 6 characters.';
     } elseif (!filter_var($adminEmail, FILTER_VALIDATE_EMAIL)) {
         $error = 'Please enter a valid email address.';
-    } elseif (file_exists(__DIR__ . '/config.php')) {
+    } elseif (file_exists(__DIR__ . '/config.json')) {
         $error = 'Configuration file already exists. Remove it to reinstall.';
     } else {
         $_SESSION['install_site_name'] = $siteName;

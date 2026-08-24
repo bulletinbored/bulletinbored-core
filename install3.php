@@ -1,10 +1,53 @@
 <?php
 session_start();
 
+require_once __DIR__ . '/src/csp.php';
+$cspNonce = generate_csp_nonce();
+send_security_headers($cspNonce);
+
 require_once __DIR__ . '/lib/PluginManager.php';
+
+function is_installed() {
+    $configPath = __DIR__ . '/config.json';
+    $legacyPath = __DIR__ . '/config.php';
+    if (!file_exists($configPath) && !file_exists($legacyPath)) {
+        return false;
+    }
+    $config = [];
+    if (file_exists($configPath)) {
+        $config = json_decode(file_get_contents($configPath), true);
+    } else {
+        @include $legacyPath;
+    }
+    if (empty($config['db_driver'] ?? '')) {
+        return false;
+    }
+    try {
+        if (($config['db_driver'] ?? 'sqlite') === 'mysql') {
+            $pdo = new PDO(
+                "mysql:host={$config['db_host']};dbname={$config['db_name']};charset=utf8mb4",
+                $config['db_user'],
+                $config['db_pass']
+            );
+        } else {
+            $pdo = new PDO('sqlite:' . ($config['db_path'] ?? __DIR__ . '/data/database.sqlite'));
+        }
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $stmt = $pdo->query("SELECT COUNT(*) FROM users");
+        return $stmt->fetchColumn() > 0;
+    } catch (PDOException $e) {
+        return false;
+    }
+}
 
 function escape($s) {
     return htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
+}
+
+if (is_installed()) {
+    log_security_event('installer_access_denied', ['script' => 'install3.php']);
+    http_response_code(403);
+    die('<h1>Already Installed</h1><p>bulletinbored is already installed. Delete <code>config.json</code> to reinstall.</p>');
 }
 
 if (empty($_SESSION['install_db_driver']) || empty($_SESSION['install_site_name'])) {
@@ -232,51 +275,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install'])) {
             }
         }
 
-        $configContent = "<?php\n";
-        $configContent .= '$config[\'db_driver\'] = \'' . $dbDriver . "';\n";
-        if ($dbDriver === 'sqlite') {
-            $dbPath = $_SESSION['install_db_path'];
-            $normalizedDir = str_replace('\\', '/', __DIR__);
-            $normalizedPath = str_replace('\\', '/', $dbPath);
-            if (!str_starts_with($normalizedPath, $normalizedDir . '/')) {
-                if (!preg_match('~^[a-zA-Z]:/|^/~', $normalizedPath)) {
-                    $dbPath = __DIR__ . '/' . ltrim($dbPath, '/\\');
-                }
-            }
-            $relPath = str_replace(__DIR__, '', $dbPath);
-            $configContent .= '$config[\'db_path\'] = __DIR__ . \'' . $relPath . "';\n";
-        } else {
-            $configContent .= '$config[\'db_path\'] = __DIR__ . \'/data/database.sqlite\';' . "\n";
-        }
-        $configContent .= '$config[\'db_host\'] = \'' . str_replace("'", "\\'", $dbHost) . "';\n";
-        $configContent .= '$config[\'db_name\'] = \'' . str_replace("'", "\\'", $dbName) . "';\n";
-        $configContent .= '$config[\'db_user\'] = \'' . str_replace("'", "\\'", $dbUser) . "';\n";
-        $configContent .= '$config[\'db_pass\'] = \'' . str_replace("'", "\\'", $dbPass) . "';\n";
-        $configContent .= '$config[\'site_name\'] = \'' . str_replace("'", "\\'", $siteName) . "';\n";
-        $configContent .= '$config[\'admin_user\'] = \'' . str_replace("'", "\\'", $adminUser) . "';\n";
-        $configContent .= '$config[\'admin_pass\'] = \'' . str_replace("'", "\\'", $adminPass) . "';\n";
-        $configContent .= '$config[\'mail_from\'] = \'' . str_replace("'", "\\'", $adminEmail) . "';\n";
-        $configContent .= '$config[\'mail_from_name\'] = \'' . str_replace("'", "\\'", $siteName) . "';\n";
-        $configContent .= '$config[\'mail_method\'] = \'mail\';' . "\n";
-        $configContent .= '$config[\'theme\'] = \'freshbored\';' . "\n";
-        $configContent .= '$config[\'default_lang\'] = \'en\';' . "\n";
-        $configContent .= '$config[\'available_langs\'] = [\'en\'];' . "\n";
-        $configContent .= '$config[\'avatar_max_size\'] = 2097152;' . "\n";
-        $configContent .= '$config[\'avatar_allowed_types\'] = [\'image/jpeg\', \'image/png\', \'image/gif\', \'image/webp\'];' . "\n";
-        $configContent .= '$config[\'base_url\'] = \'\';' . "\n";
-        $configContent .= '$config[\'site_tagline\'] = \'\';' . "\n";
-        $configContent .= '$config[\'site_icon\'] = \'\';' . "\n";
-        $configContent .= '$config[\'timezone\'] = \'UTC\';' . "\n";
-        $configContent .= '$config[\'date_format\'] = \'Y-m-d\';' . "\n";
-        $configContent .= '$config[\'time_format\'] = \'H:i\';' . "\n";
-        $configContent .= '$config[\'version\'] = trim(file_get_contents(__DIR__.\'/VERSION\'));' . "\n";
-        $configContent .= '$config[\'plugin_manifest\'] = __DIR__.\'/data/plugins.json\';' . "\n";
-        $configContent .= '$config[\'theme_manifest\'] = __DIR__.\'/data/themes.json\';' . "\n";
-        $configContent .= '$config[\'update_manifest\'] = __DIR__.\'/data/updates.json\';' . "\n";
-        $configContent .= '$config[\'update_server\'] = \'https://github.com/bulletinbored/bulletinbored-core\';' . "\n";
-        $configContent .= '$config[\'update_mirror\'] = \'https://extend.bulletinbored.net\';' . "\n";
+        $config = [
+            'db_driver' => $dbDriver,
+            'db_path' => $dbDriver === 'sqlite' ? $dbPath : __DIR__ . '/data/database.sqlite',
+            'db_host' => $dbHost,
+            'db_name' => $dbName,
+            'db_user' => $dbUser,
+            'db_pass' => $dbPass,
+            'site_name' => $siteName,
+            'admin_user' => $adminUser,
+            'admin_pass' => $adminPass,
+            'mail_from' => $adminEmail,
+            'mail_from_name' => $siteName,
+            'mail_method' => 'mail',
+            'theme' => 'freshbored',
+            'default_lang' => 'en',
+            'available_langs' => ['en'],
+            'avatar_max_size' => 2097152,
+            'avatar_allowed_types' => ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+            'base_url' => '',
+            'site_tagline' => '',
+            'site_icon' => '',
+            'timezone' => 'UTC',
+            'date_format' => 'Y-m-d',
+            'time_format' => 'H:i',
+            'version' => trim(file_get_contents(__DIR__ . '/VERSION')),
+            'plugin_manifest' => __DIR__ . '/data/plugins.json',
+            'theme_manifest' => __DIR__ . '/data/themes.json',
+            'update_manifest' => __DIR__ . '/data/updates.json',
+            'update_server' => 'https://github.com/bulletinbored/bulletinbored-core',
+            'update_mirror' => 'https://extend.bulletinbored.net',
+        ];
 
-        file_put_contents(__DIR__ . '/config.php', $configContent, LOCK_EX);
+        file_put_contents(__DIR__ . '/config.json', json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE), LOCK_EX);
 
         $pluginManager = new PluginManager(__DIR__ . '/plugins', __DIR__ . '/data/plugins.json');
         foreach ($availablePlugins as $name => $info) {
@@ -667,6 +698,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install'])) {
                     </div>
                 <?php endif; ?>
 
+                <div class="alert alert-warning mt-3">
+                    <i class="fas fa-shield-alt me-2"></i>
+                    <strong>Security reminder:</strong> delete the installer files
+                    (<code>install.php</code>, <code>install2.php</code>, <code>install3.php</code>)
+                    from your server now that setup is complete. Leaving them in place is a security risk.
+                </div>
+
                 <a href="<?= htmlspecialchars(rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'])), '/') . '/', ENT_QUOTES, 'UTF-8') ?>" class="btn btn-brand w-100">
                     Go to your forum<i class="fas fa-arrow-right ms-2"></i>
                 </a>
@@ -675,7 +713,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install'])) {
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
+    <script nonce="<?= htmlspecialchars($cspNonce, ENT_QUOTES, 'UTF-8') ?>">
         document.querySelectorAll('.plugin-card input[type="checkbox"]').forEach(function (input) {
             input.addEventListener('change', function () {
                 input.closest('.plugin-card').classList.toggle('checked', input.checked);

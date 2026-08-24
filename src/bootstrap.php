@@ -13,14 +13,12 @@
 
 // --- Security headers -------------------------------------------------------
 // Sent on every request (including the built-in server). Hardening headers
-// that need no app knowledge live here; CSP is intentionally permissive to
-// allow the CDN scripts the editor relies on, but blocks injection vectors.
-header('X-Content-Type-Options: nosniff');
-header('X-Frame-Options: DENY');
-header('Referrer-Policy: strict-origin-when-cross-origin');
-if (!headers_sent()) {
-    header("Content-Security-Policy: default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://connect.facebook.net https://www.instagram.com https://platform.twitter.com https://www.youtube.com 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com; font-src 'self' https: data:; img-src 'self' data: https:; frame-src https://www.instagram.com https://connect.facebook.net https://www.facebook.com https://facebook.com https://www.youtube.com https://www.youtube-nocookie.com https://platform.twitter.com; connect-src 'self' https://www.instagram.com https://connect.facebook.net https://www.facebook.com https://platform.twitter.com https://www.google.com");
-}
+// that need no app knowledge live here; CSP uses a per-request nonce instead
+// of 'unsafe-inline' so inline scripts are still allowed but bound to this
+// request only.
+require_once __DIR__ . '/csp.php';
+$cspNonce = generate_csp_nonce();
+send_security_headers($cspNonce);
 
 // --- Session storage --------------------------------------------------------
 // Use an app-owned, writable directory for session files. The system default
@@ -29,13 +27,11 @@ if (!headers_sent()) {
 // CSRF validation (login, posting, etc.). Fall back to data/sessions whenever
 // the PHP default is not usable, so this works out of the box on new installs.
 // Must run before session_start().
-$sessionDir = __DIR__ . '/../data/sessions';
+$sessionDir = realpath(__DIR__ . '/../data/sessions') ?: (__DIR__ . '/../data/sessions');
 if (!is_dir($sessionDir)) {
     @mkdir($sessionDir, 0755, true);
 }
-$defaultSessionPath = session_save_path() ?: (@ini_get('session.save_path') ?: '');
-if ((!$defaultSessionPath || !is_dir($defaultSessionPath) || !is_writable($defaultSessionPath))
-    && is_dir($sessionDir) && is_writable($sessionDir)) {
+if (is_dir($sessionDir) && is_writable($sessionDir)) {
     session_save_path($sessionDir);
 }
 
@@ -62,7 +58,8 @@ if (session_status() === PHP_SESSION_NONE) {
 $installerPages = ['install.php', 'install2.php', 'install3.php'];
 $scriptName = basename($_SERVER['SCRIPT_NAME'] ?? '');
 
-if (!file_exists(__DIR__ . '/../config.php') && !in_array($scriptName, $installerPages)) {
+$hasConfig = file_exists(__DIR__ . '/../config.json') || file_exists(__DIR__ . '/../config.php');
+if (!$hasConfig && !in_array($scriptName, $installerPages)) {
     $base = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '')), '/');
     if ($base === '' || $base === '/') {
         $base = '';
@@ -87,7 +84,23 @@ spl_autoload_register(function ($class) {
 });
 
 // Load configuration
-require __DIR__ . '/../config.php';
+$configPath = __DIR__ . '/../config.json';
+$legacyConfigPath = __DIR__ . '/../config.php';
+if (file_exists($configPath)) {
+    $config = json_decode(file_get_contents($configPath), true);
+    if (!is_array($config)) {
+        $config = [];
+    }
+} elseif (file_exists($legacyConfigPath)) {
+    $config = [];
+    @include $legacyConfigPath;
+    if (!is_array($config)) {
+        $config = [];
+    }
+    if (file_put_contents($configPath, json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) !== false) {
+        @unlink($legacyConfigPath);
+    }
+}
 
 // Localization
 $lang = $_GET['lang'] ?? $config['default_lang'] ?? 'en';

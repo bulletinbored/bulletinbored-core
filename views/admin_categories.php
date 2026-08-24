@@ -143,7 +143,7 @@ $csrf = generate_csrf_token();
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
-<script>
+<script nonce="<?= htmlspecialchars(csp_nonce(), ENT_QUOTES, 'UTF-8') ?>">
 (function() {
     const tbody = document.getElementById('categories-sortable');
     const saveBtn = document.getElementById('save-order-btn');

@@ -1,11 +1,22 @@
 <?php
 session_start();
 
+require_once __DIR__ . '/src/csp.php';
+$cspNonce = generate_csp_nonce();
+send_security_headers($cspNonce);
+
 function is_installed() {
-    if (!file_exists(__DIR__ . '/config.php')) {
+    $configPath = __DIR__ . '/config.json';
+    $legacyPath = __DIR__ . '/config.php';
+    if (!file_exists($configPath) && !file_exists($legacyPath)) {
         return false;
     }
-    $config = @include __DIR__ . '/config.php';
+    $config = [];
+    if (file_exists($configPath)) {
+        $config = json_decode(file_get_contents($configPath), true);
+    } else {
+        @include $legacyPath;
+    }
     if (empty($config['db_driver'] ?? '')) {
         return false;
     }
@@ -32,8 +43,9 @@ function escape($s) {
 }
 
 if (is_installed()) {
+    log_security_event('installer_access_denied', ['script' => 'install.php']);
     http_response_code(403);
-    die('<h1>Already Installed</h1><p>bulletinbored is already installed. Delete <code>config.php</code> to reinstall.</p>');
+    die('<h1>Already Installed</h1><p>bulletinbored is already installed. Delete <code>config.json</code> to reinstall.</p>');
 }
 
 $error = '';
@@ -472,7 +484,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
+    <script nonce="<?= htmlspecialchars($cspNonce, ENT_QUOTES, 'UTF-8') ?>">
         const driverInputs = document.querySelectorAll('input[name="db_driver"]');
         const sqliteFields = document.getElementById('sqlite-fields');
         const mysqlFields = document.getElementById('mysql-fields');

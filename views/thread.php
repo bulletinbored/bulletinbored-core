@@ -8,6 +8,9 @@ $perPage     = (int)($perPage ?? 15);
 $totalPages  = (int)($totalPages ?? 1);
 $isLogged    = function_exists('is_logged_in') && is_logged_in();
 $canModerate = $isLogged && in_array($_SESSION['user_role'] ?? 'user', ['admin', 'moderator'], true);
+$replyError = $_SESSION['reply_error'] ?? '';
+$replyContent = $_SESSION['reply_content'] ?? '';
+unset($_SESSION['reply_error'], $_SESSION['reply_content']);
 $isLocked    = ($thread['status'] ?? '') === 'locked';
 
 $categories = [];
@@ -418,12 +421,17 @@ render_header($thread['title'] ?? 'Thread', ['info' => $sidebarInfo]);
         <?php else: ?>
             <section class="reply-box" id="reply">
                 <h2 class="reply-title"><i class="fas fa-reply me-2"></i><?= t('reply') ?></h2>
+                <?php if ($replyError): ?>
+                <div class="alert alert-danger" role="alert">
+                    <?= escape($replyError) ?>
+                </div>
+                <?php endif; ?>
                 <form method="POST" action="<?= url('reply') ?>">
                     <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                     <input type="hidden" name="thread_id" value="<?= $threadId ?>">
                     <div class="mb-3">
                         <textarea id="editbored-content" name="content" class="form-control" rows="6"
-                                  placeholder="<?= t('reply_placeholder') ?>" required></textarea>
+                                  placeholder="<?= t('reply_placeholder') ?>" required><?= escape($replyContent) ?></textarea>
                     </div>
                     <button type="submit" class="btn btn-brand"><i class="fas fa-paper-plane me-2"></i><?= t('submit_reply') ?></button>
                 </form>

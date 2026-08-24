@@ -378,6 +378,34 @@ class PluginManager
         $this->deleteDir($nested);
     }
 
+    private function safeExtractZip(ZipArchive $zip, string $dest): bool
+    {
+        $dest = rtrim($dest, '/');
+        $realDest = realpath($dest);
+        if ($realDest === false) {
+            return false;
+        }
+
+        for ($i = 0; $i < $zip->numFiles; $i++) {
+            $name = $zip->getNameIndex($i);
+            if ($name === false) {
+                continue;
+            }
+
+            $name = str_replace('\\', '/', $name);
+            if (str_starts_with($name, '/') || str_contains($name, '..')) {
+                return false;
+            }
+
+            $target = $dest . '/' . $name;
+            if (!str_starts_with($target, $realDest . '/')) {
+                return false;
+            }
+        }
+
+        return $zip->extractTo($dest);
+    }
+
     public function installFromZip(string $zipPath): array
     {
         if (!file_exists($zipPath)) {
@@ -395,12 +423,14 @@ class PluginManager
         }
 
         $dest = rtrim($this->pluginsDir, '/') . '/';
-        $zip->extractTo($dest);
+        $ok = $this->safeExtractZip($zip, $dest);
         $zip->close();
         @unlink($zipPath);
 
-        // Normalise the extracted layout (see installFromRepo for details):
-        // only "un-nest" when there is no manifest.json directly at the root.
+        if (!$ok) {
+            return ['success' => false, 'message' => 'Invalid ZIP entries'];
+        }
+
         $this->flattenNestedDir($dest);
 
         // Optional integrity checks. These can be disabled by the admin via

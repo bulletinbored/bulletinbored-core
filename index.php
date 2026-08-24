@@ -43,14 +43,6 @@ $themeCssUrl = $themeManager->getCssUrl();
 $themeCssPath = $themeManager->getCssPath();
 $themeName = $activeTheme;
 
-$pluginHeadAssets = '';
-$pluginManager->captureHook('before_render');
-$pluginManager->captureHook('frontend_before_render');
-if (is_admin()) {
-    $pluginManager->captureHook('admin_before_render');
-}
-$pluginHeadAssets = $pluginManager->getCapturedHead(false);
-
 // Pretty URL support: populate $_GET['action'] from the request path.
 Bulletin\Router::resolve();
 

@@ -6,7 +6,7 @@
 //   wide     bool  full width main column, used by auth/form pages
 //   info     array extra "discussion info" rows shown on top of the sidebar
 function render_header($title = 'bulletinbored', $options = []) {
-    global $config, $lang, $pluginHeadAssets, $pdo;
+    global $config, $lang, $pdo;
 
     $siteName = $config['site_name'] ?? 'bulletinbored';
     $options  = is_array($options) ? $options : [];
@@ -32,7 +32,15 @@ function render_header($title = 'bulletinbored', $options = []) {
     }
     ?>
     <link href="<?= htmlspecialchars($themeCssUrl ?? base_url().'/themes/freshbored/style.css', ENT_QUOTES, 'UTF-8') ?>" rel="stylesheet">
-    <?php echo $pluginHeadAssets ?? ''; ?>
+    <?php
+    if (!empty($GLOBALS['pluginManager']) && method_exists($GLOBALS['pluginManager'], 'runHook')) {
+        $GLOBALS['pluginManager']->runHook('before_render');
+        $GLOBALS['pluginManager']->runHook('frontend_before_render');
+        if (is_admin()) {
+            $GLOBALS['pluginManager']->runHook('admin_before_render');
+        }
+    }
+    ?>
 </head>
 <body>
     <nav class="navbar navbar-expand-lg navbar-forum fixed-top">
@@ -183,16 +191,7 @@ function render_footer() {
     </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        window.addEventListener('scroll', () => {
-            const nav = document.querySelector('.navbar-forum');
-            if (window.scrollY > 20) {
-                nav.classList.add('scrolled');
-            } else {
-                nav.classList.remove('scrolled');
-            }
-        });
-    </script>
+    <script src="<?= htmlspecialchars(base_url() . '/assets/js/navbar.js', ENT_QUOTES, 'UTF-8') ?>"></script>
 </body>
 </html>
 <?php

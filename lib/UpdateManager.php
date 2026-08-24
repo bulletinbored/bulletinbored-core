@@ -399,19 +399,26 @@ class UpdateManager
             file_put_contents($versionFile, $tag);
         }
 
-        $configFile = __DIR__ . '/../config.php';
-        if (is_writable($configFile)) {
-            $content = file_get_contents($configFile);
+        $configJsonPath = __DIR__ . '/../config.json';
+        $legacyConfigPath = __DIR__ . '/../config.php';
+        if (file_exists($configJsonPath) && is_writable($configJsonPath)) {
+            $config = json_decode(file_get_contents($configJsonPath), true);
+            if (is_array($config)) {
+                $config['version'] = ltrim($tag, 'v');
+                file_put_contents($configJsonPath, json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+            }
+        } elseif (file_exists($legacyConfigPath) && is_writable($legacyConfigPath)) {
+            $content = file_get_contents($legacyConfigPath);
             $content = preg_replace(
                 <<<'REGEX'
-/\$config\['version'\]\s*=\s*\'[^\']*\';/
-REGEX
+                /\$config\['version'\]\s*=\s*\'[^\']*\';/
+                REGEX
                 ,
                 "\$config['version'] = '" . ltrim($tag, 'v') . "';",
                 $content
             );
             if ($content !== null) {
-                file_put_contents($configFile, $content);
+                file_put_contents($legacyConfigPath, $content);
             }
         }
 

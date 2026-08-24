@@ -136,7 +136,7 @@ function url($action, $params = [], $absolute = false) {
         case 'create_thread':
         case 'update_profile':
         case 'upload_avatar':
-        case 'editbored_upload':
+        case 'upload_avatar':
             $path = [
                 'do_login' => '/login',
                 'do_register' => '/register',
@@ -145,7 +145,6 @@ function url($action, $params = [], $absolute = false) {
                 'create_thread' => '/new-thread',
                 'update_profile' => '/edit-profile',
                 'upload_avatar' => '/edit-profile',
-                'editbored_upload' => '/editbored-upload',
             ][$action];
             return $base . $path . (!empty($query) ? '?' . http_build_query($query) : '');
         default:
@@ -235,10 +234,18 @@ function sanitize_html($html) {
                     }
                     if ($name === 'href' || $name === 'src') {
                         $safeAttrs[] = $name . '="' . escape($val) . '"';
-                    } elseif (in_array($name, ['alt', 'title', 'class', 'target', 'rel', 'width', 'height', 'colspan', 'rowspan', 'start', 'cite', 'style', 'id'])) {
+                    } elseif ($name === 'style') {
+                        $safeStyle = sanitize_style($val);
+                        if ($safeStyle !== '') {
+                            $safeAttrs[] = 'style="' . escape($safeStyle) . '"';
+                        }
+                    } elseif ($name === 'id') {
+                        $safeAttrs[] = 'id="' . escape($val) . '"';
+                    } elseif (in_array($name, ['alt', 'title', 'class', 'target', 'rel', 'width', 'height', 'colspan', 'rowspan', 'start', 'cite'])) {
                         $safeAttrs[] = $name . '="' . escape($val) . '"';
-                    } elseif (str_starts_with($name, 'data-')) {
-                        // Allow data-* attributes used by Instagram/Facebook embeds.
+                    } elseif ($name === 'data-url') {
+                        $safeAttrs[] = 'data-url="' . escape($val) . '"';
+                    } elseif (str_starts_with($name, 'data-instgrm-')) {
                         $safeAttrs[] = $name . '="' . escape($val) . '"';
                     }
                 }
@@ -260,6 +267,27 @@ function sanitize_html($html) {
     $decoded = preg_replace('/✕/', '', $decoded);
 
     return $decoded;
+}
+
+function sanitize_style(string $css): string
+{
+    if ($css === '') {
+        return '';
+    }
+
+    $css = preg_replace('/expression\s*\([^)]*\)/is', '', $css);
+    $css = preg_replace('/behavior\s*:[^;]+/i', '', $css);
+    $css = preg_replace('/-moz-binding\s*:[^;]+/i', '', $css);
+    $css = preg_replace('/position\s*:\s*(fixed|sticky)\b/i', '', $css);
+    $css = preg_replace('/z-index\s*:\s*[1-9]\d*\b/i', '', $css);
+    $css = preg_replace('/url\s*\(\s*[\'"]?\s*(?:javascript|vbscript)\s*:[^)\'"]*[\'"]?\s*\)/is', '', $css);
+    $css = preg_replace('/url\s*\(\s*[\'"]?\s*data\s*:[^)\'"]*[\'"]?\s*\)/is', '', $css);
+    $css = preg_replace('/[{}]/', '', $css);
+    $css = preg_replace('/\s+/', ' ', $css);
+    $css = str_replace(' ;', ';', $css);
+    $css = trim($css, '; ');
+
+    return $css;
 }
 
 function marked_parse($text) {
@@ -353,6 +381,29 @@ function base_url() {
     }
     return $baseUrl;
 }
+
+function log_security_event(string $event, array $context = []): void {
+    static $logDir = null;
+    if ($logDir === null) {
+        $logDir = __DIR__ . '/../data/logs';
+        if (!is_dir($logDir)) {
+            @mkdir($logDir, 0755, true);
+        }
+    }
+    if (!is_dir($logDir) || !is_writable($logDir)) {
+        return;
+    }
+    $ip = $_SERVER['REMOTE_ADDR'] ?? ($_SERVER['HTTP_X_FORWARDED_FOR'] ?? '');
+    $line = sprintf(
+        "[%s] %s ip=%s %s\n",
+        date('c'),
+        $event,
+        $ip,
+        json_encode($context, JSON_UNESCAPED_UNICODE)
+    );
+    @file_put_contents($logDir . '/security.log', $line, FILE_APPEND | LOCK_EX);
+}
+
 function generate_csrf_token() {
     if (empty($_SESSION['csrf_token'])) {
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
@@ -752,7 +803,7 @@ function send_email($to, $subject, $body) {
         fclose($fp);
         return true;
     }
-    return mail($to, '=?UTF-8?B?'.base64_encode($subject).'?=', $htmlBody, $headers, $envelope);
+    return @mail($to, '=?UTF-8?B?'.base64_encode($subject).'?=', $htmlBody, $headers, $envelope);
 }
 
 // Notify the administrator about a new user registration (cases 6).
@@ -836,5 +887,18 @@ function ensure_private_messages_table($pdo) {
         ");
         $pdo->exec("CREATE INDEX IF NOT EXISTS idx_pm_recipient ON private_messages(recipient_id, is_read, created_at)");
         $pdo->exec("CREATE INDEX IF NOT EXISTS idx_pm_sender ON private_messages(sender_id, created_at)");
+    }
+}
+
+function create_notification(PDO $pdo, int $userId, string $type, string $title, string $message, string $link = ''): void
+{
+    $cfg = $GLOBALS['config'] ?? [];
+    $driver = ($cfg['db_driver'] ?? 'sqlite');
+    if ($driver === 'mysql') {
+        $pdo->prepare("INSERT INTO notifications (user_id, type, title, message, link) VALUES (?, ?, ?, ?, ?)")
+            ->execute([$userId, $type, $title, $message, $link]);
+    } else {
+        $pdo->prepare("INSERT INTO notifications (user_id, type, title, message, link) VALUES (?, ?, ?, ?, ?)")
+            ->execute([$userId, $type, $title, $message, $link]);
     }
 }
