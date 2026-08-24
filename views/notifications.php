@@ -32,7 +32,7 @@
                 <div class="list-group-item <?= $n['is_read'] ? '' : 'list-group-item-warning' ?>">
                     <div class="d-flex justify-content-between align-items-start">
                         <div>
-                            <h6 class="mb-1"><?= escape($n['title']) ?></h6>
+                            <h6 class="mb-1"><?= escape($n['title'] ?: notification_label($n)) ?></h6>
                             <p class="mb-1 small text-muted"><?= escape($n['message'] ?? '') ?></p>
                             <small class="text-muted"><i class="fas fa-clock me-1"></i><?= escape($nFormattedDate) ?></small>
                         </div>

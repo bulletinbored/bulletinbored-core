@@ -67,88 +67,15 @@ function render_header($title = 'bulletinbored', $options = []) {
                 <?php // Keep this list the LAST child: plugins append their items here. ?>
                 <ul class="navbar-nav topbar-user">
                     <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
-                        <?php
-                        $navUnreadMsg = 0;
-                        $navUnreadNotif = 0;
-                        $navNotifs = [];
-                        $navConvos = [];
-                        if (!empty($pdo)) {
-                            try {
-                                $me = (int)($_SESSION['user_id'] ?? 0);
-                                $stmt = $pdo->prepare("SELECT COUNT(*) FROM private_messages WHERE recipient_id = ? AND is_read = 0");
-                                $stmt->execute([$me]);
-                                $navUnreadMsg = (int)$stmt->fetchColumn();
-                                $stmt = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
-                                $stmt->execute([$me]);
-                                $navUnreadNotif = (int)$stmt->fetchColumn();
-                                $stmt = $pdo->prepare("SELECT id, message, is_read, created_at FROM notifications WHERE user_id = ? ORDER BY id DESC LIMIT 5");
-                                $stmt->execute([$me]);
-                                $navNotifs = $stmt->fetchAll(PDO::FETCH_ASSOC);
-                                $stmt = $pdo->prepare("
-                                    SELECT c.other_user_id, u.username,
-                                           (SELECT is_read FROM private_messages m WHERE m.conversation_id = c.id AND m.recipient_id = ? ORDER BY m.id DESC LIMIT 1) AS last_read,
-                                           (SELECT COUNT(*) FROM private_messages m WHERE m.conversation_id = c.id AND m.recipient_id = ? AND m.is_read = 0) AS unread
-                                    FROM conversations c
-                                    JOIN users u ON u.id = c.other_user_id
-                                    WHERE c.user_id = ?
-                                    ORDER BY c.last_message_at DESC
-                                    LIMIT 5
-                                ");
-                                $stmt->execute([$me, $me, $me]);
-                                $navConvos = $stmt->fetchAll(PDO::FETCH_ASSOC);
-                            } catch (PDOException $e) {}
-                        }
-                        ?>
-                        <li class="nav-item dropdown">
-                            <a class="nav-link nav-icon position-relative dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false" title="<?= t('messages') ?>">
+                        <li class="nav-item">
+                            <a class="nav-link nav-icon position-relative" href="<?= url('messages') ?>" title="<?= t('messages') ?>">
                                 <i class="fas fa-envelope"></i>
-                                <?php if ($navUnreadMsg > 0): ?><span class="nav-badge"><?= $navUnreadMsg > 99 ? '99+' : $navUnreadMsg ?></span><?php endif; ?>
                             </a>
-                            <ul class="dropdown-menu dropdown-menu-end dropdown-menu-lg" style="min-width:280px;">
-                                <li class="dropdown-header d-flex justify-content-between align-items-center">
-                                    <span><?= t('messages') ?></span>
-                                    <a class="small" href="<?= url('messages') ?>"><?= t('view_all') ?></a>
-                                </li>
-                                <?php if (empty($navConvos)): ?>
-                                    <li><span class="dropdown-item-text text-muted small"><?= t('no_messages') ?></span></li>
-                                <?php else: ?>
-                                    <?php foreach ($navConvos as $c): ?>
-                                        <li>
-                                            <a class="dropdown-item d-flex justify-content-between gap-2" href="<?= url('messages', ['conversation' => $c['other_user_id']]) ?>">
-                                                <span class="text-truncate"><?= escape($c['username'] ?? '') ?></span>
-                                                <?php if ((int)($c['unread'] ?? 0) > 0): ?><span class="nav-badge"><?= (int)$c['unread'] > 99 ? '99+' : (int)$c['unread'] ?></span><?php endif; ?>
-                                            </a>
-                                        </li>
-                                    <?php endforeach; ?>
-                                <?php endif; ?>
-                                <li><hr class="dropdown-divider"></li>
-                                <li><a class="dropdown-item text-center" href="<?= url('messages') ?>"><i class="fas fa-envelope me-2"></i><?= t('open_messages') ?></a></li>
-                            </ul>
                         </li>
-                        <li class="nav-item dropdown">
-                            <a class="nav-link nav-icon position-relative dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false" title="<?= t('notifications') ?>">
+                        <li class="nav-item">
+                            <a class="nav-link nav-icon position-relative" href="<?= url('notifications') ?>" title="<?= t('notifications') ?>">
                                 <i class="fas fa-bell"></i>
-                                <?php if ($navUnreadNotif > 0): ?><span class="nav-badge"><?= $navUnreadNotif > 99 ? '99+' : $navUnreadNotif ?></span><?php endif; ?>
                             </a>
-                            <ul class="dropdown-menu dropdown-menu-end dropdown-menu-lg" style="min-width:300px;">
-                                <li class="dropdown-header d-flex justify-content-between align-items-center">
-                                    <span><?= t('notifications') ?></span>
-                                    <a class="small" href="<?= url('notifications') ?>"><?= t('view_all') ?></a>
-                                </li>
-                                <?php if (empty($navNotifs)): ?>
-                                    <li><span class="dropdown-item-text text-muted small"><?= t('no_notifications') ?></span></li>
-                                <?php else: ?>
-                                    <?php foreach ($navNotifs as $n): ?>
-                                        <li>
-                                            <a class="dropdown-item" href="<?= url('notifications', ['do' => 'mark_read', 'id' => $n['id']]) ?>">
-                                                <div class="small text-truncate <?= empty($n['is_read']) ? 'fw-semibold' : 'text-muted' ?>"><?= escape(strip_tags($n['message'] ?? '')) ?></div>
-                                            </a>
-                                        </li>
-                                    <?php endforeach; ?>
-                                <?php endif; ?>
-                                <li><hr class="dropdown-divider"></li>
-                                <li><a class="dropdown-item text-center" href="<?= url('notifications') ?>"><i class="fas fa-bell me-2"></i><?= t('open_notifications') ?></a></li>
-                            </ul>
                         </li>
                         <li class="nav-item dropdown d-none d-lg-block">
                             <a class="nav-link dropdown-toggle d-flex align-items-center gap-2" href="#" data-bs-toggle="dropdown">

@@ -902,3 +902,35 @@ function create_notification(PDO $pdo, int $userId, string $type, string $title,
             ->execute([$userId, $type, $title, $message, $link]);
     }
 }
+
+/**
+ * Render a human-readable label for a notification row. The stored message may
+ * be a raw key (e.g. "pm_notification") emitted by plugins, so we translate the
+ * known types and fall back to the stored message text when it is already
+ * readable.
+ */
+function notification_label(array $n): string
+{
+    $type = $n['type'] ?? '';
+    $msg = $n['message'] ?? '';
+    $map = [
+        'pm'             => 'New private message',
+        'pm_notification'=> 'New private message',
+        'vote'           => 'New vote on your post',
+        'reply'          => 'New reply',
+        'mention'        => 'You were mentioned',
+        'follow'         => 'New follower',
+        'role'           => 'Your role was updated',
+    ];
+    if (isset($map[$type])) {
+        return $map[$type];
+    }
+    // If the message looks like a key (no spaces), translate via i18n too.
+    if (preg_match('/^[a-z_]+$/', $msg)) {
+        $translated = t($msg);
+        if ($translated !== $msg) {
+            return $translated;
+        }
+    }
+    return $msg;
+}

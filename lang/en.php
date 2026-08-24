@@ -117,6 +117,10 @@ return [
     'open_messages' => 'Open messages',
     'no_notifications' => 'No notifications',
     'open_notifications' => 'Open notifications',
+    'pm_notification' => 'New private message from {sender}',
+    'new_pm_subject' => 'New private message from {sender}',
+    'new_pm_body' => '<p>Hello {username},</p><p>You received a new private message from <strong>{sender}</strong>:</p><blockquote>{message}</blockquote><p><a href="{link}">Open messages</a></p>',
+
 
     // --- discussion listing ---
     'discussions_count' => '{n} discussions',
