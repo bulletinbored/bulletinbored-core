@@ -144,7 +144,7 @@ function url($action, $params = [], $absolute = false) {
         case 'create_thread':
         case 'update_profile':
         case 'upload_avatar':
-        case 'upload_avatar':
+        case 'remove_avatar':
             $path = [
                 'do_login' => '/login',
                 'do_register' => '/register',
@@ -153,6 +153,7 @@ function url($action, $params = [], $absolute = false) {
                 'create_thread' => '/new-thread',
                 'update_profile' => '/edit-profile',
                 'upload_avatar' => '/edit-profile',
+                'remove_avatar' => '/remove-avatar',
             ][$action];
             return $base . $path . (!empty($query) ? '?' . http_build_query($query) : '');
         default:

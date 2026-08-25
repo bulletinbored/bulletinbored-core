@@ -60,6 +60,12 @@
                     </div>
                     <button type="submit" class="btn btn-outline-soft w-100"><i class="fas fa-upload me-2"></i><?= t('upload_avatar') ?></button>
                 </form>
+                <?php if (!empty($_SESSION['avatar'] ?? '')): ?>
+                    <form method="POST" action="<?= url('remove_avatar') ?>" class="mt-2">
+                        <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                        <button type="submit" class="btn btn-outline-danger w-100"><i class="fas fa-trash-alt me-2"></i><?= t('remove_avatar') ?></button>
+                    </form>
+                <?php endif; ?>
             </section>
         </div>
     </div>

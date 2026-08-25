@@ -60,6 +60,7 @@ class Router
             '#^admin/ban-user$#'                        => fn()   => ['action' => 'ban_user'],
             '#^admin/unban-user$#'                      => fn()   => ['action' => 'unban_user'],
             '#^edit-profile$#'                          => fn()   => ['action' => 'edit_profile'],
+            '#^remove-avatar$#'                         => fn()   => ['action' => 'remove_avatar'],
             '#^forgot-password$#'                       => fn()   => ['action' => 'forgot_password'],
             '#^reset-password$#'                        => fn()   => ['action' => 'reset_password'],
             '#^verify-email$#'                          => fn()   => ['action' => 'verify_email'],

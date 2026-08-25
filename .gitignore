@@ -9,6 +9,8 @@ data/ratelimit/
 data/sessions/
 .user.ini
 
+uploads/
+
 .kilo/
 
 /lang/*.php

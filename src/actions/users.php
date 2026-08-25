@@ -15,6 +15,8 @@ function handle_users_action(string $action, string $method): bool
             return handle_profile();
         case 'edit_profile':
             return handle_edit_profile($method);
+        case 'remove_avatar':
+            return handle_remove_avatar($method);
         case 'forgot_password':
             return handle_forgot_password($method);
         case 'reset_password':
@@ -341,6 +343,37 @@ function handle_edit_profile(string $method): bool
 
     include __DIR__ . '/../../views/edit_profile.php';
     return true;
+}
+
+function handle_remove_avatar(string $method): bool
+{
+    global $pdo;
+
+    if (!is_logged_in()) {
+        die('Login required');
+    }
+
+    if ($method === 'POST') {
+        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+            die('CSRF token invalid');
+        }
+
+        $avatarDir = __DIR__ . '/../../uploads/avatars/';
+        foreach (glob($avatarDir . 'avatar_' . $_SESSION['user_id'] . '.*') as $oldAvatar) {
+            @unlink($oldAvatar);
+        }
+
+        try {
+            $pdo->prepare("UPDATE users SET avatar = '' WHERE id = ?")
+                ->execute([$_SESSION['user_id']]);
+            $_SESSION['avatar'] = '';
+            $_SESSION['avatar_upload_success'] = t('avatar_removed');
+        } catch (Exception $e) {
+            $_SESSION['avatar_upload_error'] = 'Database error: ' . $e->getMessage();
+        }
+    }
+
+    redirect(url('edit_profile'));
 }
 
 function handle_forgot_password(string $method): bool

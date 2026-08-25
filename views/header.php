@@ -262,7 +262,7 @@ function render_footer() {
                 </div>
             </div>
             <div class="footer-bottom">
-                &copy; <?= date('Y') ?> <?= escape($siteName) ?> &mdash; <?= t('footer_powered') ?>
+                &copy; <?= date('Y') ?> <?= escape($siteName) ?> - <?= t('footer_powered') ?>
             </div>
         </div>
     </footer>
