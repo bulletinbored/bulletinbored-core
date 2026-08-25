@@ -43,22 +43,6 @@ $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
     || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower($_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https')
     || (!empty($_SERVER['HTTP_X_FORWARDED_SSL']) && strtolower($_SERVER['HTTP_X_FORWARDED_SSL']) === 'on');
 $redirectHttps = !$isHttps;
-@file_put_contents(
-    __DIR__ . '/../data/debug_redirect.log',
-    sprintf(
-        "[%s] cookie_secure=%s isHttps=%s redirect=%s port=%s https=%s proto=%s host=%s uri=%s\n",
-        date('c'),
-        var_export(!empty($config['cookie_secure']), true),
-        var_export($isHttps, true),
-        var_export($redirectHttps, true),
-        $_SERVER['SERVER_PORT'] ?? 'none',
-        $_SERVER['HTTPS'] ?? 'none',
-        $_SERVER['HTTP_X_FORWARDED_PROTO'] ?? 'none',
-        $_SERVER['HTTP_HOST'] ?? 'none',
-        $_SERVER['REQUEST_URI'] ?? 'none'
-    ),
-    FILE_APPEND | LOCK_EX
-);
 if ($redirectHttps) {
     $host = $_SERVER['HTTP_HOST'] ?? ($_SERVER['SERVER_NAME'] ?? '');
     $reqUri = $_SERVER['REQUEST_URI'] ?? '/';
