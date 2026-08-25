@@ -104,18 +104,26 @@ function render_header($title = 'bulletinbored', $options = []) {
         <a href="<?= url('new_thread') ?>" class="mobile-tab" title="<?= t('new_thread') ?>">
             <i class="fas fa-plus"></i>
         </a>
+        <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
         <a href="<?= url('messages') ?>" class="mobile-tab" data-mobile-tab="messages" title="<?= t('messages') ?>">
             <i class="fas fa-envelope"></i>
         </a>
         <a href="<?= url('notifications') ?>" class="mobile-tab" data-mobile-tab="notifications" title="<?= t('notifications') ?>">
             <i class="fas fa-bell"></i>
         </a>
+        <?php endif; ?>
         <a href="#" class="mobile-tab" data-mobile-tab="search" title="<?= t('search') ?>">
             <i class="fas fa-search"></i>
         </a>
+        <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
         <a href="#" class="mobile-tab" data-mobile-tab="user" title="<?= t('account') ?>">
             <?= render_avatar($_SESSION['username'] ?? '', $_SESSION['avatar'] ?? '', 24) ?>
         </a>
+        <?php else: ?>
+        <a href="#" class="mobile-tab" data-mobile-tab="login" title="<?= t('login') ?> / <?= t('register') ?>">
+            <i class="fas fa-sign-in-alt"></i>
+        </a>
+        <?php endif; ?>
     </nav>
 
     <?php // Mobile full-screen panel (Facebook-style) – only visible < 992px ?>
@@ -125,23 +133,32 @@ function render_header($title = 'bulletinbored', $options = []) {
                 <i class="fas fa-arrow-left"></i>
             </button>
             <div class="mobile-stack-tabs" role="tablist">
+                <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
                 <button type="button" class="mobile-stack-tab active" data-tab="messages" role="tab"><i class="fas fa-envelope"></i></button>
                 <button type="button" class="mobile-stack-tab" data-tab="notifications" role="tab"><i class="fas fa-bell"></i></button>
-                <button type="button" class="mobile-stack-tab" data-tab="search" role="tab"><i class="fas fa-search"></i></button>
+                <?php endif; ?>
+                <button type="button" class="mobile-stack-tab<?= (function_exists('is_logged_in') && is_logged_in()) ? '' : ' active' ?>" data-tab="search" role="tab"><i class="fas fa-search"></i></button>
+                <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
                 <button type="button" class="mobile-stack-tab" data-tab="user" role="tab"><i class="fas fa-user"></i></button>
+                <?php else: ?>
+                <button type="button" class="mobile-stack-tab" data-tab="login" role="tab"><i class="fas fa-sign-in-alt"></i></button>
+                <?php endif; ?>
             </div>
             <span class="mobile-stack-title" id="mobileStackTitle"></span>
         </div>
         <div class="mobile-stack-body">
+            <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
             <div class="mobile-stack-pane active" data-pane="messages" id="paneMessages"><div class="mobile-stack-loading">Loading…</div></div>
             <div class="mobile-stack-pane" data-pane="notifications" id="paneNotifications"><div class="mobile-stack-loading">Loading…</div></div>
-            <div class="mobile-stack-pane" data-pane="search" id="paneSearch">
+            <?php endif; ?>
+            <div class="mobile-stack-pane<?= (function_exists('is_logged_in') && is_logged_in()) ? '' : ' active' ?>" data-pane="search" id="paneSearch">
                 <form class="mobile-stack-search" method="GET" action="<?= url('search') ?>" role="search">
                     <i class="fas fa-search"></i>
                     <input type="text" name="q" value="<?= escape($_GET['q'] ?? '') ?>" placeholder="<?= t('search') ?>…" aria-label="<?= t('search') ?>" required>
                     <button type="submit" class="btn btn-brand btn-sm"><?= t('search') ?></button>
                 </form>
             </div>
+            <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
             <div class="mobile-stack-pane" data-pane="user" id="paneUser">
                 <a class="mobile-stack-row" href="<?= url('profile', ['user' => $_SESSION['username'] ?? '']) ?>">
                     <i class="fas fa-id-card mobile-stack-row-icon"></i>
@@ -170,6 +187,18 @@ function render_header($title = 'bulletinbored', $options = []) {
                     <div class="mobile-stack-row-main"><div class="mobile-stack-row-title"><?= t('logout') ?></div></div>
                 </a>
             </div>
+            <?php else: ?>
+            <div class="mobile-stack-pane" data-pane="login" id="paneLogin">
+                <a class="mobile-stack-row" href="<?= url('login') ?>">
+                    <i class="fas fa-sign-in-alt mobile-stack-row-icon"></i>
+                    <div class="mobile-stack-row-main"><div class="mobile-stack-row-title"><?= t('login') ?></div></div>
+                </a>
+                <a class="mobile-stack-row" href="<?= url('register') ?>">
+                    <i class="fas fa-user-plus mobile-stack-row-icon"></i>
+                    <div class="mobile-stack-row-main"><div class="mobile-stack-row-title"><?= t('register') ?></div></div>
+                </a>
+            </div>
+            <?php endif; ?>
         </div>
     </div>
 

@@ -9,8 +9,8 @@
     var panes = stack.querySelectorAll('.mobile-stack-pane');
     var titleEl = document.getElementById('mobileStackTitle');
 
-    var titles = { messages: 'Messages', notifications: 'Notifications', search: 'Search', user: 'Account' };
-    var loaded = { messages: false, notifications: false, user: false };
+    var titles = { messages: 'Messages', notifications: 'Notifications', search: 'Search', user: 'Account', login: 'Login' };
+    var loaded = { messages: false, notifications: false, user: false, login: false };
 
     var isMobile = function () {
         return window.matchMedia('(max-width: 991.98px)').matches;
@@ -30,7 +30,12 @@
         stack.classList.add('open');
         stack.setAttribute('aria-hidden', 'false');
         document.body.style.overflow = 'hidden';
-        selectTab(tab || 'messages');
+        if (tab && stack.querySelector('.mobile-stack-tab[data-tab="' + tab + '"]')) {
+            selectTab(tab);
+        } else {
+            var first = stack.querySelector('.mobile-stack-tab');
+            selectTab(first ? first.dataset.tab : 'search');
+        }
     }
 
     function closeStack() {
