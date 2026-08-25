@@ -63,13 +63,15 @@ function render_post($data, $number, $threadId, $threadUrl, $opts = []) {
     $isOp       = !empty($opts['is_op']);
     $thread     = $opts['thread'] ?? [];
     $isWatching = !empty($opts['is_watching']);
+    $canModerate = !empty($opts['can_moderate']);
+    $categories  = $opts['categories'] ?? [];
+    $isLogged    = !empty($opts['is_logged']);
     $anchor     = $isOp ? 'post-1' : 'post-'.(int)($data['id'] ?? 0);
     $author     = $data['author'] ?? '';
     $role       = $data['author_role'] ?? 'user';
     $canEdit    = function_exists('is_logged_in') && is_logged_in()
                 && (($_SESSION['user_id'] ?? 0) == ($data['user_id'] ?? -1) || (function_exists('is_admin') && is_admin()));
     $isLocked   = ($thread['status'] ?? '') === 'locked';
-    global $canModerate, $categories, $isLogged;
     ?>
     <article class="post <?= $isOp ? 'post-op' : '' ?>" id="<?= escape($anchor) ?>" data-post-id="<?= (int)($data['id'] ?? 0) ?>" data-is-op="<?= $isOp ? '1' : '0' ?>">
         <div class="post-side">
@@ -222,8 +224,8 @@ function render_post($data, $number, $threadId, $threadUrl, $opts = []) {
                 <div class="post-actions">
                     <a class="post-action" href="<?= $threadUrl ?>#<?= escape($anchor) ?>" title="<?= t('permalink') ?>"><i class="fas fa-link"></i></a>
                     <?php if ($canEdit): ?>
-                        <a class="post-action" href="<?= url('edit_post', ['id' => !empty($opts['is_op']) ? $threadId : $data['id']]) ?>" title="<?= t('edit') ?>"><i class="fas fa-pen"></i></a>
-                        <form method="POST" action="<?= url('delete_post', ['id' => !empty($opts['is_op']) ? $threadId : $data['id']]) ?>" class="d-inline"
+                        <a class="post-action" href="<?= url(!empty($opts['is_op']) ? 'edit_thread' : 'edit_post', ['id' => !empty($opts['is_op']) ? $threadId : $data['id']]) ?>" title="<?= t('edit') ?>"><i class="fas fa-pen"></i></a>
+                        <form method="POST" action="<?= url(!empty($opts['is_op']) ? 'delete_thread' : 'delete_post', ['id' => !empty($opts['is_op']) ? $threadId : $data['id']]) ?>" class="d-inline"
                               data-confirm="<?= t('delete_confirm') ?>">
                             <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                             <button type="submit" class="post-action post-action-danger" title="<?= t('delete') ?>"><i class="fas fa-trash"></i></button>
@@ -253,7 +255,7 @@ function render_post($data, $number, $threadId, $threadUrl, $opts = []) {
 include __DIR__.'/header.php';
 render_header($thread['title'] ?? 'Thread', ['info' => $sidebarInfo]);
 ?>
-    <nav aria-label="breadcrumb">
+        <nav aria-label="breadcrumb">
         <ol class="breadcrumb">
             <li class="breadcrumb-item"><a href="<?= url('home') ?>"><?= t('all_discussions') ?></a></li>
             <li class="breadcrumb-item">
@@ -381,6 +383,9 @@ render_header($thread['title'] ?? 'Thread', ['info' => $sidebarInfo]);
                 'thread' => $thread,
                 'is_watching' => $isWatching,
                 'is_locked' => $isLocked,
+                'can_moderate' => $canModerate,
+                'categories' => $categories,
+                'is_logged' => $isLogged,
             ]); ?>
         <?php else: ?>
             <a class="stream-jump" href="<?= url('thread', ['id' => $threadId, 'slug' => slugify($thread['title'] ?? '')]) ?>">
@@ -395,7 +400,11 @@ render_header($thread['title'] ?? 'Thread', ['info' => $sidebarInfo]);
             </div>
         <?php else: ?>
             <?php foreach ($posts as $index => $post): ?>
-                <?php render_post($post, ($postPage - 1) * $perPage + $index + 2, $threadId, $threadUrl); ?>
+                <?php render_post($post, ($postPage - 1) * $perPage + $index + 2, $threadId, $threadUrl, [
+                    'can_moderate' => $canModerate,
+                    'categories' => $categories,
+                    'is_logged' => $isLogged,
+                ]); ?>
             <?php endforeach; ?>
         <?php endif; ?>
     </div>
@@ -447,3 +456,27 @@ render_header($thread['title'] ?? 'Thread', ['info' => $sidebarInfo]);
     <?php endif; ?>
 <?php render_footer(); ?>
 <script src="<?= htmlspecialchars(base_url() . '/assets/js/thread-mod.js', ENT_QUOTES, 'UTF-8') ?>" nonce="<?= htmlspecialchars(csp_nonce(), ENT_QUOTES, 'UTF-8') ?>"></script>
+<script nonce="<?= htmlspecialchars(csp_nonce(), ENT_QUOTES, 'UTF-8') ?>">
+    // Prevent the reply editor from grabbing focus / scrolling to bottom on load.
+    (function () {
+        function defocusReply() {
+            var box = document.querySelector('.reply-box');
+            if (!box) return;
+            var active = document.activeElement;
+            if (active && box.contains(active)) {
+                active.blur();
+                if (document.activeElement && box.contains(document.activeElement)) {
+                    document.activeElement.blur();
+                }
+            }
+            if (!location.hash) {
+                window.scrollTo(0, 0);
+            }
+        }
+        if (document.readyState === 'complete') {
+            defocusReply();
+        } else {
+            window.addEventListener('load', defocusReply);
+        }
+    })();
+</script>

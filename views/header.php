@@ -42,71 +42,136 @@ function render_header($title = 'bulletinbored', $options = []) {
     }
     ?>
 </head>
-<body>
+<body class="<?= (function_exists('is_admin') && is_admin()) ? 'is-admin' : '' ?>">
+    <script>
+        // Always start a thread (or any page) at the top, unless a permalink
+        // hash is present, so the browser does not restore scroll at the bottom.
+        if ('scrollRestoration' in history) {
+            history.scrollRestoration = 'manual';
+        }
+        if (!location.hash) {
+            window.scrollTo(0, 0);
+        }
+    </script>
     <nav class="navbar navbar-expand-lg navbar-forum fixed-top">
         <div class="container">
             <a class="navbar-brand" href="<?= url('home') ?>">
                 <span class="brand-mark">▦</span>
                 <span class="brand-text">bulletin<b>bored</b></span>
             </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-label="Menu">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav topbar-links me-auto">
-                    <li class="nav-item">
-                        <a class="nav-link" href="<?= url('home') ?>"><?= t('all_discussions') ?></a>
-                    </li>
-                </ul>
 
-                <form class="topbar-search me-lg-3" method="GET" action="<?= url('search') ?>" role="search">
-                    <i class="fas fa-search"></i>
-                    <input type="text" name="q" value="<?= escape($_GET['q'] ?? '') ?>" placeholder="<?= t('search') ?>…" aria-label="<?= t('search') ?>" required>
-                </form>
-
-                <?php // Keep this list the LAST child: plugins append their items here. ?>
-                <ul class="navbar-nav topbar-user">
-                    <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
+            <?php // User icons: desktop dropdown / mobile opens the full-screen stack ?>
+            <ul class="navbar-nav topbar-user">
+                <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
                         <li class="nav-item">
-                            <a class="nav-link nav-icon position-relative" href="<?= url('messages') ?>" title="<?= t('messages') ?>">
+                            <a class="nav-link nav-icon position-relative" href="<?= url('messages') ?>" title="<?= t('messages') ?>" data-mobile-tab="messages">
                                 <i class="fas fa-envelope"></i>
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link nav-icon position-relative" href="<?= url('notifications') ?>" title="<?= t('notifications') ?>">
+                            <a class="nav-link nav-icon position-relative" href="<?= url('notifications') ?>" title="<?= t('notifications') ?>" data-mobile-tab="notifications">
                                 <i class="fas fa-bell"></i>
                             </a>
                         </li>
-                        <li class="nav-item dropdown d-none d-lg-block">
-                            <a class="nav-link dropdown-toggle d-flex align-items-center gap-2" href="#" data-bs-toggle="dropdown">
-                                <?= render_avatar($_SESSION['username'] ?? '', $_SESSION['avatar'] ?? '', 28) ?>
-                                <span class="d-none d-lg-inline"><?= escape($_SESSION['username'] ?? '') ?></span>
-                            </a>
-                            <ul class="dropdown-menu dropdown-menu-end">
-                                <li><a class="dropdown-item" href="<?= url('profile', ['user' => $_SESSION['username'] ?? '']) ?>"><i class="fas fa-id-card me-2"></i><?= t('profile') ?></a></li>
-                                <li><a class="dropdown-item" href="<?= url('edit_profile') ?>"><i class="fas fa-sliders-h me-2"></i><?= t('edit_profile') ?></a></li>
-                                <li><a class="dropdown-item" href="<?= url('messages') ?>"><i class="fas fa-envelope me-2"></i><?= t('messages') ?></a></li>
-                                <?php if (function_exists('is_admin') && is_admin()): ?>
-                                    <li><hr class="dropdown-divider"></li>
-                                    <li><a class="dropdown-item" href="<?= url('admin') ?>"><i class="fas fa-cog me-2"></i><?= t('admin_panel') ?></a></li>
-                                <?php endif; ?>
+                        <li class="nav-item dropdown user-menu-dropdown">
+                        <a class="nav-link dropdown-toggle d-flex align-items-center gap-2" href="#" data-bs-toggle="dropdown">
+                            <?= render_avatar($_SESSION['username'] ?? '', $_SESSION['avatar'] ?? '', 28) ?>
+                            <span class="d-none d-lg-inline"><?= escape($_SESSION['username'] ?? '') ?></span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><a class="dropdown-item" href="<?= url('profile', ['user' => $_SESSION['username'] ?? '']) ?>"><i class="fas fa-id-card me-2"></i><?= t('profile') ?></a></li>
+                            <li><a class="dropdown-item" href="<?= url('edit_profile') ?>"><i class="fas fa-sliders-h me-2"></i><?= t('edit_profile') ?></a></li>
+                            <li><a class="dropdown-item" href="<?= url('messages') ?>"><i class="fas fa-envelope me-2"></i><?= t('messages') ?></a></li>
+                            <?php if (function_exists('is_admin') && is_admin()): ?>
                                 <li><hr class="dropdown-divider"></li>
-                                <li><a class="dropdown-item" href="<?= url('logout') ?>"><i class="fas fa-sign-out-alt me-2"></i><?= t('logout') ?></a></li>
-                            </ul>
-                        </li>
-                        <li class="nav-item d-lg-none">
-                            <a class="nav-link" href="<?= url('profile', ['user' => $_SESSION['username'] ?? '']) ?>" title="<?= t('profile') ?>">
-                                <?= render_avatar($_SESSION['username'] ?? '', $_SESSION['avatar'] ?? '', 28) ?>
-                            </a>
-                        </li>
-                    <?php else: ?>
-                        <li class="nav-item"><a class="nav-link" href="<?= url('login') ?>"><?= t('login') ?></a></li>
-                        <li class="nav-item"><a class="btn btn-brand btn-sm ms-lg-2" href="<?= url('register') ?>"><?= t('register') ?></a></li>
-                    <?php endif; ?>
-                </ul>
-            </div>
+                                <li><a class="dropdown-item" href="<?= url('admin') ?>"><i class="fas fa-cog me-2"></i><?= t('admin_panel') ?></a></li>
+                            <?php endif; ?>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="<?= url('logout') ?>"><i class="fas fa-sign-out-alt me-2"></i><?= t('logout') ?></a></li>
+                        </ul>
+                    </li>
+                <?php else: ?>
+                    <li class="nav-item"><a class="nav-link" href="<?= url('login') ?>"><?= t('login') ?></a></li>
+                    <li class="nav-item"><a class="btn btn-brand btn-sm ms-lg-2" href="<?= url('register') ?>"><?= t('register') ?></a></li>
+                <?php endif; ?>
+            </ul>
         </div>
     </nav>
+
+    <?php // Mobile tab bar: the 3 icons live BELOW the main navbar (mobile only).
+          // Tapping one opens the full-screen stack. ?>
+    <nav class="mobile-tabbar" aria-label="Mobile">
+        <a href="<?= url('new_thread') ?>" class="mobile-tab" title="<?= t('new_thread') ?>">
+            <i class="fas fa-plus"></i>
+        </a>
+        <a href="<?= url('messages') ?>" class="mobile-tab" data-mobile-tab="messages" title="<?= t('messages') ?>">
+            <i class="fas fa-envelope"></i>
+        </a>
+        <a href="<?= url('notifications') ?>" class="mobile-tab" data-mobile-tab="notifications" title="<?= t('notifications') ?>">
+            <i class="fas fa-bell"></i>
+        </a>
+        <a href="#" class="mobile-tab" data-mobile-tab="search" title="<?= t('search') ?>">
+            <i class="fas fa-search"></i>
+        </a>
+        <a href="#" class="mobile-tab" data-mobile-tab="user" title="<?= t('account') ?>">
+            <?= render_avatar($_SESSION['username'] ?? '', $_SESSION['avatar'] ?? '', 24) ?>
+        </a>
+    </nav>
+
+    <?php // Mobile full-screen panel (Facebook-style) – only visible < 992px ?>
+    <div class="mobile-stack" id="mobileStack" aria-hidden="true">
+        <div class="mobile-stack-bar">
+            <button type="button" class="mobile-stack-back" id="mobileStackBack" aria-label="Back to forum">
+                <i class="fas fa-arrow-left"></i>
+            </button>
+            <div class="mobile-stack-tabs" role="tablist">
+                <button type="button" class="mobile-stack-tab active" data-tab="messages" role="tab"><i class="fas fa-envelope"></i></button>
+                <button type="button" class="mobile-stack-tab" data-tab="notifications" role="tab"><i class="fas fa-bell"></i></button>
+                <button type="button" class="mobile-stack-tab" data-tab="search" role="tab"><i class="fas fa-search"></i></button>
+                <button type="button" class="mobile-stack-tab" data-tab="user" role="tab"><i class="fas fa-user"></i></button>
+            </div>
+            <span class="mobile-stack-title" id="mobileStackTitle"></span>
+        </div>
+        <div class="mobile-stack-body">
+            <div class="mobile-stack-pane active" data-pane="messages" id="paneMessages"><div class="mobile-stack-loading">Loading…</div></div>
+            <div class="mobile-stack-pane" data-pane="notifications" id="paneNotifications"><div class="mobile-stack-loading">Loading…</div></div>
+            <div class="mobile-stack-pane" data-pane="search" id="paneSearch">
+                <form class="mobile-stack-search" method="GET" action="<?= url('search') ?>" role="search">
+                    <i class="fas fa-search"></i>
+                    <input type="text" name="q" value="<?= escape($_GET['q'] ?? '') ?>" placeholder="<?= t('search') ?>…" aria-label="<?= t('search') ?>" required>
+                    <button type="submit" class="btn btn-brand btn-sm"><?= t('search') ?></button>
+                </form>
+            </div>
+            <div class="mobile-stack-pane" data-pane="user" id="paneUser">
+                <a class="mobile-stack-row" href="<?= url('profile', ['user' => $_SESSION['username'] ?? '']) ?>">
+                    <i class="fas fa-id-card mobile-stack-row-icon"></i>
+                    <div class="mobile-stack-row-main"><div class="mobile-stack-row-title"><?= t('profile') ?></div></div>
+                </a>
+                <a class="mobile-stack-row" href="<?= url('edit_profile') ?>">
+                    <i class="fas fa-sliders-h mobile-stack-row-icon"></i>
+                    <div class="mobile-stack-row-main"><div class="mobile-stack-row-title"><?= t('edit_profile') ?></div></div>
+                </a>
+                <a class="mobile-stack-row" href="<?= url('messages') ?>">
+                    <i class="fas fa-envelope mobile-stack-row-icon"></i>
+                    <div class="mobile-stack-row-main"><div class="mobile-stack-row-title"><?= t('messages') ?></div></div>
+                </a>
+                <a class="mobile-stack-row" href="<?= url('notifications') ?>">
+                    <i class="fas fa-bell mobile-stack-row-icon"></i>
+                    <div class="mobile-stack-row-main"><div class="mobile-stack-row-title"><?= t('notifications') ?></div></div>
+                </a>
+                <?php if (function_exists('is_admin') && is_admin()): ?>
+                <a class="mobile-stack-row" href="<?= url('admin') ?>">
+                    <i class="fas fa-cog mobile-stack-row-icon"></i>
+                    <div class="mobile-stack-row-main"><div class="mobile-stack-row-title"><?= t('admin_panel') ?></div></div>
+                </a>
+                <?php endif; ?>
+                <a class="mobile-stack-row" href="<?= url('logout') ?>">
+                    <i class="fas fa-sign-out-alt mobile-stack-row-icon"></i>
+                    <div class="mobile-stack-row-main"><div class="mobile-stack-row-title"><?= t('logout') ?></div></div>
+                </a>
+            </div>
+        </div>
+    </div>
 
     <main class="page-shell">
         <div class="container">
@@ -176,6 +241,7 @@ function render_footer() {
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" nonce="<?= htmlspecialchars(csp_nonce(), ENT_QUOTES, 'UTF-8') ?>"></script>
     <script src="<?= htmlspecialchars(base_url() . '/assets/js/navbar.js', ENT_QUOTES, 'UTF-8') ?>" nonce="<?= htmlspecialchars(csp_nonce(), ENT_QUOTES, 'UTF-8') ?>"></script>
     <script src="<?= htmlspecialchars(base_url() . '/assets/js/core-helpers.js', ENT_QUOTES, 'UTF-8') ?>" nonce="<?= htmlspecialchars(csp_nonce(), ENT_QUOTES, 'UTF-8') ?>"></script>
+    <script src="<?= htmlspecialchars(base_url() . '/assets/js/mobile-panel.js', ENT_QUOTES, 'UTF-8') ?>" nonce="<?= htmlspecialchars(csp_nonce(), ENT_QUOTES, 'UTF-8') ?>"></script>
 </body>
 </html>
 <?php

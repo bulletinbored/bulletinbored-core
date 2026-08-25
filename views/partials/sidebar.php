@@ -12,16 +12,16 @@ $sbInfo       = $GLOBALS['layoutOptions']['info'] ?? [];
 <aside class="sidebar" id="forumSidebar">
 
     <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
-        <a href="<?= url('new_thread') ?>" class="btn btn-brand w-100 btn-new-thread">
+        <a href="<?= url('new_thread') ?>" class="btn btn-brand w-100 btn-new-thread hide-on-mobile">
             <i class="fas fa-pen-to-square me-2"></i><?= t('new_thread') ?>
         </a>
     <?php else: ?>
-        <a href="<?= url('login') ?>" class="btn btn-brand w-100 btn-new-thread">
+        <a href="<?= url('login') ?>" class="btn btn-brand w-100 btn-new-thread hide-on-mobile">
             <i class="fas fa-pen-to-square me-2"></i><?= t('new_thread') ?>
         </a>
     <?php endif; ?>
 
-    <button class="btn btn-outline-soft w-100 d-lg-none sidebar-toggle" type="button"
+    <button class="btn btn-outline-soft w-100 d-lg-none sidebar-toggle hide-on-mobile" type="button"
             data-bs-toggle="collapse" data-bs-target="#sidebarBody" aria-expanded="false" aria-controls="sidebarBody">
         <i class="fas fa-bars me-2"></i><?= t('browse') ?>
     </button>

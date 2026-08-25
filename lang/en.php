@@ -118,6 +118,13 @@ return [
     'no_notifications' => 'No notifications',
     'open_notifications' => 'Open notifications',
     'pm_notification' => 'New private message from {sender}',
+    'mentioned_notification' => '{author} mentioned you in {title}',
+    'vote_notification' => '{voter} {type} your post in {title}',
+    'note_notification' => 'New note from {sender}',
+    'new_follower_notification' => 'You have a new follower',
+    'role_updated_notification' => 'Your role was updated',
+    'upvote' => 'upvoted',
+    'downvote' => 'downvoted',
     'new_pm_subject' => 'New private message from {sender}',
     'new_pm_body' => '<p>Hello {username},</p><p>You received a new private message from <strong>{sender}</strong>:</p><blockquote>{message}</blockquote><p><a href="{link}">Open messages</a></p>',
 

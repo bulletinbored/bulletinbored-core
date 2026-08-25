@@ -1210,9 +1210,30 @@ function handle_delete_user_post(): bool
     if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
         die('CSRF token invalid');
     }
-    $userId = (int)($_GET['id'] ?? 0);
+    $userId = (int)($_POST['id'] ?? $_GET['id'] ?? 0);
     if ($userId > 0) {
-        $pdo->prepare("DELETE FROM users WHERE id = ? AND role <> 'admin'")->execute([$userId]);
+        $stmt = $pdo->prepare("DELETE FROM users WHERE id = ? AND role <> 'admin'");
+        $stmt->execute([$userId]);
+        if ($stmt->rowCount() === 0) {
+            $_SESSION['admin_error'] = t('user_not_deleted') ?? 'User could not be deleted (does not exist or is an admin).';
+        }
+    } else {
+        $_SESSION['admin_error'] = t('invalid_user_id') ?? 'Invalid user id.';
+    }
+    redirect(url('admin_users'));
+    return true;
+}
+
+function handle_unban_user_post(): bool
+{
+    global $pdo;
+
+    if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+        die('CSRF token invalid');
+    }
+    $userId = (int)($_POST['id'] ?? $_GET['id'] ?? 0);
+    if ($userId > 0) {
+        $pdo->prepare("UPDATE users SET status = 'active', suspension_time = 0 WHERE id = ?")->execute([$userId]);
     }
     redirect(url('admin_users'));
     return true;
@@ -1225,54 +1246,11 @@ function handle_ban_user_post(): bool
     if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
         die('CSRF token invalid');
     }
-    $userId = (int)($_GET['id'] ?? 0);
-    $username = '';
+    $userId = (int)($_POST['id'] ?? $_GET['id'] ?? 0);
     if ($userId > 0) {
-        $userStmt = $pdo->prepare("SELECT username FROM users WHERE id = ?");
-        $userStmt->execute([$userId]);
-        $username = $userStmt->fetchColumn() ?? '';
         $pdo->prepare("UPDATE users SET status = 'banned' WHERE id = ? AND role <> 'admin'")->execute([$userId]);
     }
-    $redirect = $_POST['redirect'] ?? '';
-    if ($redirect !== '' && str_starts_with($redirect, '/')) {
-        $redirect = base_url() . $redirect;
-    }
-    if ($redirect && $username) {
-        redirect($redirect);
-    } elseif ($username) {
-        redirect(url('profile', ['user' => $username]));
-    } else {
-        redirect(url('admin_users'));
-    }
-    return true;
-}
-
-function handle_unban_user_post(): bool
-{
-    global $pdo;
-
-    if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
-        die('CSRF token invalid');
-    }
-    $userId = (int)($_GET['id'] ?? 0);
-    $username = '';
-    if ($userId > 0) {
-        $userStmt = $pdo->prepare("SELECT username FROM users WHERE id = ?");
-        $userStmt->execute([$userId]);
-        $username = $userStmt->fetchColumn() ?? '';
-        $pdo->prepare("UPDATE users SET status = 'active', suspension_time = 0 WHERE id = ?")->execute([$userId]);
-    }
-    $redirect = $_POST['redirect'] ?? '';
-    if ($redirect !== '' && str_starts_with($redirect, '/')) {
-        $redirect = base_url() . $redirect;
-    }
-    if ($redirect && $username) {
-        redirect($redirect);
-    } elseif ($username) {
-        redirect(url('profile', ['user' => $username]));
-    } else {
-        redirect(url('admin_users'));
-    }
+    redirect(url('admin_users'));
     return true;
 }
 
@@ -1283,26 +1261,12 @@ function handle_suspend_user_post(): bool
     if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
         die('CSRF token invalid');
     }
-    $userId = (int)($_GET['id'] ?? 0);
+    $userId = (int)($_POST['id'] ?? $_GET['id'] ?? 0);
     $days = max(1, (int)($_POST['days'] ?? 1));
     $suspensionTime = time() + ($days * 86400);
-    $username = '';
     if ($userId > 0) {
-        $userStmt = $pdo->prepare("SELECT username FROM users WHERE id = ?");
-        $userStmt->execute([$userId]);
-        $username = $userStmt->fetchColumn() ?? '';
         $pdo->prepare("UPDATE users SET status = 'suspended', suspension_time = ? WHERE id = ?")->execute([$suspensionTime, $userId]);
     }
-    $redirect = $_POST['redirect'] ?? '';
-    if ($redirect !== '' && str_starts_with($redirect, '/')) {
-        $redirect = base_url() . $redirect;
-    }
-    if ($redirect && $username) {
-        redirect($redirect);
-    } elseif ($username) {
-        redirect(url('profile', ['user' => $username]));
-    } else {
-        redirect(url('admin_users'));
-    }
+    redirect(url('admin_users'));
     return true;
 }

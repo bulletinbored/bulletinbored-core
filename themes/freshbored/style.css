@@ -153,6 +153,14 @@ hr { border-color: var(--fb-border); opacity: 1; }
     background-color: var(--fb-brand-soft);
 }
 .navbar-forum .nav-icon { font-size: 1rem; }
+/* Icon dropdowns (bellbored / textmebored) inject their panel into the <li>;
+   give it a positioning context so Bootstrap aligns the menu correctly. */
+.navbar-forum .topbar-user { display: flex; align-items: center; }
+.navbar-forum .topbar-user > li.nav-item { position: relative; display: flex; align-items: center; }
+/* Hide a badge that has no number (e.g. zero unread) so it doesn't show as a
+   red dot. bellbored / textmebored clear the text when the count is 0. */
+.navbar-forum .nav-badge:empty { display: none; }
+
 .navbar-forum .nav-badge {
     position: absolute;
     top: 2px;
@@ -859,27 +867,62 @@ hr { border-color: var(--fb-border); opacity: 1; }
 }
 
 /* ---------- responsive ---------- */
+/* The mobile tab bar is hidden everywhere by default; only shown < 992px */
+.mobile-tabbar { display: none; }
+
 @media (max-width: 991.98px) {
+    body { padding-top: calc(var(--fb-navbar-h) + 56px); }
     .sidebar { position: static; }
-    .topbar-search { flex: 1 1 auto; margin: .75rem 0; }
-    .navbar-forum .topbar-user { flex-direction: row; flex-wrap: wrap; gap: .25rem; align-items: center; }
     .page-head { flex-direction: column; }
 
-    /* Burger menu: solid, readable background. The user icons are plain
-       links on mobile (badges stay); dropdowns are disabled there. */
-    .navbar-forum .navbar-collapse {
+    /* Center the brand on mobile (icons live in the tab bar below) */
+    .navbar-forum .navbar-brand {
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+    }
+
+    /* Navbar keeps only the brand on mobile; user icons live in the tab bar */
+    .navbar-forum .topbar-user { display: none; }
+
+    /* Mobile tab bar: 4 icons (messages / notifications / search / user)
+       centered, with a background, fixed BELOW the main navbar. */
+    .mobile-tabbar {
+        display: flex;
+        position: fixed;
+        top: var(--fb-navbar-h);
+        left: 0; right: 0;
+        z-index: 1030;
+        align-items: center;
+        justify-content: center;
+        flex-wrap: nowrap;
+        gap: .3rem;
+        padding: 0 .4rem;
+        height: 56px;
         background: var(--fb-surface);
+        border-bottom: 1px solid var(--fb-border);
+        box-shadow: var(--fb-shadow);
+    }
+    .mobile-tabbar .mobile-tab {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+        width: 42px; height: 42px;
+        border-radius: 50%;
+        color: var(--fb-text);
+        font-size: 1.05rem;
+        text-decoration: none;
+        background: var(--fb-bg);
         border: 1px solid var(--fb-border);
-        border-radius: var(--fb-radius);
-        padding: 1rem;
-        margin-top: .5rem;
-        box-shadow: var(--fb-shadow-lg);
     }
-    .navbar-forum .topbar-links .nav-link {
-        padding: .6rem .25rem;
-        border-bottom: 1px solid var(--fb-border-soft);
-    }
-    .navbar-forum .navbar-toggler { color: var(--fb-text); }
+    .mobile-tabbar .mobile-tab:active { background: var(--fb-border-soft); }
+    .mobile-tabbar .mobile-tab img,
+    .mobile-tabbar .mobile-tab .avatar { width: 26px; height: 26px; border-radius: 50%; }
+
+    /* The New thread / Browse buttons live in #forumSidebar on desktop but are
+       already provided by the mobile tab bar, so hide them on mobile only. */
+    .hide-on-mobile { display: none !important; }
 }
 
 @media (max-width: 767.98px) {
@@ -917,6 +960,166 @@ hr { border-color: var(--fb-border); opacity: 1; }
     .profile-head-actions { margin-left: 0; width: 100%; }
     .sort-bar { overflow-x: auto; flex-wrap: nowrap; }
     .sort-link { white-space: nowrap; }
+}
+
+/* ---------- mobile full-screen stack (Facebook-style) ---------- */
+.mobile-stack {
+    display: none;
+}
+
+@media (max-width: 991.98px) {
+    .mobile-stack {
+        display: block;
+        position: fixed;
+        inset: 0;
+        z-index: 1200;
+        background: var(--fb-surface);
+        transform: translateX(100%);
+        transition: transform .28s cubic-bezier(.4, 0, .2, 1);
+        visibility: hidden;
+    }
+    .mobile-stack.open {
+        transform: translateX(0);
+        visibility: visible;
+    }
+    .mobile-stack-bar {
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        height: var(--fb-navbar-h);
+        padding: 0 .75rem;
+        border-bottom: 1px solid var(--fb-border);
+        background: var(--fb-surface);
+        position: sticky;
+        top: 0;
+    }
+    .mobile-stack-back {
+        border: none;
+        background: transparent;
+        color: var(--fb-brand);
+        font-size: 1.1rem;
+        width: 40px; height: 40px;
+        border-radius: 10px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .mobile-stack-back:active { background: var(--fb-border-soft); }
+    .mobile-stack-tabs {
+        flex: 1;
+        display: flex;
+        justify-content: center;
+        gap: 1.25rem;
+    }
+    .mobile-stack-tab {
+        border: none;
+        background: transparent;
+        color: var(--fb-muted-soft);
+        font-size: 1.15rem;
+        padding: .35rem .5rem;
+        border-radius: 10px;
+        position: relative;
+    }
+    .mobile-stack-tab.active { color: var(--fb-brand); }
+    .mobile-stack-tab.active::after {
+        content: "";
+        position: absolute;
+        left: 50%; bottom: -2px;
+        width: 22px; height: 3px;
+        border-radius: 3px;
+        background: var(--fb-brand);
+        transform: translateX(-50%);
+    }
+    .mobile-stack-title {
+        width: 40px;
+        text-align: right;
+        font-size: .8rem;
+        color: var(--fb-muted);
+        visibility: hidden;
+    }
+    .mobile-stack-body {
+        position: absolute;
+        top: var(--fb-navbar-h);
+        left: 0; right: 0; bottom: 0;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    .mobile-stack-pane { display: none; padding: .5rem 0; }
+    .mobile-stack-pane.active { display: block; animation: stackFade .2s ease; }
+    @keyframes stackFade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+    .mobile-stack-loading,
+    .mobile-stack-empty {
+        text-align: center;
+        color: var(--fb-muted-soft);
+        padding: 3rem 1rem;
+    }
+    .mobile-stack-empty i { font-size: 1.75rem; display: block; margin-bottom: .5rem; }
+
+    .mobile-stack-row {
+        display: flex;
+        align-items: center;
+        gap: .75rem;
+        padding: .8rem 1rem;
+        border-bottom: 1px solid var(--fb-border-soft);
+        color: var(--fb-text);
+        text-decoration: none;
+    }
+    .mobile-stack-row:active { background: var(--fb-border-soft); }
+    .mobile-stack-row-icon { width: 20px; text-align: center; color: var(--fb-muted-soft); }
+    .mobile-stack-row-main { flex: 1; min-width: 0; }
+    .mobile-stack-row-title { font-weight: 600; font-size: .95rem; }
+    .mobile-stack-row-sub {
+        font-size: .82rem;
+        color: var(--fb-muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .mobile-stack-count {
+        background: #e5484d;
+        color: #fff;
+        font-size: .72rem;
+        font-weight: 700;
+        min-width: 20px;
+        height: 20px;
+        padding: 0 6px;
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .mobile-stack-dot {
+        width: 9px; height: 9px;
+        border-radius: 50%;
+        background: var(--fb-brand);
+        flex-shrink: 0;
+    }
+    .mobile-stack-search {
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        padding: .75rem 1rem;
+        border-bottom: 1px solid var(--fb-border-soft);
+        position: relative;
+    }
+    .mobile-stack-search i {
+        color: var(--fb-muted-soft);
+        font-size: .85rem;
+    }
+    .mobile-stack-search input {
+        flex: 1;
+        min-width: 0;
+        border: 1px solid var(--fb-border);
+        border-radius: 999px;
+        padding: .5rem .9rem;
+        font-size: .9rem;
+        outline: none;
+    }
+    .mobile-stack-search input:focus {
+        border-color: var(--fb-brand);
+        box-shadow: 0 0 0 3px rgba(85,2,150,.12);
+    }
 }
 
 /* ---------- markdown container emitted by the core ---------- */

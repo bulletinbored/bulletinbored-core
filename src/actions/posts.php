@@ -13,6 +13,10 @@ function handle_posts_action(string $action, string $method): bool
             return handle_edit_post($method);
         case 'delete_post':
             return $method === 'POST' ? handle_delete_post() : false;
+        case 'edit_thread':
+            return handle_edit_thread($method);
+        case 'delete_thread':
+            return $method === 'POST' ? handle_delete_thread() : false;
         case 'watch':
             return is_logged_in() ? handle_watch() : false;
         case 'unwatch':
@@ -209,7 +213,6 @@ function handle_reply_post(): bool
 function handle_edit_post(string $method): bool
 {
     global $pdo;
-    global $pdo;
 
     if (!is_logged_in()) {
         die('Login required');
@@ -254,9 +257,60 @@ function handle_edit_post(string $method): bool
     return true;
 }
 
-function handle_delete_post(): bool
+function handle_edit_thread(string $method): bool
 {
     global $pdo;
+
+    if (!is_logged_in()) {
+        die('Login required');
+    }
+
+    $threadId = (int)($_GET['id'] ?? 0);
+    if ($threadId <= 0) {
+        redirect(url('home'));
+    }
+
+    $threadStmt = $pdo->prepare("SELECT * FROM threads WHERE id = ?");
+    $threadStmt->execute([$threadId]);
+    $thread = $threadStmt->fetch();
+
+    if (!$thread) {
+        redirect(url('home'));
+    }
+
+    if ($thread['user_id'] !== $_SESSION['user_id'] && !is_admin()) {
+        die('Not authorized');
+    }
+
+    if ($method === 'POST') {
+        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+            die('CSRF token invalid');
+        }
+
+        $content = validate_input($_POST['content'] ?? '');
+        if ($content !== '') {
+            $pdo->prepare("UPDATE threads SET content = ? WHERE id = ?")
+                ->execute([$content, $threadId]);
+        }
+        if (!empty($_POST['title'])) {
+            $pdo->prepare("UPDATE threads SET title = ? WHERE id = ?")
+                ->execute([validate_input($_POST['title']), $threadId]);
+        }
+
+        redirect(url('thread', ['id' => $threadId, 'slug' => slugify($thread['title'] ?? '')]));
+    }
+
+    $editThreadTitle = true;
+    $post = $thread;
+    $post['thread_id'] = $thread['id'];
+    $post['thread_title'] = $thread['title'];
+
+    include __DIR__ . '/../../views/edit_post.php';
+    return true;
+}
+
+function handle_delete_post(): bool
+{
     global $pdo;
 
     if (!is_logged_in()) {
@@ -302,12 +356,52 @@ function handle_delete_post(): bool
     return true;
 }
 
+function handle_delete_thread(): bool
+{
+    global $pdo;
+
+    if (!is_logged_in()) {
+        die('Login required');
+    }
+
+    if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+        die('CSRF token invalid');
+    }
+
+    $threadId = (int)($_GET['id'] ?? 0);
+    if ($threadId <= 0) {
+        redirect(url('home'));
+    }
+
+    $threadStmt = $pdo->prepare("SELECT * FROM threads WHERE id = ?");
+    $threadStmt->execute([$threadId]);
+    $thread = $threadStmt->fetch();
+
+    if (!$thread) {
+        redirect(url('home'));
+    }
+
+    if ($thread['user_id'] !== $_SESSION['user_id'] && !is_admin()) {
+        die('Not authorized');
+    }
+
+    $pdo->prepare("DELETE FROM posts WHERE thread_id = ?")->execute([$threadId]);
+    $pdo->prepare("DELETE FROM threads WHERE id = ?")->execute([$threadId]);
+
+    redirect(url('category', ['id' => $thread['category_id']]));
+    return true;
+}
+
 function handle_watch(): bool
 {
     global $pdo;
 
-    $threadId = (int)($_GET['id'] ?? 0);
-    if ($threadId > 0) {
+    $threadId = (int)($_GET['thread_id'] ?? 0);
+    if ($threadId > 0 && is_logged_in()) {
+        try {
+            $pdo->prepare("INSERT OR IGNORE INTO thread_watchers (thread_id, user_id) VALUES (?, ?)")
+                ->execute([$threadId, $_SESSION['user_id']]);
+        } catch (PDOException $e) {}
         $watched = $_SESSION['watched_threads'] ?? [];
         if (!in_array($threadId, $watched, true)) {
             $watched[] = $threadId;
@@ -315,7 +409,7 @@ function handle_watch(): bool
         }
     }
 
-    $referer = $_SERVER['HTTP_REFERER'] ?? url('home');
+    $referer = $_SERVER['HTTP_REFERER'] ?? url('thread', ['id' => $threadId]);
     redirect($referer);
     return true;
 }
@@ -324,14 +418,18 @@ function handle_unwatch(): bool
 {
     global $pdo;
 
-    $threadId = (int)($_GET['id'] ?? 0);
-    if ($threadId > 0) {
+    $threadId = (int)($_GET['thread_id'] ?? 0);
+    if ($threadId > 0 && is_logged_in()) {
+        try {
+            $pdo->prepare("DELETE FROM thread_watchers WHERE thread_id = ? AND user_id = ?")
+                ->execute([$threadId, $_SESSION['user_id']]);
+        } catch (PDOException $e) {}
         $watched = $_SESSION['watched_threads'] ?? [];
         $watched = array_filter($watched, fn($id) => $id !== $threadId);
         $_SESSION['watched_threads'] = array_values($watched);
     }
 
-    $referer = $_SERVER['HTTP_REFERER'] ?? url('home');
+    $referer = $_SERVER['HTTP_REFERER'] ?? url('thread', ['id' => $threadId]);
     redirect($referer);
     return true;
 }

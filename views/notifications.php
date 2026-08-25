@@ -25,15 +25,28 @@
         </div>
     <?php else: ?>
         <div class="list-group">
-            <?php foreach ($notifications as $n): 
-                $nDate = $n['created_at'] ?? '';
-                $nFormattedDate = $nDate ? date('M j, Y H:i', strtotime($nDate)) : '';
-            ?>
-                <div class="list-group-item <?= $n['is_read'] ? '' : 'list-group-item-warning' ?>">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div>
-                            <h6 class="mb-1"><?= escape($n['title'] ?: notification_label($n)) ?></h6>
-                            <p class="mb-1 small text-muted"><?= escape($n['message'] ?? '') ?></p>
+                <?php foreach ($notifications as $n): 
+                    $nDate = $n['created_at'] ?? '';
+                    $nFormattedDate = $nDate ? date('M j, Y H:i', strtotime($nDate)) : '';
+                    $nLabel = $n['title'] ?: notification_label($n);
+                    // Some legacy rows stored a raw translation key (or text with
+                    // lost parameters) directly in the title/message. Translate it
+                    // when it is a known key so the user never sees the key itself.
+                    if (preg_match('/^[a-z_]+$/', $nLabel) && t($nLabel) !== $nLabel) {
+                        $nLabel = t($nLabel);
+                    }
+                    $nMessage = $n['message'] ?? '';
+                    if (preg_match('/^[a-z_]+$/', $nMessage) && t($nMessage) !== $nMessage) {
+                        $nMessage = t($nMessage);
+                    }
+                ?>
+                    <div class="list-group-item <?= $n['is_read'] ? '' : 'list-group-item-warning' ?>">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <h6 class="mb-1"><?= escape($nLabel) ?></h6>
+                                <?php if ($nMessage !== '' && $nMessage !== $nLabel): ?>
+                                    <p class="mb-1 small text-muted"><?= escape($nMessage) ?></p>
+                                <?php endif; ?>
                             <small class="text-muted"><i class="fas fa-clock me-1"></i><?= escape($nFormattedDate) ?></small>
                         </div>
                         <div class="ms-3">
@@ -41,8 +54,10 @@
                                 <a href="<?= escape($n['link']) ?>" class="btn btn-sm btn-outline-primary"><i class="fas fa-external-link-alt me-1"></i>View</a>
                             <?php endif; ?>
                             <?php if (!$n['is_read']): ?>
-                                <form method="POST" action="<?= url('notifications', ['do' => 'mark_read', 'id' => $n['id']]) ?>" class="d-inline" data-confirm="Mark as read?">
+                                <form method="POST" action="<?= url('notifications') ?>" class="d-inline" data-confirm="Mark as read?">
                                     <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                                    <input type="hidden" name="do" value="mark_read">
+                                    <input type="hidden" name="id" value="<?= (int)$n['id'] ?>">
                                     <button type="submit" class="btn btn-sm btn-outline-success"><i class="fas fa-check me-1"></i>Mark read</button>
                                 </form>
                             <?php endif; ?>

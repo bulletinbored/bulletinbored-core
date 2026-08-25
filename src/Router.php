@@ -35,6 +35,8 @@ class Router
             '#^u/([^/]+)$#'                              => fn($m) => ['action' => 'profile', 'user' => urldecode($m[1])],
             '#^edit-post/([0-9]+)$#'                    => fn($m) => ['action' => 'edit_post', 'id' => (int)$m[1]],
             '#^delete-post/([0-9]+)$#'                  => fn($m) => ['action' => 'delete_post', 'id' => (int)$m[1]],
+            '#^edit-thread/([0-9]+)$#'                  => fn($m) => ['action' => 'edit_thread', 'id' => (int)$m[1]],
+            '#^delete-thread/([0-9]+)$#'                => fn($m) => ['action' => 'delete_thread', 'id' => (int)$m[1]],
             '#^download/([0-9]+)$#'                     => fn($m) => ['action' => 'download', 'id' => (int)$m[1]],
             '#^admin$#'                                  => fn()   => ['action' => 'admin'],
             '#^admin/moderation$#'                       => fn()   => ['action' => 'admin_moderation'],

@@ -70,6 +70,14 @@ function url($action, $params = [], $absolute = false) {
             $id = $params['id'] ?? 0;
             unset($query['id']);
             return $base . '/delete-post/' . $id . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'edit_thread':
+            $id = $params['id'] ?? 0;
+            unset($query['id']);
+            return $base . '/edit-thread/' . $id . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'delete_thread':
+            $id = $params['id'] ?? 0;
+            unset($query['id']);
+            return $base . '/delete-thread/' . $id . (!empty($query) ? '?' . http_build_query($query) : '');
         case 'reply':
             return $base . '/reply' . (!empty($query) ? '?' . http_build_query($query) : '');
         case 'watch':
@@ -914,18 +922,22 @@ function notification_label(array $n): string
     $type = $n['type'] ?? '';
     $msg = $n['message'] ?? '';
     $map = [
-        'pm'             => 'New private message',
-        'pm_notification'=> 'New private message',
-        'vote'           => 'New vote on your post',
-        'reply'          => 'New reply',
-        'mention'        => 'You were mentioned',
-        'follow'         => 'New follower',
-        'role'           => 'Your role was updated',
+        'pm'             => 'pm_notification',
+        'pm_notification'=> 'pm_notification',
+        'vote'           => 'vote_notification',
+        'reply'          => 'reply_notification',
+        'mention'        => 'mentioned_notification',
+        'follow'         => 'new_follower_notification',
+        'role'           => 'role_updated_notification',
+        'note'           => 'note_notification',
+        'note_notification' => 'note_notification',
     ];
     if (isset($map[$type])) {
-        return $map[$type];
+        return t($map[$type]);
     }
     // If the message looks like a key (no spaces), translate via i18n too.
+    // Only do so when the key actually exists, otherwise we would echo the
+    // raw key (e.g. "note_notification") to the user.
     if (preg_match('/^[a-z_]+$/', $msg)) {
         $translated = t($msg);
         if ($translated !== $msg) {
