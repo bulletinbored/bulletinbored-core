@@ -42,11 +42,17 @@ $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
     || (isset($_SERVER['SERVER_PORT']) && (int) $_SERVER['SERVER_PORT'] === 443)
     || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower($_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https')
     || (!empty($_SERVER['HTTP_X_FORWARDED_SSL']) && strtolower($_SERVER['HTTP_X_FORWARDED_SSL']) === 'on');
-$redirectHttps = !$isHttps;
+// The redirect can be disabled with "force_https": false in config.json. That
+// escape hatch matters on hosts where the domain has no valid certificate yet
+// (or during local development): without it every URL would 301 to an https://
+// address the browser cannot open, locking the site out entirely. It is also
+// skipped for CLI/built-in-server requests, which have no host to redirect to.
+$forceHttps = $config['force_https'] ?? true;
+$redirectHttps = $forceHttps && !$isHttps && PHP_SAPI !== 'cli' && PHP_SAPI !== 'cli-server';
 if ($redirectHttps) {
     $host = $_SERVER['HTTP_HOST'] ?? ($_SERVER['SERVER_NAME'] ?? '');
     $reqUri = $_SERVER['REQUEST_URI'] ?? '/';
-    if ($host !== '') {
+    if ($host !== '' && !preg_match('#^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$#i', $host)) {
         header('Location: https://' . $host . $reqUri, true, 301);
         exit;
     }
@@ -82,7 +88,7 @@ session_name('BBSESSID');
 $configIsHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
     || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower($_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https')
     || (!empty($_SERVER['HTTP_X_FORWARDED_SSL']) && strtolower($_SERVER['HTTP_X_FORWARDED_SSL']) === 'on');
-$sessionSecure = $config['cookie_secure'] ?? $configIsHttps;
+$sessionSecure = $config['cookie_secure'] ?? ($configIsHttps && $forceHttps);
 
 session_set_cookie_params([
     'lifetime' => 0,

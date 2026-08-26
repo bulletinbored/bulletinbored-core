@@ -17,6 +17,7 @@
     "avatar_max_size": 2097152,
     "avatar_allowed_types": ["image/jpeg", "image/png", "image/gif", "image/webp"],
     "base_url": "",
+    "force_https": true,
     "cookie_secure": true,
     "site_tagline": "",
     "site_icon": "",

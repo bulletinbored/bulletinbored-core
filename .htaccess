@@ -1,14 +1,28 @@
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
-    # The rewrite rules below are relative (no RewriteBase) so they work
-    # regardless of the install path: /forum, /forum-nuovo or document root.
-    RewriteRule ^thread/([0-9]+)(?:-([^/]+))?$ index.php?action=thread&id=$1 [L,QSA]
-    RewriteRule ^category/([0-9]+)(?:-([^/]+))?$ index.php?action=category&id=$1 [L,QSA]
-    RewriteRule ^u/([^/]+)$ index.php?action=profile&user=$1 [L,QSA]
-    RewriteRule ^download/([0-9]+)$ index.php?action=download&id=$1 [L,QSA]
+    # Derive the base path automatically so the rules work regardless of the
+    # install path (/forum, /forum-nuovo or the document root) without needing
+    # a hardcoded RewriteBase. Some shared hosts (Netsons, cPanel-based ones)
+    # resolve relative rewrites against the document root instead of the
+    # .htaccess directory, which breaks subfolder installs.
+    RewriteCond %{REQUEST_URI}::$1 ^(.*?/)(.*)::\2$
+    RewriteRule ^(.*)$ - [E=BASE:%1]
+
+    RewriteRule ^thread/([0-9]+)(?:-([^/]+))?$ %{ENV:BASE}index.php?action=thread&id=$1 [L,QSA]
+    RewriteRule ^category/([0-9]+)(?:-([^/]+))?$ %{ENV:BASE}index.php?action=category&id=$1 [L,QSA]
+    RewriteRule ^u/([^/]+)$ %{ENV:BASE}index.php?action=profile&user=$1 [L,QSA]
+    RewriteRule ^download/([0-9]+)$ %{ENV:BASE}index.php?action=download&id=$1 [L,QSA]
 
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteCond %{REQUEST_FILENAME} !-d
-    RewriteRule ^ index.php [L]
+    RewriteRule ^ %{ENV:BASE}index.php [L]
+</IfModule>
+
+# Without mod_rewrite the pretty URLs (/login, /register, ...) cannot work.
+# Fail loudly instead of returning a confusing 404 from Apache.
+<IfModule !mod_rewrite.c>
+    <IfModule mod_dir.c>
+        DirectoryIndex index.php
+    </IfModule>
 </IfModule>
