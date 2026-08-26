@@ -90,6 +90,8 @@ function handle_thread_view(): bool
     $postsStmt->execute([$threadId]);
     $posts = $postsStmt->fetchAll();
 
+    $categories = $pdo->query("SELECT * FROM categories ORDER BY position")->fetchAll();
+
     include __DIR__ . '/../../views/thread.php';
     return true;
 }
@@ -342,7 +344,7 @@ function handle_delete_post(): bool
 
     $pdo->prepare("DELETE FROM posts WHERE id = ?")->execute([$postId]);
 
-    $countStmt = $pdo->prepare("SELECT COUNT(*) FROM posts WHERE thread_id = ?");
+    $countStmt = $pdo->prepare("SELECT COUNT(*) FROM posts WHERE thread_id = ? AND status = 'visible'");
     $countStmt->execute([$threadId]);
     if (empty($countStmt->fetchColumn())) {
         $threadStmt = $pdo->prepare("SELECT * FROM threads WHERE id = ?");

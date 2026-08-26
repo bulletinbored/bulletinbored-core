@@ -217,12 +217,9 @@ class PluginManager
             if (empty($plugin['folder'])) {
                 continue;
             }
-            $langFile = $this->pluginsDir . '/' . $plugin['folder'] . '/lang/' . $lang . '.php';
+            $langFile = $this->pluginsDir . '/' . $plugin['folder'] . '/lang/' . $lang . '.json';
             if (file_exists($langFile)) {
-                $data = include $langFile;
-                if (is_array($data)) {
-                    $GLOBALS['i18n'][$scope] = $data;
-                }
+                $GLOBALS['i18n'][$scope] = load_lang_file($langFile);
             }
         }
     }

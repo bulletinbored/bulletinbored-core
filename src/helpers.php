@@ -199,9 +199,13 @@ function sanitize_html($html) {
     // External social embeds (YouTube/Twitter/X iframes, Instagram/Facebook
     // containers) are produced by the editbored editor's link-preview system.
     // These hosts are restrictively allowed so third-party players can render.
+    // NOTE: inline styles and generic id/data-* attributes are intentionally
+    // NOT in the allow-list below — they are the most common stored-XSS /
+    // phishing (overlay) vectors and add no essential formatting once content
+    // is authored through the editor.
     $allowedTags = '<p><br><a><strong><em><b><i><u><s><strike><ul><ol><li>'
         . '<blockquote><code><pre><h1><h2><h3><h4><h5><h6><hr><table><thead>'
-        . '<tbody><tr><th><td><img><span><div><sub><sup><del><ins><mark><abbr>'
+        . '<tbody><tr><th><td><img><sub><sup><del><ins><mark><abbr>'
         . '<iframe>';
     $decoded = strip_tags($decoded, $allowedTags);
 
@@ -219,8 +223,7 @@ function sanitize_html($html) {
                     $name = strtolower($a[1]);
                     $val  = $a[3] ?? ($a[4] ?? ($a[5] ?? ''));
 
-                    // Drop every event handler. (style/id/data-* are allowed for
-                    // social-embed containers, but data:* URIs are still banned.)
+                    // Drop every event handler.
                     if (str_starts_with($name, 'on')) {
                         continue;
                     }
@@ -243,14 +246,7 @@ function sanitize_html($html) {
                     }
                     if ($name === 'href' || $name === 'src') {
                         $safeAttrs[] = $name . '="' . escape($val) . '"';
-                    } elseif ($name === 'style') {
-                        $safeStyle = sanitize_style($val);
-                        if ($safeStyle !== '') {
-                            $safeAttrs[] = 'style="' . escape($safeStyle) . '"';
-                        }
-                    } elseif ($name === 'id') {
-                        $safeAttrs[] = 'id="' . escape($val) . '"';
-                    } elseif (in_array($name, ['alt', 'title', 'class', 'target', 'rel', 'width', 'height', 'colspan', 'rowspan', 'start', 'cite'])) {
+                    } elseif (in_array($name, ['alt', 'title', 'class', 'target', 'rel', 'width', 'height', 'colspan', 'rowspan', 'start', 'cite'], true)) {
                         $safeAttrs[] = $name . '="' . escape($val) . '"';
                     } elseif ($name === 'data-url') {
                         $safeAttrs[] = 'data-url="' . escape($val) . '"';
@@ -276,27 +272,6 @@ function sanitize_html($html) {
     $decoded = preg_replace('/✕/', '', $decoded);
 
     return $decoded;
-}
-
-function sanitize_style(string $css): string
-{
-    if ($css === '') {
-        return '';
-    }
-
-    $css = preg_replace('/expression\s*\([^)]*\)/is', '', $css);
-    $css = preg_replace('/behavior\s*:[^;]+/i', '', $css);
-    $css = preg_replace('/-moz-binding\s*:[^;]+/i', '', $css);
-    $css = preg_replace('/position\s*:\s*(fixed|sticky)\b/i', '', $css);
-    $css = preg_replace('/z-index\s*:\s*[1-9]\d*\b/i', '', $css);
-    $css = preg_replace('/url\s*\(\s*[\'"]?\s*(?:javascript|vbscript)\s*:[^)\'"]*[\'"]?\s*\)/is', '', $css);
-    $css = preg_replace('/url\s*\(\s*[\'"]?\s*data\s*:[^)\'"]*[\'"]?\s*\)/is', '', $css);
-    $css = preg_replace('/[{}]/', '', $css);
-    $css = preg_replace('/\s+/', ' ', $css);
-    $css = str_replace(' ;', ';', $css);
-    $css = trim($css, '; ');
-
-    return $css;
 }
 
 function marked_parse($text) {
@@ -813,6 +788,57 @@ function send_email($to, $subject, $body) {
         return true;
     }
     return @mail($to, '=?UTF-8?B?'.base64_encode($subject).'?=', $htmlBody, $headers, $envelope);
+}
+
+// Notify the thread author and watchers about a new reply (case 1).
+// Creates in-app notifications; skips the user who posted the reply.
+function notify_thread_reply($thread, int $authorId, string $content): void
+{
+    global $pdo;
+    if (!isset($pdo) || !$pdo) {
+        return;
+    }
+    $threadId = (int)($thread['id'] ?? 0);
+    if ($threadId <= 0) {
+        return;
+    }
+    $title = $thread['title'] ?? '';
+    $authorName = '';
+    $authorStmt = $pdo->prepare("SELECT username FROM users WHERE id = ?");
+    $authorStmt->execute([$authorId]);
+    $authorName = (string)($authorStmt->fetchColumn() ?: '');
+
+    $subject = t('reply_notification_subject', ['title' => $title]);
+    $body = t('reply_notification_body', [
+        'username' => $authorName,
+        'author' => $authorName,
+        'title' => $title,
+        'link' => url('thread', ['id' => $threadId, 'slug' => slugify($title)], true),
+    ]);
+
+    $recipients = [];
+    // Thread author.
+    if (!empty($thread['user_id']) && (int)$thread['user_id'] !== $authorId) {
+        $recipients[(int)$thread['user_id']] = true;
+    }
+    // Watchers.
+    try {
+        $wStmt = $pdo->prepare("SELECT user_id FROM thread_watchers WHERE thread_id = ?");
+        $wStmt->execute([$threadId]);
+        foreach ($wStmt->fetchAll(PDO::FETCH_COLUMN) as $uid) {
+            $uid = (int)$uid;
+            if ($uid !== $authorId) {
+                $recipients[$uid] = true;
+            }
+        }
+    } catch (Throwable $e) {}
+
+    $ins = $pdo->prepare("INSERT INTO notifications (user_id, type, title, message, link, is_read, created_at) VALUES (?, 'reply', ?, ?, ?, 0, datetime('now'))");
+    foreach (array_keys($recipients) as $uid) {
+        try {
+            $ins->execute([$uid, $subject, $body, url('thread', ['id' => $threadId, 'slug' => slugify($title)], true)]);
+        } catch (Throwable $e) {}
+    }
 }
 
 // Notify the administrator about a new user registration (cases 6).

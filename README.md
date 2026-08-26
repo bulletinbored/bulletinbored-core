@@ -55,3 +55,16 @@ Part of this code was written with AI assistance, and there is no established co
 If and when a community forms, any future change to the license will be decided together with the community.
 
 Contributions are accepted under the terms of the [CLA.md](CLA.md).
+
+## Security model & known risks
+
+For the full security model, trust boundary, and known risks (including why plugin/
+theme packages are not cryptographically signed in a decentralized distribution
+model), see the [Security Model documentation](https://docs.bulletinbored.net/security/).
+
+In short: bulletinbored is designed for a single trusted administrator who installs
+plugins, themes, language packs and updates — installing code is an explicit act of
+trust in its source. Defense-in-depth is provided by Zip Slip protection on every
+package extraction, JSON-only (non-executable) language files, HTML sanitization under
+a nonce-based CSP, and the `plugin_verify_files` / `theme_verify_files` integrity checks
+(enabled by default).

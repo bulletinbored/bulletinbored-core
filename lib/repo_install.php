@@ -170,6 +170,46 @@ function download_file(string $url, string $dest, ?int &$httpCode = null): bool
     return false;
 }
 
+/**
+ * Validate every ZIP entry stays inside $targetDir. Blocks absolute paths,
+ * ".." traversal and any resolved target escaping the destination.
+ */
+function zip_entries_safe(ZipArchive $zip, string $targetDir): bool
+{
+    $targetDir = rtrim($targetDir, '/');
+    $realDest = realpath($targetDir);
+    if ($realDest === false) {
+        return false;
+    }
+    $realDest = rtrim($realDest, '/');
+
+    for ($i = 0; $i < $zip->numFiles; $i++) {
+        $name = $zip->getNameIndex($i);
+        if ($name === false) {
+            continue;
+        }
+
+        $name = str_replace('\\', '/', $name);
+        if (str_starts_with($name, '/') || str_contains($name, '..')) {
+            return false;
+        }
+
+        $resolved = realpath($targetDir . '/' . $name);
+        if ($resolved === false) {
+            $resolved = $targetDir . '/' . $name;
+        }
+        if ($resolved !== $realDest && !str_starts_with($resolved . '/', $realDest . '/')) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/**
+ * Safely extract a ZIP into $targetDir, mitigating Zip Slip by validating
+ * every entry before extracting and writing each entry individually.
+ */
 function extract_zip(string $zipPath, string $targetDir): bool
 {
     if (!class_exists('ZipArchive')) {
@@ -181,32 +221,48 @@ function extract_zip(string $zipPath, string $targetDir): bool
     }
 
     $targetDir = rtrim($targetDir, '/');
-    $realDest = realpath($targetDir);
-    if ($realDest === false) {
+    if (!is_dir($targetDir)) {
+        mkdir($targetDir, 0755, true);
+    }
+
+    if (!zip_entries_safe($zip, $targetDir)) {
         $zip->close();
         return false;
     }
 
+    $realDest = rtrim(realpath($targetDir), '/');
+    $ok = true;
     for ($i = 0; $i < $zip->numFiles; $i++) {
         $name = $zip->getNameIndex($i);
         if ($name === false) {
             continue;
         }
-
         $name = str_replace('\\', '/', $name);
-        if (str_starts_with($name, '/') || str_contains($name, '..')) {
-            $zip->close();
-            return false;
+
+        $dest = $targetDir . '/' . $name;
+        if (substr($name, -1) === '/') {
+            if (!is_dir($dest)) {
+                mkdir($dest, 0755, true);
+            }
+            continue;
         }
 
-        $target = $targetDir . '/' . $name;
-        if (!str_starts_with($target, $realDest . '/')) {
-            $zip->close();
-            return false;
+        $dir = dirname($dest);
+        if (!is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
+
+        $content = $zip->getFromIndex($i);
+        if ($content === false) {
+            $ok = false;
+            break;
+        }
+        if (file_put_contents($dest, $content) === false) {
+            $ok = false;
+            break;
         }
     }
 
-    $ok = $zip->extractTo($targetDir);
     $zip->close();
-    return (bool)$ok;
+    return $ok;
 }

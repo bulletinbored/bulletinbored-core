@@ -68,9 +68,9 @@
                             <div class="form-text"><?= t('use_lowercase_letters') ?></div>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label"><?= t('php_translation_file') ?></label>
-                            <input type="file" name="lang_file" accept=".php" required class="form-control">
-                            <div class="form-text"><?= t('file_must_return_array') ?></div>
+                            <label class="form-label"><?= t('json_translation_file') ?></label>
+                            <input type="file" name="lang_file" accept=".json" required class="form-control">
+                            <div class="form-text"><?= t('file_must_be_json_array') ?></div>
                         </div>
                         <button type="submit" name="upload_lang" value="1" class="btn btn-primary"><i class="fas fa-upload me-1"></i><?= t('upload_language_file') ?></button>
                     </form>
@@ -101,7 +101,7 @@
                                 <?php foreach ($langOptions as $code): ?>
                                     <tr>
                                         <td><?= escape($code) ?></td>
-                                        <td><?= escape($code) ?>.php</td>
+                                        <td><?= escape($code) ?>.json</td>
                                         <td>
                                             <?php if ($code === ($config['default_lang'] ?? 'en')): ?>
                                                 <span class="badge bg-success"><?= t('default') ?></span>

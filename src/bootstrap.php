@@ -157,8 +157,38 @@ setcookie('lang', $lang, time() + 365 * 24 * 60 * 60, '/');
 // other (no key collisions). A translation that is missing simply returns the
 // key itself, so a plugin/theme that ships no lang file still works unchanged.
 $GLOBALS['i18n'] = [];
-$coreLangFile = __DIR__ . '/../lang/' . $lang . '.php';
-$GLOBALS['i18n']['core'] = file_exists($coreLangFile) ? include $coreLangFile : [];
+
+/**
+ * Load a translation file as a plain array. Translation files are JSON only
+ * (no PHP include) so a malicious upload cannot achieve RCE: an uploaded lang
+ * file is parsed as data, never executed.
+ *
+ * @return array<string,string>
+ */
+function load_lang_file(string $path): array
+{
+    if (!file_exists($path)) {
+        return [];
+    }
+    $raw = file_get_contents($path);
+    if ($raw === false) {
+        return [];
+    }
+    $data = json_decode($raw, true);
+    if (!is_array($data)) {
+        return [];
+    }
+    $out = [];
+    foreach ($data as $k => $v) {
+        if (is_string($k) && is_string($v)) {
+            $out[$k] = $v;
+        }
+    }
+    return $out;
+}
+
+$coreLangFile = __DIR__ . '/../lang/' . $lang . '.json';
+$GLOBALS['i18n']['core'] = load_lang_file($coreLangFile);
 // Back-compat alias: code that still does `global $translations` keeps working.
 $translations = &$GLOBALS['i18n']['core'];
 

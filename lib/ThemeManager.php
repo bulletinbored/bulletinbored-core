@@ -21,12 +21,9 @@ class ThemeManager
         foreach ($this->getAll() as $name => $theme) {
             $scope = 'theme:' . strtolower($name);
             $GLOBALS['i18n'][$scope] = [];
-            $langFile = $this->themesDir . '/' . $name . '/lang/' . $lang . '.php';
+            $langFile = $this->themesDir . '/' . $name . '/lang/' . $lang . '.json';
             if (file_exists($langFile)) {
-                $data = include $langFile;
-                if (is_array($data)) {
-                    $GLOBALS['i18n'][$scope] = $data;
-                }
+                $GLOBALS['i18n'][$scope] = load_lang_file($langFile);
             }
         }
     }
@@ -183,6 +180,8 @@ class ThemeManager
             return ['success' => false, 'message' => 'The PHP zip extension is not enabled on this server. Enable it or extract the theme manually into the themes/ directory.'];
         }
 
+        require_once __DIR__ . '/repo_install.php';
+
         $zip = new ZipArchive();
         $res = $zip->open($zipPath);
         if ($res !== true) {
@@ -190,9 +189,13 @@ class ThemeManager
         }
 
         $dest = rtrim($this->themesDir, '/') . '/';
-        $zip->extractTo($dest);
+        $ok = extract_zip($zipPath, $dest);
         $zip->close();
         @unlink($zipPath);
+
+        if (!$ok) {
+            return ['success' => false, 'message' => 'Invalid ZIP entries (Zip Slip protection)'];
+        }
 
         // Normalise the extracted layout: a theme ZIP may nest files under a
         // single <repo>-<ref>/ folder. Only "un-nest" when there is no
@@ -236,6 +239,12 @@ class ThemeManager
         }
 
         return ['success' => true, 'message' => 'Theme installed'];
+    }
+
+    private function verifyFilesEnabled(): bool
+    {
+        global $config;
+        return !isset($config['theme_verify_files']) || $config['theme_verify_files'] !== false;
     }
 
     /**
@@ -289,7 +298,7 @@ class ThemeManager
                     $detail .= "\n  undeclared: " . implode(', ', $p['extra']);
                 }
             }
-            return ['success' => false, 'message' => 'Theme integrity check failed. The archive contains files not declared in manifest.json (or is missing declared files). This may indicate a tampered package:' . $detail . "\n\nYou can disable this check by setting \$config['theme_verify_files'] = false; in config.php."];
+            return ['success' => false, 'message' => 'Theme integrity check failed. The archive contains files not declared in manifest.json (or is missing declared files). This may indicate a tampered package:' . $detail . "\n\nYou can disable this check by setting \$config['theme_verify_files'] = false; in config.json."];
         }
 
         return ['success' => true, 'message' => 'ok'];

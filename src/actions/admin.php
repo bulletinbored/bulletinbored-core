@@ -318,15 +318,37 @@ function handle_split_thread_post(): bool
     if (!$srcThread) {
         die('Thread not found');
     }
+
+    $intIds = array_map('intval', $postIds);
+    $placeholders = implode(',', array_fill(0, count($intIds), '?'));
+    // Only move posts that actually belong to the source thread (prevents a
+    // moderator from pulling posts from other threads into the new one).
+    $selStmt = $pdo->prepare("SELECT id, content, user_id, created_at FROM posts WHERE thread_id = ? AND id IN ($placeholders) ORDER BY created_at ASC, id ASC");
+    $selStmt->execute(array_merge([$threadId], $intIds));
+    $selPosts = $selStmt->fetchAll();
+    if (empty($selPosts)) {
+        die('No valid posts selected');
+    }
+
+    $firstPost = $selPosts[0];
     $ins = $pdo->prepare("INSERT INTO threads (category_id, user_id, title, content, status, created_at) VALUES (?, ?, ?, ?, 'visible', ?)");
-    $ins->execute([$srcThread['category_id'], $srcThread['user_id'], $newTitle, $srcThread['content'], $srcThread['created_at']]);
+    $ins->execute([$srcThread['category_id'], $firstPost['user_id'], $newTitle, $firstPost['content'], $firstPost['created_at']]);
     $newThreadId = (int)$pdo->lastInsertId();
-    $postIns = $pdo->prepare("INSERT INTO posts (thread_id, user_id, content, status, created_at) SELECT ?, user_id, content, status, created_at FROM posts WHERE id IN (" . implode(',', array_fill(0, count($postIds), '?')) . ")");
-    $params = array_merge([$newThreadId], array_map('intval', $postIds));
-    $postIns->execute($params);
-    $delParams = array_merge([$threadId], array_map('intval', $postIds));
-    $delSql = "DELETE FROM posts WHERE thread_id = ? AND id IN (" . implode(',', array_fill(0, count($postIds), '?')) . ")";
-    $pdo->prepare($delSql)->execute($delParams);
+
+    // The first selected post becomes the new thread's opening post (it is stored
+    // as threads.content, exactly like the OP of any thread), so it must NOT also
+    // be inserted into posts — otherwise it would appear twice. Only the
+    // remaining selected posts become replies.
+    $replyIds = array_slice($intIds, 1);
+    if (!empty($replyIds)) {
+        $replyPlaceholders = implode(',', array_fill(0, count($replyIds), '?'));
+        $postIns = $pdo->prepare("INSERT INTO posts (thread_id, user_id, content, status, created_at) SELECT ?, user_id, content, status, created_at FROM posts WHERE thread_id = ? AND id IN ($replyPlaceholders)");
+        $postIns->execute(array_merge([$newThreadId, $threadId], $replyIds));
+    }
+
+    $delSql = "DELETE FROM posts WHERE thread_id = ? AND id IN ($placeholders)";
+    $pdo->prepare($delSql)->execute(array_merge([$threadId], $intIds));
+
     $countStmt = $pdo->prepare("SELECT COUNT(*) FROM posts WHERE thread_id = ? AND status = 'visible'");
     $countStmt->execute([$threadId]);
     if (empty($countStmt->fetchColumn())) {
@@ -631,8 +653,8 @@ function handle_admin_langs(string $method): bool
                 $defaultLang = trim($_POST['default_lang'] ?? $config['default_lang'] ?? 'en');
                 $config['default_lang'] = $defaultLang;
                 $installedLangs = [];
-                foreach (glob(__DIR__ . '/../../lang/*.php') as $file) {
-                    $installedLangs[] = basename($file, '.php');
+                foreach (glob(__DIR__ . '/../../lang/*.json') as $file) {
+                    $installedLangs[] = basename($file, '.json');
                 }
                 $config['available_langs'] = array_values(array_unique($installedLangs));
                 file_put_contents(__DIR__ . '/../../config.json', json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
@@ -643,14 +665,36 @@ function handle_admin_langs(string $method): bool
                 if ($langCode === '') {
                     $langError = 'Invalid language code';
                 } else {
-                    $dest = __DIR__ . '/../../lang/'.$langCode.'.php';
+                    $dest = __DIR__ . '/../../lang/'.$langCode.'.json';
                     if (file_exists($dest)) {
                         $langError = 'Language file already exists: '.escape($langCode);
-                    } elseif (move_uploaded_file($_FILES['lang_file']['tmp_name'], $dest)) {
-                        $_SESSION['lang_success'] = 'Language file uploaded: '.escape($langCode);
-                        redirect(url('admin_langs'));
                     } else {
-                        $langError = 'Failed to upload language file';
+                        // Translation files are JSON only: never execute uploaded
+                        // content. Reject anything that is not a valid string=>string
+                        // JSON array so a PHP upload cannot lead to RCE.
+                        $raw = file_get_contents($_FILES['lang_file']['tmp_name']);
+                        if ($raw === false) {
+                            $langError = 'Failed to read uploaded file';
+                        } else {
+                            $decoded = json_decode($raw, true);
+                            $valid = is_array($decoded);
+                            if ($valid) {
+                                foreach ($decoded as $k => $v) {
+                                    if (!is_string($k) || !is_string($v)) {
+                                        $valid = false;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (!$valid) {
+                                $langError = 'Language file must be a JSON array of "key": "translation" strings';
+                            } elseif (move_uploaded_file($_FILES['lang_file']['tmp_name'], $dest)) {
+                                $_SESSION['lang_success'] = 'Language file uploaded: '.escape($langCode);
+                                redirect(url('admin_langs'));
+                            } else {
+                                $langError = 'Failed to upload language file';
+                            }
+                        }
                     }
                 }
             } elseif (isset($_POST['install_github_lang']) || isset($_POST['update_github_lang'])) {
@@ -675,16 +719,48 @@ function handle_admin_langs(string $method): bool
                     if (!$allowed) {
                         $langError = 'Invalid download URL. Only URLs from the official language repository are allowed.';
                     } else {
-                        $dest = __DIR__ . '/../../lang/'.$langCode.'.php';
+                        $dest = __DIR__ . '/../../lang/'.$langCode.'.json';
                         if ($isUpdate && !file_exists($dest)) {
                             $langError = 'Language file not found: '.escape($langCode);
                         } elseif (!$isUpdate && file_exists($dest)) {
                             $langError = 'Language file already exists: '.escape($langCode);
                         } else {
-                            $content = @file_get_contents($downloadUrl);
-                            if ($content === false) {
-                                $langError = 'Failed to download language file';
-                            } elseif (file_put_contents($dest, $content) === false) {
+                            // Prefer the JSON file from the official repo (no code
+                            // execution at all). Fall back to the legacy PHP file
+                            // ("return [...]") only from the allow-listed official
+                            // host (supply-chain trust); it is evaluated once and
+                            // stored as JSON so it is never executed on this server.
+                            $candidateUrls = [$downloadUrl];
+                            if (preg_match('#\.php$#i', $downloadUrl)) {
+                                $candidateUrls[] = substr($downloadUrl, 0, -4) . '.json';
+                            } else {
+                                $candidateUrls[] = substr($downloadUrl, 0, -5) . '.php';
+                            }
+
+                            $data = null;
+                            foreach ($candidateUrls as $tryUrl) {
+                                $content = @file_get_contents($tryUrl);
+                                if ($content === false) {
+                                    continue;
+                                }
+                                if (str_ends_with($tryUrl, '.json')) {
+                                    $decoded = json_decode($content, true);
+                                    if (is_array($decoded)) {
+                                        $data = $decoded;
+                                        break;
+                                    }
+                                } else {
+                                    $decoded = @eval('?>' . $content);
+                                    if (is_array($decoded)) {
+                                        $data = $decoded;
+                                        break;
+                                    }
+                                }
+                            }
+
+                            if ($data === null) {
+                                $langError = 'Invalid language file from repository';
+                            } elseif (file_put_contents($dest, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) === false) {
                                 $langError = 'Failed to save language file';
                             } else {
                                 saveLangMeta($langCode, $remoteSha);
@@ -697,7 +773,7 @@ function handle_admin_langs(string $method): bool
             } elseif (isset($_POST['delete_lang'])) {
                 $langCode = $_POST['lang_code'] ?? '';
                 $langCode = preg_replace('/[^a-z_]/', '', strtolower($langCode));
-                $dest = __DIR__ . '/../../lang/'.$langCode.'.php';
+                $dest = __DIR__ . '/../../lang/'.$langCode.'.json';
                 if ($langCode === $config['default_lang']) {
                     $langError = 'Cannot delete the default language';
                 } elseif (file_exists($dest)) {
@@ -711,7 +787,7 @@ function handle_admin_langs(string $method): bool
         }
     }
 
-    $langFiles = glob(__DIR__ . '/../../lang/*.php');
+    $langFiles = glob(__DIR__ . '/../../lang/*.json');
     $langOptions = [];
     foreach ($langFiles as $file) {
         $code = basename($file, '.php');
@@ -977,7 +1053,7 @@ function handle_admin_themes(string $method): bool
 
 function handle_admin_catalog(string $method): bool
 {
-    global $config;
+    global $config, $updateManager;
 
     if (!is_admin()) {
         die('Admin required');

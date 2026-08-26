@@ -15,7 +15,8 @@ uploads/
 .kilo/
 
 /lang/*.php
-!/lang/en.php
+!/lang/en.json
+!/lang/it.json
 
 /plugins/*
 !/plugins/hellobored

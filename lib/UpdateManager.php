@@ -287,16 +287,28 @@ class UpdateManager
             return false;
         }
 
+        require_once __DIR__ . '/repo_install.php';
+
         $zip = new ZipArchive();
         $res = $zip->open($zipPath);
         if ($res !== true) {
             return false;
         }
 
-        $extractTo = __DIR__ . '/../';
-        $zip->extractTo($extractTo);
+        $tmpExtract = rtrim(sys_get_temp_dir(), '/') . '/bb_upd_' . uniqid() . '/';
+        mkdir($tmpExtract, 0755, true);
+        $ok = extract_zip($zipPath, $tmpExtract);
         $zip->close();
         @unlink($zipPath);
+
+        if (!$ok) {
+            $this->deleteRecursive($tmpExtract);
+            return false;
+        }
+
+        $root = rtrim(__DIR__ . '/../', '/');
+        $this->copyRecursive($tmpExtract, $root);
+        $this->deleteRecursive($tmpExtract);
 
         $version = '1.0.0';
         if ($type === 'plugin') {
@@ -325,6 +337,8 @@ class UpdateManager
         file_put_contents($tmpZip, $data);
         error_log('BB CORE downloaded size=' . strlen($data));
 
+        require_once __DIR__ . '/repo_install.php';
+
         $zip = new ZipArchive();
         if ($zip->open($tmpZip) !== true) {
             error_log('BB CORE FAIL zip open');
@@ -332,66 +346,28 @@ class UpdateManager
             return false;
         }
 
-        $extractTo = __DIR__ . '/../';
-        $zip->extractTo($extractTo);
+        $tmpExtract = rtrim(sys_get_temp_dir(), '/') . '/bb_core_' . uniqid() . '/';
+        mkdir($tmpExtract, 0755, true);
+        $ok = extract_zip($tmpZip, $tmpExtract);
         $zip->close();
         @unlink($tmpZip);
+
+        if (!$ok) {
+            $this->deleteRecursive($tmpExtract);
+            error_log('BB CORE FAIL unsafe zip');
+            return false;
+        }
+
+        $root = rtrim(__DIR__ . '/../', '/');
+        $this->copyRecursive($tmpExtract, $root);
+        $this->deleteRecursive($tmpExtract);
+
+        // A core update re-extracts the installer scripts from the package.
+        // Remove them again so they do not re-appear on a deployed (already
+        // installed) forum. They are only kept when the forum is not yet
+        // installed (no config.json), so first-run setup still works.
+        $this->removeInstallerScripts($root);
         error_log('BB CORE extracted');
-
-        $topFolder = glob($extractTo . 'bulletinbored-core-*', GLOB_ONLYDIR);
-        if (empty($topFolder)) {
-            error_log('BB CORE FAIL no top folder');
-            return false;
-        }
-        error_log('BB CORE topFolder=' . $topFolder[0]);
-
-        $src = $topFolder[0];
-        $items = @scandir($src);
-        if ($items === false) {
-            error_log('BB CORE FAIL scandir');
-            return false;
-        }
-        error_log('BB CORE items=' . count($items));
-
-        foreach ($items as $item) {
-            if ($item === '.' || $item === '..') {
-                continue;
-            }
-            $srcPath = $src . '/' . $item;
-            $targetPath = $extractTo . $item;
-            if (is_dir($srcPath)) {
-                if (!is_dir($targetPath)) {
-                    if (!rename($srcPath, $targetPath)) {
-                        error_log('BB CORE FAIL rename dir ' . $item);
-                        $this->deleteRecursive($src);
-                        return false;
-                    }
-                } else {
-                    $this->copyRecursive($srcPath, $targetPath);
-                    if (basename($srcPath) !== '.kilo' && !$this->deleteRecursive($srcPath)) {
-                        error_log('BB CORE FAIL delete dir ' . $item);
-                        $this->deleteRecursive($src);
-                        return false;
-                    }
-                }
-            } elseif (is_file($srcPath)) {
-                if (!file_exists($targetPath)) {
-                    if (!rename($srcPath, $targetPath)) {
-                        error_log('BB CORE FAIL rename file ' . $item);
-                        $this->deleteRecursive($src);
-                        return false;
-                    }
-                } else {
-                    $this->copyRecursive($srcPath, $targetPath);
-                    if (basename($srcPath) !== '.kilo') {
-                        $this->deleteRecursive($srcPath);
-                    }
-                }
-            }
-        }
-        $this->deleteRecursive($src);
-        error_log('BB CORE copied all items');
-        error_log('BB CORE cleaned src');
 
         $this->setVersion('core', 'core', $tag);
         $versionFile = __DIR__ . '/../VERSION';
@@ -466,11 +442,18 @@ class UpdateManager
             $extractTo = rtrim(__DIR__ . '/../themes', '/') . '/';
         }
 
+        require_once __DIR__ . '/repo_install.php';
+
         $tmpExtract = $extractTo . '_update_' . uniqid() . '/';
         mkdir($tmpExtract, 0755, true);
-        $zip->extractTo($tmpExtract);
+        $ok = extract_zip($tmpZip, $tmpExtract);
         $zip->close();
         @unlink($tmpZip);
+
+        if (!$ok) {
+            $this->deleteRecursive($tmpExtract);
+            return false;
+        }
 
         $src = $tmpExtract;
         $topFolders = glob($tmpExtract . '*', GLOB_ONLYDIR);
@@ -577,6 +560,32 @@ class UpdateManager
             }
         }
         return @rmdir($dir);
+    }
+
+    /**
+     * Remove the installer scripts from a deployed root, but only when the
+     * forum is already installed (config.json present). On a fresh install
+     * (no config.json yet) the scripts must stay so setup can run.
+     *
+     * Called after a core update, since the update package re-ships the
+     * installer files and would otherwise re-expose them.
+     */
+    private function removeInstallerScripts(string $root): void
+    {
+        if (!file_exists($root . '/config.json')) {
+            return;
+        }
+        $installerScripts = [
+            $root . '/install.php',
+            $root . '/install2.php',
+            $root . '/install3.php',
+            $root . '/api/install.php',
+        ];
+        foreach ($installerScripts as $f) {
+            if (is_file($f)) {
+                @unlink($f);
+            }
+        }
     }
 
     private function clearCache(): void
