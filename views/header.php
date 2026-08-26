@@ -106,9 +106,6 @@ function render_header($title = 'bulletinbored', $options = []) {
             <i class="fas fa-plus"></i>
         </a>
         <?php endif; ?>
-        <a href="<?= url('messages') ?>" class="mobile-tab" data-mobile-tab="messages" title="<?= t('messages') ?>">
-            <i class="fas fa-envelope"></i>
-        </a>
         <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
         <a href="<?= url('messages') ?>" class="mobile-tab" data-mobile-tab="messages" title="<?= t('messages') ?>">
             <i class="fas fa-envelope"></i>
