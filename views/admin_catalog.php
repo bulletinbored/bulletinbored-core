@@ -61,7 +61,9 @@
                                     $installedItem = $installed['plugins'][$itemName] ?? $installed['themes'][$itemName] ?? null;
                                     $installedVersion = $installedItem['version'] ?? '';
                                     $isInstalled = $installedItem !== null;
-                                    $updateAvailable = $isInstalled && $latestTag && $latestTag !== $installedVersion;
+                                    $normalizedLatest = $latestTag !== '' ? ltrim((string)$latestTag, 'vV') : '';
+                                    $normalizedInstalled = $installedVersion !== '' ? ltrim((string)$installedVersion, 'vV') : '';
+                                    $updateAvailable = $isInstalled && $normalizedLatest !== '' && $normalizedInstalled !== '' && version_compare($normalizedLatest, $normalizedInstalled, '>');
                                 ?>
                                 <tr>
                                     <td>

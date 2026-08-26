@@ -1254,6 +1254,16 @@ function handle_admin_updates(string $method): bool
                     } elseif ($type === 'themes' && $themeManager) {
                         $themeManager->discover();
                     }
+                    $installedPath = __DIR__ . '/../../data/installed.json';
+                    $installedData = file_exists($installedPath) ? json_decode(file_get_contents($installedPath), true) : ['plugins' => [], 'themes' => []];
+                    if (!is_array($installedData)) {
+                        $installedData = ['plugins' => [], 'themes' => []];
+                    }
+                    $group = $type === 'plugins' ? 'plugins' : 'themes';
+                    if (isset($installedData[$group][$extName])) {
+                        $installedData[$group][$extName]['version'] = $tag;
+                    }
+                    file_put_contents($installedPath, json_encode($installedData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
                 } else {
                     $updateError = 'Failed to update extension';
                     log_security_event('extension_update_failed', ['type' => $type, 'name' => $extName, 'tag' => $tag]);
