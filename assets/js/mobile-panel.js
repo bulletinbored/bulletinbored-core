@@ -48,7 +48,7 @@
         tabs.forEach(function (t) { t.classList.toggle('active', t.dataset.tab === tab); });
         panes.forEach(function (p) { p.classList.toggle('active', p.dataset.pane === tab); });
         titleEl.textContent = titles[tab] || '';
-        if (tab === 'user' || tab === 'search') { return; }
+        if (tab === 'user' || tab === 'search' || tab === 'login') { return; }
         if (!loaded[tab]) {
             loadPane(tab);
         }
@@ -138,6 +138,25 @@
                 e.stopPropagation();
                 neutralizeDropdownToggles();
                 openStack('user');
+            });
+        }
+        // Mobile-only "menu" icon in the tab bar toggles the sidebar collapse
+        // (the Browse button inside the sidebar is hidden on mobile).
+        var menuToggle = document.getElementById('mobileMenuToggle');
+        if (menuToggle) {
+            menuToggle.addEventListener('click', function (e) {
+                if (!isMobile()) return;
+                e.preventDefault();
+                var body = document.getElementById('sidebarBody');
+                if (body && window.bootstrap) {
+                    var inst = window.bootstrap.Collapse.getOrCreateInstance(body);
+                    // Opening the menu: scroll to top so the navbar reappears and
+                    // the interaction feels natural (it was hidden on scroll-down).
+                    if (!body.classList.contains('show')) {
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }
+                    inst.toggle();
+                }
             });
         }
     }

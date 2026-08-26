@@ -101,8 +101,13 @@ function render_header($title = 'bulletinbored', $options = []) {
     <?php // Mobile tab bar: the 3 icons live BELOW the main navbar (mobile only).
           // Tapping one opens the full-screen stack. ?>
     <nav class="mobile-tabbar" aria-label="Mobile">
+        <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
         <a href="<?= url('new_thread') ?>" class="mobile-tab" title="<?= t('new_thread') ?>">
             <i class="fas fa-plus"></i>
+        </a>
+        <?php endif; ?>
+        <a href="<?= url('messages') ?>" class="mobile-tab" data-mobile-tab="messages" title="<?= t('messages') ?>">
+            <i class="fas fa-envelope"></i>
         </a>
         <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
         <a href="<?= url('messages') ?>" class="mobile-tab" data-mobile-tab="messages" title="<?= t('messages') ?>">
@@ -120,10 +125,13 @@ function render_header($title = 'bulletinbored', $options = []) {
             <?= render_avatar($_SESSION['username'] ?? '', $_SESSION['avatar'] ?? '', 24) ?>
         </a>
         <?php else: ?>
-        <a href="#" class="mobile-tab" data-mobile-tab="login" title="<?= t('login') ?> / <?= t('register') ?>">
+        <a href="#" class="mobile-tab" data-mobile-tab="login" title="<?= t('login') ?>">
             <i class="fas fa-sign-in-alt"></i>
         </a>
         <?php endif; ?>
+        <a href="#" class="mobile-tab" id="mobileMenuToggle" title="<?= t('browse') ?>">
+            <i class="fas fa-bars"></i>
+        </a>
     </nav>
 
     <?php // Mobile full-screen panel (Facebook-style) – only visible < 992px ?>
