@@ -15,9 +15,10 @@ function install_repo_package(string $repoUrl, string $targetDir, ?string $tag =
     $dest = rtrim(dirname($targetDir), '/') . '/';
     $finalName = $expectedName ?: $repoName;
     $targetDir = $dest . $finalName;
+    $haveGit = function_exists('exec') && !empty(shell_exec('git --version 2>/dev/null'));
 
     if (is_dir($targetDir)) {
-        if (function_exists('exec') && !empty(shell_exec('git --version 2>/dev/null'))) {
+        if ($haveGit) {
             exec('git -C ' . escapeshellarg($targetDir) . ' fetch --tags 2>&1', $fetchOut, $fetchCode);
             $pull = $tag
                 ? 'git -C ' . escapeshellarg($targetDir) . ' checkout -q ' . escapeshellarg($tag) . ' 2>&1 && git -C ' . escapeshellarg($targetDir) . ' pull --ff-only 2>&1'
@@ -28,7 +29,7 @@ function install_repo_package(string $repoUrl, string $targetDir, ?string $tag =
             }
         }
     } else {
-        if (function_exists('exec') && !empty(shell_exec('git --version 2>/dev/null'))) {
+        if ($haveGit) {
             $cmd = 'git clone --depth 1';
             if ($tag) {
                 $cmd .= ' --branch ' . escapeshellarg($tag);
@@ -78,10 +79,27 @@ function download_repo_archive(string $repoUrl, string $targetDir, ?string $tag 
     }
 
     $extracted = extract_zip($tmp, $targetDir);
-    @unlink($tmp);
     if (!$extracted) {
-        return ['success' => false, 'message' => 'Failed to extract archive. Ensure the PHP zip extension is enabled.'];
+        $reason = 'unknown';
+        if (!class_exists('ZipArchive')) {
+            $reason = 'PHP zip extension not enabled';
+        } elseif (!is_writable(dirname($targetDir))) {
+            $reason = 'parent directory not writable: ' . dirname($targetDir);
+        } elseif (!is_dir($targetDir) || !is_writable($targetDir)) {
+            $reason = 'target directory not writable: ' . $targetDir;
+        } else {
+            $z = new ZipArchive();
+            if ($z->open($tmp) === true) {
+                $z->close();
+                $reason = 'extraction blocked (zip_entries_safe validation or file write failure); target=' . $targetDir;
+            } else {
+                $reason = 'downloaded file is not a valid ZIP (possibly HTML/rate-limit from GitHub instead of archive)';
+            }
+        }
+        @unlink($tmp);
+        return ['success' => false, 'message' => 'Failed to extract archive: ' . $reason];
     }
+    @unlink($tmp);
 
     // Git archives nest files under <repo>-<ref>/ ; flatten if needed.
     $entries = array_values(array_filter(glob($targetDir . '/*'), 'is_dir'));
@@ -177,11 +195,16 @@ function download_file(string $url, string $dest, ?int &$httpCode = null): bool
 function zip_entries_safe(ZipArchive $zip, string $targetDir): bool
 {
     $targetDir = rtrim($targetDir, '/');
+    // Canonicalize the target so "../" segments in the input path don't break
+    // the prefix comparison below (e.g. "src/actions/../../plugins/editbored").
     $realDest = realpath($targetDir);
     if ($realDest === false) {
         return false;
     }
-    $realDest = rtrim($realDest, '/');
+    $targetDir = $realDest;
+    // Normalize to forward slashes so the prefix check is portable across
+    // Windows (backslashes) and Linux (forward slashes).
+    $realDest = str_replace('\\', '/', rtrim($realDest, '/'));
 
     for ($i = 0; $i < $zip->numFiles; $i++) {
         $name = $zip->getNameIndex($i);
@@ -198,6 +221,7 @@ function zip_entries_safe(ZipArchive $zip, string $targetDir): bool
         if ($resolved === false) {
             $resolved = $targetDir . '/' . $name;
         }
+        $resolved = str_replace('\\', '/', $resolved);
         if ($resolved !== $realDest && !str_starts_with($resolved . '/', $realDest . '/')) {
             return false;
         }
@@ -215,6 +239,9 @@ function extract_zip(string $zipPath, string $targetDir): bool
     if (!class_exists('ZipArchive')) {
         return false;
     }
+    if (!is_writable(dirname($targetDir))) {
+        return false;
+    }
     $zip = new ZipArchive();
     if ($zip->open($zipPath) !== true) {
         return false;
@@ -222,7 +249,11 @@ function extract_zip(string $zipPath, string $targetDir): bool
 
     $targetDir = rtrim($targetDir, '/');
     if (!is_dir($targetDir)) {
-        mkdir($targetDir, 0755, true);
+        @mkdir($targetDir, 0755, true);
+    }
+    if (!is_dir($targetDir) || !is_writable($targetDir)) {
+        $zip->close();
+        return false;
     }
 
     if (!zip_entries_safe($zip, $targetDir)) {
@@ -230,7 +261,6 @@ function extract_zip(string $zipPath, string $targetDir): bool
         return false;
     }
 
-    $realDest = rtrim(realpath($targetDir), '/');
     $ok = true;
     for ($i = 0; $i < $zip->numFiles; $i++) {
         $name = $zip->getNameIndex($i);
@@ -242,25 +272,37 @@ function extract_zip(string $zipPath, string $targetDir): bool
         $dest = $targetDir . '/' . $name;
         if (substr($name, -1) === '/') {
             if (!is_dir($dest)) {
-                mkdir($dest, 0755, true);
+                @mkdir($dest, 0755, true);
             }
             continue;
         }
 
         $dir = dirname($dest);
         if (!is_dir($dir)) {
-            mkdir($dir, 0755, true);
+            @mkdir($dir, 0755, true);
         }
 
         $content = $zip->getFromIndex($i);
         if ($content === false) {
+            // Fallback: extract this single entry via extractTo with a temp dir
+            $tmpDir = sys_get_temp_dir() . '/zipfall_' . uniqid();
+            @mkdir($tmpDir, 0755, true);
+            if ($zip->extractTo($tmpDir, [$i])) {
+                $srcFile = $tmpDir . '/' . $name;
+                if (file_exists($srcFile)) {
+                    @mkdir(dirname($dest), 0755, true);
+                    @copy($srcFile, $dest);
+                }
+                @unlink($srcFile);
+            }
+            @rmdir($tmpDir);
+            continue;
+        }
+        if (@file_put_contents($dest, $content) === false) {
             $ok = false;
             break;
         }
-        if (file_put_contents($dest, $content) === false) {
-            $ok = false;
-            break;
-        }
+        @chmod($dest, 0644);
     }
 
     $zip->close();
