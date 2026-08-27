@@ -368,6 +368,25 @@ class UpdateManager
         $this->copyRecursive($sourceDir, $root);
         $this->deleteRecursive($tmpExtract);
 
+        // Self-healing: if a previous (buggy) run left the nested
+        // "<repo>-<ref>/" folder inside $root, flatten it now so the
+        // updated files actually land in the document root.
+        foreach (glob($root . '/bulletinbored-core-*', GLOB_ONLYDIR) as $nested) {
+            foreach (glob($nested . '/*') as $item) {
+                $base = basename($item);
+                $dest = $root . '/' . $base;
+                if (is_dir($item)) {
+                    $this->copyRecursive($item, $dest);
+                } elseif (is_file($item)) {
+                    if (is_dir($dest)) {
+                        $this->deleteRecursive($dest);
+                    }
+                    copy($item, $dest);
+                }
+            }
+            $this->deleteRecursive($nested);
+        }
+
         // A core update re-extracts the installer scripts from the package.
         // Remove them again so they do not re-appear on a deployed (already
         // installed) forum. They are only kept when the forum is not yet
