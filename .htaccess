@@ -13,6 +13,11 @@
     RewriteRule ^category/([0-9]+)(?:-([^/]+))?$ %{ENV:BASE}index.php?action=category&id=$1 [L,QSA]
     RewriteRule ^u/([^/]+)$ %{ENV:BASE}index.php?action=profile&user=$1 [L,QSA]
     RewriteRule ^download/([0-9]+)$ %{ENV:BASE}index.php?action=download&id=$1 [L,QSA]
+    RewriteRule ^edit-post/([0-9]+)$ %{ENV:BASE}index.php?action=edit_post&id=$1 [L,QSA]
+    RewriteRule ^edit-thread/([0-9]+)$ %{ENV:BASE}index.php?action=edit_thread&id=$1 [L,QSA]
+    RewriteRule ^delete-post/([0-9]+)$ %{ENV:BASE}index.php?action=delete_post&id=$1 [L,QSA]
+    RewriteRule ^delete-thread/([0-9]+)$ %{ENV:BASE}index.php?action=delete_thread&id=$1 [L,QSA]
+    RewriteRule ^new-thread$ %{ENV:BASE}index.php?action=new_thread [L,QSA]
 
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteCond %{REQUEST_FILENAME} !-d

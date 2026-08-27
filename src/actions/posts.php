@@ -21,18 +21,84 @@ function handle_posts_action(string $action, string $method): bool
             return is_logged_in() ? handle_watch() : false;
         case 'unwatch':
             return is_logged_in() ? handle_unwatch() : false;
+        case 'upload_image':
+            return $method === 'POST' ? handle_upload_image() : false;
         default:
             return false;
     }
+}
+
+/**
+ * Accept an image uploaded from the Markdown editor, validate it strictly with
+ * validate_uploaded_file() (real MIME + getimagesize, never the extension),
+ * store it under uploads/ and record it in the uploads table. Returns JSON.
+ */
+function handle_upload_image(): bool
+{
+    global $pdo;
+    if (!is_logged_in()) {
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => false, 'error' => 'Login required']);
+        return true;
+    }
+    if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => false, 'error' => 'CSRF token invalid']);
+        return true;
+    }
+    if (empty($_FILES['image']['tmp_name'])) {
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => false, 'error' => 'No file uploaded']);
+        return true;
+    }
+
+    $allowed = [
+        'image/jpeg' => 'jpg',
+        'image/png'  => 'png',
+        'image/gif'  => 'gif',
+        'image/webp' => 'webp',
+    ];
+    $maxSize = $GLOBALS['config']['image_max_size'] ?? 5 * 1024 * 1024;
+    $info = validate_uploaded_file($_FILES['image']['tmp_name'], $_FILES['image']['name'] ?? '', $allowed, $maxSize);
+    if ($info === null) {
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => false, 'error' => 'Invalid image']);
+        return true;
+    }
+
+    $uploadDir = __DIR__ . '/../../uploads';
+    if (!is_dir($uploadDir)) {
+        @mkdir($uploadDir, 0755, true);
+    }
+    $dest = $uploadDir . '/' . $info['safe_name'];
+    if (!move_uploaded_file($_FILES['image']['tmp_name'], $dest)) {
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => false, 'error' => 'Move failed']);
+        return true;
+    }
+
+    $stmt = $pdo->prepare("INSERT INTO uploads (user_id, filename, original_name, size, mime_type) VALUES (?, ?, ?, ?, ?)");
+    $stmt->execute([
+        $_SESSION['user_id'],
+        $info['safe_name'],
+        basename($_FILES['image']['name'] ?? 'image.' . $info['ext']),
+        filesize($dest),
+        $info['mime'],
+    ]);
+
+    $url = base_url() . '/uploads/' . $info['safe_name'];
+    header('Content-Type: application/json');
+    echo json_encode(['ok' => true, 'url' => $url, 'markdown' => '![](' . $url . ')']);
+    return true;
 }
 
 function handle_thread_view(): bool
 {
     global $pdo;
 
-    $threadId = (int)($_GET['id'] ?? 0);
+    $threadId = (int)($_POST['thread_id'] ?? $_GET['id'] ?? 0);
     if ($threadId <= 0) {
-        die('Thread not found');
+        redirect(url('home'));
     }
 
     $stmt = $pdo->prepare("
@@ -113,7 +179,7 @@ function handle_new_thread(string $method): bool
             die('You are posting too fast. Please try again later.');
         }
 
-        $title = validate_input($_POST['title'] ?? '');
+        $title = clean_text($_POST['title'] ?? '');
         $content = validate_input($_POST['content'] ?? '');
         $categoryId = (int)($_POST['category_id'] ?? 1);
 
@@ -143,10 +209,10 @@ function handle_new_thread(string $method): bool
         }
 
         $stmt = $pdo->prepare("
-            INSERT INTO threads (category_id, user_id, title, content)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO threads (category_id, user_id, title, content, created_at)
+            VALUES (?, ?, ?, ?, ?)
         ");
-        $stmt->execute([$categoryId, $_SESSION['user_id'], $title, $content]);
+        $stmt->execute([$categoryId, $_SESSION['user_id'], $title, $content, date('Y-m-d H:i:s')]);
         $threadId = $pdo->lastInsertId();
 
         if (!empty($config['attachments_enabled']) && !empty($_FILES['attachments']['name'][0])) {
@@ -200,10 +266,10 @@ function handle_reply_post(): bool
     }
 
     $stmt = $pdo->prepare("
-        INSERT INTO posts (thread_id, user_id, content)
-        VALUES (?, ?, ?)
+        INSERT INTO posts (thread_id, user_id, content, created_at)
+        VALUES (?, ?, ?, ?)
     ");
-    $stmt->execute([$threadId, $_SESSION['user_id'], $content]);
+    $stmt->execute([$threadId, $_SESSION['user_id'], $content, date('Y-m-d H:i:s')]);
     $postId = $pdo->lastInsertId();
 
     notify_thread_reply($thread, $_SESSION['user_id'], $content);
@@ -220,7 +286,7 @@ function handle_edit_post(string $method): bool
         die('Login required');
     }
 
-    $postId = (int)($_GET['id'] ?? 0);
+    $postId = (int)($_POST['post_id'] ?? $_GET['id'] ?? 0);
     if ($postId <= 0) {
         redirect(url('home'));
     }
@@ -236,6 +302,8 @@ function handle_edit_post(string $method): bool
     if ($post['user_id'] !== $_SESSION['user_id'] && !is_admin()) {
         die('Not authorized');
     }
+
+    $editThreadTitle = false;
 
     if ($method === 'POST') {
         if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
@@ -296,7 +364,7 @@ function handle_edit_thread(string $method): bool
         }
         if (!empty($_POST['title'])) {
             $pdo->prepare("UPDATE threads SET title = ? WHERE id = ?")
-                ->execute([validate_input($_POST['title']), $threadId]);
+                ->execute([clean_text($_POST['title']), $threadId]);
         }
 
         redirect(url('thread', ['id' => $threadId, 'slug' => slugify($thread['title'] ?? '')]));

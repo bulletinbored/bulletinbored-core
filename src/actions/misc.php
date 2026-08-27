@@ -7,9 +7,50 @@ function handle_misc_action(string $action, string $method): bool
             return handle_notifications($method);
         case 'messages':
             return handle_messages($method);
+        case 'preview':
+            return $method === 'POST' ? handle_markdown_preview() : false;
+        case 'mention_users':
+            return $method === 'GET' ? handle_mention_users() : false;
         default:
             return false;
     }
+}
+
+/**
+ * Server-side Markdown preview. Reuses the exact same rendering pipeline as
+ * real posts (bb_render_content), so the preview can never show something the
+ * server would not also emit — no client-side parsing, no XSS surface.
+ */
+function handle_markdown_preview(): bool
+{
+    if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+        http_response_code(403);
+        echo '<p class="text-danger">CSRF token invalid</p>';
+        return true;
+    }
+    $content = $_POST['content'] ?? '';
+    header('Content-Type: text/html; charset=utf-8');
+    echo bb_render_content(validate_input($content));
+    return true;
+}
+
+/**
+ * Username autocomplete for @mentions. Returns a small JSON list of matching
+ * usernames. Input is a strict \w+ query so it cannot be abused for leakage.
+ */
+function handle_mention_users(): bool
+{
+    global $pdo;
+    $q = preg_replace('/[^\w]/', '', (string)($_GET['q'] ?? ''));
+    $users = [];
+    if ($q !== '' && strlen($q) <= 20) {
+        $stmt = $pdo->prepare("SELECT username FROM users WHERE username LIKE ? ORDER BY username LIMIT 8");
+        $stmt->execute([$q . '%']);
+        $users = array_map(fn($r) => ['username' => $r['username']], $stmt->fetchAll());
+    }
+    header('Content-Type: application/json');
+    echo json_encode(['users' => $users]);
+    return true;
 }
 
 

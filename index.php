@@ -9,6 +9,7 @@
 
 require __DIR__ . '/src/bootstrap.php';
 require __DIR__ . '/src/helpers.php';
+require __DIR__ . '/src/markdown.php';
 require __DIR__ . '/src/setup.php';
 
 // Load managers
@@ -17,6 +18,7 @@ require __DIR__ . '/lib/ThemeManager.php';
 require __DIR__ . '/lib/UpdateManager.php';
 
 $pluginManager = new PluginManager(__DIR__ . '/plugins', $config['plugin_manifest'] ?? __DIR__ . '/data/plugins.json');
+$GLOBALS['pluginManager'] = $pluginManager;
 $themeManager = new ThemeManager(
     __DIR__ . '/themes',
     $config['theme_manifest'] ?? __DIR__ . '/data/themes.json',

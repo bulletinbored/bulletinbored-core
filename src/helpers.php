@@ -274,19 +274,16 @@ function sanitize_html($html) {
     return $decoded;
 }
 
+/**
+ * Render post content for display.
+ *
+ * Delegates to bb_render_content() which parses Markdown securely on the
+ * server (new default) and still renders legacy HTML posts saved by the old
+ * editbored editor through sanitize_html(). Kept under the historical name
+ * because every view calls marked_parse().
+ */
 function marked_parse($text) {
-    if (empty($text)) return '';
-    // Check if content is HTML (saved by editbored editor)
-    // The content is escaped by validate_input(), so HTML tags appear as
-    // <tag> (i.e. the literal string "<" is present).
-    if (str_contains($text, '&' . chr(108) . 't;')) {
-        // Pass the escaped content straight to sanitize_html(). It performs
-        // the single html_entity_decode() internally; decoding here too would
-        // create a double-decode bypass for stored-XSS payloads.
-        return '<div class="markdown-content">' . sanitize_html($text) . '</div>';
-    }
-    // Content is markdown, JavaScript renderMarkdownContent() will parse it with marked.parse()
-    return '<div class="markdown-content">' . $text . '</div>';
+    return bb_render_content($text);
 }
 
 /**
@@ -451,6 +448,18 @@ function validate_input($data) {
     $data = trim($data);
     $data = stripslashes($data);
     $data = htmlspecialchars($data, ENT_QUOTES, 'UTF-8');
+    return $data;
+}
+
+// Clean user input for values that are escaped at render time (e.g. thread
+// titles): trim/stripslashes only, WITHOUT htmlspecialchars, so they are not
+// double-escaped when the view calls escape() on output.
+function clean_text($data) {
+    if (!is_string($data)) {
+        return '';
+    }
+    $data = trim($data);
+    $data = stripslashes($data);
     return $data;
 }
 

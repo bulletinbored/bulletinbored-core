@@ -18,10 +18,11 @@ $backUrl = url('thread', ['id' => $post['thread_id'] ?? 0, 'slug' => slugify($po
     </header>
 
     <section class="panel">
-        <form method="POST" action="<?= url('edit_post', ['id' => $post['id'] ?? 0]) ?>">
+        <form method="POST" action="<?= url($editThreadTitle ? 'edit_thread' : 'edit_post', ['id' => $post['id'] ?? 0]) ?>">
             <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
             <input type="hidden" name="post_id" value="<?= (int)($post['id'] ?? 0) ?>">
             <?php if (!empty($editThreadTitle)): ?>
+            <input type="hidden" name="thread_id" value="<?= (int)($post['id'] ?? 0) ?>">
             <div class="mb-3">
                 <label class="form-label"><?= t('title') ?></label>
                 <input type="text" name="title" class="form-control" value="<?= escape($post['title'] ?? '') ?>" required>
