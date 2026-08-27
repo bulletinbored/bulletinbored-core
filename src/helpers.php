@@ -842,10 +842,12 @@ function notify_thread_reply($thread, int $authorId, string $content): void
         }
     } catch (Throwable $e) {}
 
-    $ins = $pdo->prepare("INSERT INTO notifications (user_id, type, title, message, link, is_read, created_at) VALUES (?, 'reply', ?, ?, ?, 0, datetime('now'))");
+    $now = date('Y-m-d H:i:s');
+    $link = url('thread', ['id' => $threadId, 'slug' => slugify($title)], true);
+    $ins = $pdo->prepare("INSERT INTO notifications (user_id, type, title, message, link, is_read, created_at) VALUES (?, 'reply', ?, ?, ?, 0, ?)");
     foreach (array_keys($recipients) as $uid) {
         try {
-            $ins->execute([$uid, $subject, $body, url('thread', ['id' => $threadId, 'slug' => slugify($title)], true)]);
+            $ins->execute([$uid, $subject, $body, $link, $now]);
         } catch (Throwable $e) {}
     }
 }
