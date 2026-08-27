@@ -412,9 +412,9 @@ function handle_delete_post(): bool
 
     $pdo->prepare("DELETE FROM posts WHERE id = ?")->execute([$postId]);
 
-    $countStmt = $pdo->prepare("SELECT COUNT(*) FROM posts WHERE thread_id = ? AND status = 'visible'");
+    $countStmt = $pdo->prepare("SELECT COUNT(*) FROM posts WHERE thread_id = ?");
     $countStmt->execute([$threadId]);
-    if (empty($countStmt->fetchColumn())) {
+    if ((int)$countStmt->fetchColumn() === 0) {
         $threadStmt = $pdo->prepare("SELECT * FROM threads WHERE id = ?");
         $threadStmt->execute([$threadId]);
         $thread = $threadStmt->fetch();

@@ -359,7 +359,13 @@ class UpdateManager
         }
 
         $root = rtrim(__DIR__ . '/../', '/');
-        $this->copyRecursive($tmpExtract, $root);
+
+        // GitHub archives nest everything under <repo>-<ref>/. If the extraction
+        // produced exactly one top-level directory, flatten it so files land in
+        // $root instead of $root/<repo>-<ref>/.
+        $topDirs = glob($tmpExtract . '*', GLOB_ONLYDIR);
+        $sourceDir = (count($topDirs) === 1) ? $topDirs[0] : $tmpExtract;
+        $this->copyRecursive($sourceDir, $root);
         $this->deleteRecursive($tmpExtract);
 
         // A core update re-extracts the installer scripts from the package.
