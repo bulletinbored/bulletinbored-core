@@ -790,7 +790,7 @@ function handle_admin_langs(string $method): bool
     $langFiles = glob(__DIR__ . '/../../lang/*.json');
     $langOptions = [];
     foreach ($langFiles as $file) {
-        $code = basename($file, '.php');
+        $code = basename($file, '.json');
         $langOptions[] = $code;
     }
     include __DIR__ . '/../../views/admin_langs.php';
