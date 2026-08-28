@@ -10,7 +10,10 @@ data/sessions/
 data/logs/
 .user.ini
 
-uploads/
+/uploads/
+
+# Generated sitemap (produced at runtime by the sitemapbored plugin)
+/sitemap.xml
 
 .kilo/
 

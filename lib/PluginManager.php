@@ -270,6 +270,27 @@ class PluginManager
         }
     }
 
+    /**
+     * Like runHook() but returns the first non-null value produced by a
+     * callback. Used by filters that may override a core value (e.g. content
+     * rendering). If no callback returns a non-null value, null is returned.
+     */
+    public function applyHook(string $event, mixed ...$args): mixed
+    {
+        if (!isset($this->hooks[$event])) {
+            return null;
+        }
+        foreach ($this->hooks[$event] as $callback) {
+            if (is_callable($callback)) {
+                $result = call_user_func_array($callback, $args);
+                if ($result !== null) {
+                    return $result;
+                }
+            }
+        }
+        return null;
+    }
+
     public function captureHook(string $event, mixed ...$args): void
     {
         if (!isset($this->hooks[$event])) {

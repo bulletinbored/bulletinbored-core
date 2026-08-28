@@ -10,14 +10,15 @@
  *    & are stored as entities. We decode them once here, then treat the result
  *    as plain text that may contain Markdown tokens — never as HTML.
  *  - Auto-embed: bare URLs to allow-listed hosts (YouTube, Twitter/X,
- *    Instagram, Facebook) are turned into the same restricted <iframe> markup
- *    already accepted by sanitize_html(). Host validation is done here on the
- *    server, so a user cannot smuggle an arbitrary iframe.
- *  - Legacy posts saved by the old editbored editor (HTML) keep rendering via
- *    sanitize_html(), so existing threads are not broken.
+ *    Instagram, Facebook) are turned into restricted <iframe> markup. Host
+ *    validation is done here on the server, so a user cannot smuggle an
+ *    arbitrary iframe.
+ *  - The core renders MARKDOWN ONLY. User HTML is never trusted or echoed, so
+ *    the core never needs to sanitize or parse raw HTML from any source.
  */
 
-// Hosts permitted for auto-embed iframes. Mirrors sanitize_html() allow-list.
+// Hosts permitted for auto-embed iframes (server-validated, so a user cannot
+// smuggle an arbitrary iframe).
 function bb_embed_allowed_hosts(): array {
     return [
         'www.youtube.com', 'youtube.com', 'www.youtube-nocookie.com', 'youtube-nocookie.com',
@@ -263,16 +264,26 @@ function bb_parse_markdown(string $src): string {
             continue;
         }
 
-        // Auto-embed: a standalone line that is exactly a media URL.
+        // Auto-embed: any bare http(s) URL on the line (one or many, inline or
+        // standalone) becomes an embed/card. Served after the inline Markdown
+        // pass so links already in [text](url) form are not double-embedded.
         $trimmed = trim($line);
-        if (preg_match('#^https?://\S+$#i', $trimmed)) {
-            $embed = bb_build_embed($trimmed);
-            if ($embed === null) {
-                $embed = bb_build_link_card($trimmed);
-            }
-            if ($embed !== '' && $embed !== null) {
-                $flushParagraph($buf);
-                $out[] = $embed;
+        if (preg_match('#https?://\S+#i', $trimmed)) {
+            $flushParagraph($buf);
+            $rendered = preg_replace_callback(
+                '#https?://[^\s<>"\'\)]+#i',
+                function ($m) {
+                    $url = rtrim($m[0], '.');
+                    $embed = bb_build_embed($url);
+                    if ($embed === null) {
+                        $embed = bb_build_link_card($url);
+                    }
+                    return ($embed !== '' && $embed !== null) ? $embed : bb_esc($url);
+                },
+                $trimmed
+            );
+            if ($rendered !== '' && $rendered !== null) {
+                $out[] = $rendered;
                 $i++;
                 continue;
             }
@@ -289,18 +300,15 @@ function bb_parse_markdown(string $src): string {
 
 /**
  * Render post content for display.
- *  - Markdown posts (the new default) are parsed securely server-side.
- *  - Legacy HTML posts (saved by the old editbored editor) are passed through
- *    sanitize_html() so existing threads keep rendering without stored-XSS.
+ *
+ * The core renders MARKDOWN ONLY. User HTML is never trusted or echoed: every
+ * text node is HTML-escaped by the parser, so pasted HTML appears as literal
+ * text. This is the single, secure rendering path for all posts.
  */
 function bb_render_content(string $text): string {
     if ($text === '' || $text === null) {
         return '';
     }
-    // Legacy HTML is detected by the presence of encoded tags (&lt;), the same
-    // signal marked_parse() used. For those we sanitize the HTML.
-    if (str_contains($text, '&' . chr(108) . 't;')) {
-        return '<div class="markdown-content">' . sanitize_html($text) . '</div>';
-    }
+
     return '<div class="markdown-content">' . bb_parse_markdown($text) . '</div>';
 }

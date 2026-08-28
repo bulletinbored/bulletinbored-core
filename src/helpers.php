@@ -175,112 +175,11 @@ function is_suspended() {
 }
 
 /**
- * Strip dangerous markup from user-supplied HTML.
- *
- * The editbored editor stores HTML that was run through validate_input() at
- * save time, so it arrives here as entities (e.g. <script>). marked_parse()
- * decodes it back to real HTML before echoing, which would be a stored-XSS
- * hole unless we strip scripts/handlers/event attributes first. We keep this
- * dependency-free on purpose: a strict allow-list of tags and the removal of
- * every on* attribute plus javascript:/data: URI schemes.
- */
-function sanitize_html($html) {
-    if ($html === '' || $html === null) {
-        return '';
-    }
-
-    // Remove scripts/styles and their contents entirely.
-    $html = preg_replace('#<(script|style)\b[^>]*>.*?</\1>#is', '', $html);
-    $html = preg_replace('#<script\b[^>]*>.*?$#is', '', $html);
-
-    // Decode entities so we can match real tag boundaries, then re-scan.
-    $decoded = html_entity_decode($html, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-
-    // External social embeds (YouTube/Twitter/X iframes, Instagram/Facebook
-    // containers) are produced by the editbored editor's link-preview system.
-    // These hosts are restrictively allowed so third-party players can render.
-    // NOTE: inline styles and generic id/data-* attributes are intentionally
-    // NOT in the allow-list below — they are the most common stored-XSS /
-    // phishing (overlay) vectors and add no essential formatting once content
-    // is authored through the editor.
-    $allowedTags = '<p><br><a><strong><em><b><i><u><s><strike><ul><ol><li>'
-        . '<blockquote><code><pre><h1><h2><h3><h4><h5><h6><hr><table><thead>'
-        . '<tbody><tr><th><td><img><sub><sup><del><ins><mark><abbr>'
-        . '<iframe>';
-    $decoded = strip_tags($decoded, $allowedTags);
-
-    // Remove every attribute except a small safe set; kill event handlers and
-    // javascript:/data: URIs everywhere.
-    $decoded = preg_replace_callback(
-        '#<([a-zA-Z][a-zA-Z0-9]*)\b([^>]*)>#',
-        function ($m) {
-            $tag = strtolower($m[1]);
-            $attrs = $m[2];
-
-            $safeAttrs = [];
-            if (preg_match_all('#([a-zA-Z_\-][a-zA-Z0-9_\-]*)\s*=\s*("([^"]*)"|\'([^\']*)\'|([^\s>]+))#', $attrs, $am, PREG_SET_ORDER)) {
-                foreach ($am as $a) {
-                    $name = strtolower($a[1]);
-                    $val  = $a[3] ?? ($a[4] ?? ($a[5] ?? ''));
-
-                    // Drop every event handler.
-                    if (str_starts_with($name, 'on')) {
-                        continue;
-                    }
-                    if (in_array($name, ['href', 'src'], true)) {
-                        $norm = preg_replace('#\s+#', '', strtolower($val));
-                        if (str_starts_with($norm, 'javascript:') || str_starts_with($norm, 'data:') || str_starts_with($norm, 'vbscript:')) {
-                            continue;
-                        }
-                    }
-                    if ($tag === 'iframe' && $name === 'src') {
-                        // Only permit players from well-known embed hosts.
-                        $host = parse_url($val, PHP_URL_HOST) ?: '';
-                        $host = strtolower($host);
-                        $okHosts = ['www.youtube.com', 'youtube.com', 'www.youtube-nocookie.com',
-                                    'youtube-nocookie.com', 'platform.twitter.com',
-                                    'www.facebook.com', 'facebook.com', 'www.instagram.com', 'instagram.com'];
-                        if (!in_array($host, $okHosts, true)) {
-                            continue;
-                        }
-                    }
-                    if ($name === 'href' || $name === 'src') {
-                        $safeAttrs[] = $name . '="' . escape($val) . '"';
-                    } elseif (in_array($name, ['alt', 'title', 'class', 'target', 'rel', 'width', 'height', 'colspan', 'rowspan', 'start', 'cite'], true)) {
-                        $safeAttrs[] = $name . '="' . escape($val) . '"';
-                    } elseif ($name === 'data-url') {
-                        $safeAttrs[] = 'data-url="' . escape($val) . '"';
-                    } elseif (str_starts_with($name, 'data-instgrm-')) {
-                        $safeAttrs[] = $name . '="' . escape($val) . '"';
-                    }
-                }
-            }
-
-            // Force safe linking for anchors.
-            if ($tag === 'a' && !in_array('rel="noopener noreferrer"', $safeAttrs, true)) {
-                $safeAttrs[] = 'rel="noopener noreferrer"';
-            }
-
-            return '<' . $tag . (empty($safeAttrs) ? '' : ' ' . implode(' ', $safeAttrs)) . '>';
-        },
-        $decoded
-    );
-
-    // Remove the stray "✕" glyph left inside link-preview wrappers by older
-    // versions of the editor (it was appended as a remove-control and saved
-    // into post HTML). It is plain text, not a tag, so strip_tags misses it.
-    $decoded = preg_replace('/✕/', '', $decoded);
-
-    return $decoded;
-}
-
-/**
  * Render post content for display.
  *
  * Delegates to bb_render_content() which parses Markdown securely on the
- * server (new default) and still renders legacy HTML posts saved by the old
- * editbored editor through sanitize_html(). Kept under the historical name
- * because every view calls marked_parse().
+ * server. User HTML is never trusted, so the core renders Markdown only.
+ * Kept under the historical name because every view calls marked_parse().
  */
 function marked_parse($text) {
     return bb_render_content($text);
