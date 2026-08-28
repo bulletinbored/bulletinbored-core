@@ -629,9 +629,10 @@ function handle_admin_langs(string $method): bool
     if (!function_exists('saveLangMeta')) {
         function saveLangMeta(string $code, string $sha): void {
             global $langMetaPath;
-            $meta = loadLangMeta($langMetaPath);
+            $path = $langMetaPath ?: __DIR__ . '/../../data/lang-meta.json';
+            $meta = loadLangMeta($path);
             $meta[$code] = ['sha' => $sha, 'updated' => date('c')];
-            file_put_contents($langMetaPath, json_encode($meta, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
+            @file_put_contents($path, json_encode($meta, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
         }
     }
 
@@ -705,16 +706,28 @@ function handle_admin_langs(string $method): bool
                 if ($langCode === '' || $downloadUrl === '') {
                     $langError = 'Invalid language code or download URL';
                 } else {
+                    ob_start();
+                    $prevDisplayErrors = ini_get('display_errors');
+                    @ini_set('display_errors', '0');
                     $parsed = parse_url($downloadUrl);
                     $allowed = false;
                     if (
                         $parsed
                         && ($parsed['scheme'] ?? '') === 'https'
-                        && in_array($parsed['host'], ['github.com', 'raw.githubusercontent.com'], true)
                         && !str_contains($parsed['path'], '..')
-                        && str_starts_with($parsed['path'], '/bulletinbored/langs/')
                     ) {
-                        $allowed = true;
+                        // Official GitHub sources
+                        if (
+                            in_array($parsed['host'], ['github.com', 'raw.githubusercontent.com'], true)
+                            && str_starts_with($parsed['path'], '/bulletinbored/langs/')
+                        ) {
+                            $allowed = true;
+                        }
+                        // Configured mirror (default: extend.bulletinbored.net)
+                        $mirrorHost = parse_url($langMirrorBase, PHP_URL_HOST);
+                        if ($mirrorHost && ($parsed['host'] ?? '') === $mirrorHost) {
+                            $allowed = true;
+                        }
                     }
                     if (!$allowed) {
                         $langError = 'Invalid download URL. Only URLs from the official language repository are allowed.';
@@ -759,17 +772,26 @@ function handle_admin_langs(string $method): bool
                             }
 
                             if ($data === null) {
-                                $langError = 'Invalid language file from repository';
-                            } elseif (file_put_contents($dest, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) === false) {
-                                $langError = 'Failed to save language file';
-                            } else {
-                                saveLangMeta($langCode, $remoteSha);
-                                $_SESSION['lang_success'] = ($isUpdate ? 'Language file updated: ' : 'Language file installed: ') . escape($langCode);
-                                redirect(url('admin_langs'));
-                            }
+                                    $langError = 'Invalid language file from repository';
+                                } elseif (!is_writable(dirname($dest))) {
+                                    $langError = 'Language directory is not writable. Please check permissions.';
+                                } else {
+                                    $written = @file_put_contents($dest, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+                                    if ($written === false) {
+                                        $langError = 'Failed to save language file';
+                                    } else {
+                                        saveLangMeta($langCode, $remoteSha);
+                                        $_SESSION['lang_success'] = ($isUpdate ? 'Language file updated: ' : 'Language file installed: ') . escape($langCode);
+                                        ob_end_clean();
+                                        @ini_set('display_errors', $prevDisplayErrors);
+                                        redirect(url('admin_langs'));
+                                    }
+                                }
                         }
                     }
                 }
+                @ini_set('display_errors', $prevDisplayErrors);
+                ob_end_clean();
             } elseif (isset($_POST['delete_lang'])) {
                 $langCode = $_POST['lang_code'] ?? '';
                 $langCode = preg_replace('/[^a-z_]/', '', strtolower($langCode));
