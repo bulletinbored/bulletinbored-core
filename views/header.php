@@ -58,16 +58,11 @@ function render_header($title = 'bulletinbored', $options = []) {
             <?php // User icons: desktop dropdown / mobile opens the full-screen stack ?>
             <ul class="navbar-nav topbar-user">
                 <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
-                        <li class="nav-item">
-                            <a class="nav-link nav-icon position-relative" href="<?= url('messages') ?>" title="<?= t('messages') ?>" data-mobile-tab="messages">
-                                <i class="fas fa-envelope"></i>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link nav-icon position-relative" href="<?= url('notifications') ?>" title="<?= t('notifications') ?>" data-mobile-tab="notifications">
-                                <i class="fas fa-bell"></i>
-                            </a>
-                        </li>
+                        <?php
+                        if (!empty($GLOBALS['pluginManager']) && method_exists($GLOBALS['pluginManager'], 'runHook')) {
+                            $GLOBALS['pluginManager']->runHook('navbar_icons');
+                        }
+                        ?>
                         <li class="nav-item dropdown user-menu-dropdown">
                         <a class="nav-link dropdown-toggle d-flex align-items-center gap-2" href="#" data-bs-toggle="dropdown">
                             <?= render_avatar($_SESSION['username'] ?? '', $_SESSION['avatar'] ?? '', 28) ?>
@@ -76,7 +71,6 @@ function render_header($title = 'bulletinbored', $options = []) {
                         <ul class="dropdown-menu dropdown-menu-end">
                             <li><a class="dropdown-item" href="<?= url('profile', ['user' => $_SESSION['username'] ?? '']) ?>"><i class="fas fa-id-card me-2"></i><?= t('profile') ?></a></li>
                             <li><a class="dropdown-item" href="<?= url('edit_profile') ?>"><i class="fas fa-sliders-h me-2"></i><?= t('edit_profile') ?></a></li>
-                            <li><a class="dropdown-item" href="<?= url('messages') ?>"><i class="fas fa-envelope me-2"></i><?= t('messages') ?></a></li>
                             <?php if (function_exists('is_admin') && is_admin()): ?>
                                 <li><hr class="dropdown-divider"></li>
                                 <li><a class="dropdown-item" href="<?= url('admin') ?>"><i class="fas fa-cog me-2"></i><?= t('admin_panel') ?></a></li>
@@ -100,14 +94,11 @@ function render_header($title = 'bulletinbored', $options = []) {
         <a href="<?= url('new_thread') ?>" class="mobile-tab" title="<?= t('new_thread') ?>">
             <i class="fas fa-plus"></i>
         </a>
-        <?php endif; ?>
-        <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
-        <a href="<?= url('messages') ?>" class="mobile-tab" data-mobile-tab="messages" title="<?= t('messages') ?>">
-            <i class="fas fa-envelope"></i>
-        </a>
-        <a href="<?= url('notifications') ?>" class="mobile-tab" data-mobile-tab="notifications" title="<?= t('notifications') ?>">
-            <i class="fas fa-bell"></i>
-        </a>
+        <?php
+        if (!empty($GLOBALS['pluginManager']) && method_exists($GLOBALS['pluginManager'], 'runHook')) {
+            $GLOBALS['pluginManager']->runHook('mobile_tabbar_icons');
+        }
+        ?>
         <?php endif; ?>
         <a href="#" class="mobile-tab" data-mobile-tab="search" title="<?= t('search') ?>">
             <i class="fas fa-search"></i>
@@ -133,10 +124,11 @@ function render_header($title = 'bulletinbored', $options = []) {
                 <i class="fas fa-arrow-left"></i>
             </button>
             <div class="mobile-stack-tabs" role="tablist">
-                <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
-                <button type="button" class="mobile-stack-tab active" data-tab="messages" role="tab"><i class="fas fa-envelope"></i></button>
-                <button type="button" class="mobile-stack-tab" data-tab="notifications" role="tab"><i class="fas fa-bell"></i></button>
-                <?php endif; ?>
+                <?php
+                if (!empty($GLOBALS['pluginManager']) && method_exists($GLOBALS['pluginManager'], 'runHook')) {
+                    $GLOBALS['pluginManager']->runHook('mobile_stack_tabs');
+                }
+                ?>
                 <button type="button" class="mobile-stack-tab<?= (function_exists('is_logged_in') && is_logged_in()) ? '' : ' active' ?>" data-tab="search" role="tab"><i class="fas fa-search"></i></button>
                 <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
                 <button type="button" class="mobile-stack-tab" data-tab="user" role="tab"><i class="fas fa-user"></i></button>
@@ -147,10 +139,11 @@ function render_header($title = 'bulletinbored', $options = []) {
             <span class="mobile-stack-title" id="mobileStackTitle"></span>
         </div>
         <div class="mobile-stack-body">
-            <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
-            <div class="mobile-stack-pane active" data-pane="messages" id="paneMessages"><div class="mobile-stack-loading">Loading…</div></div>
-            <div class="mobile-stack-pane" data-pane="notifications" id="paneNotifications"><div class="mobile-stack-loading">Loading…</div></div>
-            <?php endif; ?>
+            <?php
+            if (!empty($GLOBALS['pluginManager']) && method_exists($GLOBALS['pluginManager'], 'runHook')) {
+                $GLOBALS['pluginManager']->runHook('mobile_stack_panes');
+            }
+            ?>
             <div class="mobile-stack-pane<?= (function_exists('is_logged_in') && is_logged_in()) ? '' : ' active' ?>" data-pane="search" id="paneSearch">
                 <form class="mobile-stack-search" method="GET" action="<?= url('search') ?>" role="search">
                     <i class="fas fa-search"></i>
@@ -167,14 +160,6 @@ function render_header($title = 'bulletinbored', $options = []) {
                 <a class="mobile-stack-row" href="<?= url('edit_profile') ?>">
                     <i class="fas fa-sliders-h mobile-stack-row-icon"></i>
                     <div class="mobile-stack-row-main"><div class="mobile-stack-row-title"><?= t('edit_profile') ?></div></div>
-                </a>
-                <a class="mobile-stack-row" href="<?= url('messages') ?>">
-                    <i class="fas fa-envelope mobile-stack-row-icon"></i>
-                    <div class="mobile-stack-row-main"><div class="mobile-stack-row-title"><?= t('messages') ?></div></div>
-                </a>
-                <a class="mobile-stack-row" href="<?= url('notifications') ?>">
-                    <i class="fas fa-bell mobile-stack-row-icon"></i>
-                    <div class="mobile-stack-row-main"><div class="mobile-stack-row-title"><?= t('notifications') ?></div></div>
                 </a>
                 <?php if (function_exists('is_admin') && is_admin()): ?>
                 <a class="mobile-stack-row" href="<?= url('admin') ?>">

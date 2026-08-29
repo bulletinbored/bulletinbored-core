@@ -118,10 +118,6 @@ $router->middleware('auth')->group(function($router) {
     $router->get('/edit-profile', fn() => handle_edit_profile('GET'));
     $router->post('/edit-profile', fn() => handle_edit_profile('POST'));
     $router->post('/remove-avatar', fn() => handle_remove_avatar('POST'));
-    $router->get('/notifications', fn() => handle_notifications('GET'));
-    $router->post('/notifications', fn() => handle_notifications('POST'));
-    $router->get('/messages', fn() => handle_messages('GET'));
-    $router->post('/messages', fn() => handle_messages('POST'));
     $router->post('/preview', fn() => handle_markdown_preview());
     $router->get('/mention-users', fn() => handle_mention_users());
 });

@@ -63,6 +63,8 @@
         panes.forEach(function (p) { p.classList.toggle('active', p.dataset.pane === tab); });
         titleEl.textContent = titles[tab] || '';
         if (tab === 'user' || tab === 'search' || tab === 'login') { return; }
+        if (tab === 'messages' && !window.textmebored) { return; }
+        if (tab === 'notifications' && !window.bellbored) { return; }
         if (!loaded[tab]) {
             loadPane(tab);
         }
@@ -81,8 +83,13 @@
 
     function loadMessages() {
         var pane = document.getElementById('paneMessages');
+        if (!pane) return;
         pane.innerHTML = '<div class="mobile-stack-loading">Loading…</div>';
-        fetch((window.textmebored ? window.textmebored.apiUrl : '') + '/conversations', { credentials: 'same-origin' })
+        if (!window.textmebored) {
+            pane.innerHTML = '<div class="mobile-stack-empty">Messages unavailable</div>';
+            return;
+        }
+        fetch(window.textmebored.apiUrl + '/conversations', { credentials: 'same-origin' })
             .then(function (r) { return r.json(); })
             .then(function (data) {
                 loaded.messages = true;
@@ -107,8 +114,13 @@
 
     function loadNotifications() {
         var pane = document.getElementById('paneNotifications');
+        if (!pane) return;
         pane.innerHTML = '<div class="mobile-stack-loading">Loading…</div>';
-        fetch((window.bellbored ? window.bellbored.apiUrl : '') + '', { credentials: 'same-origin' })
+        if (!window.bellbored) {
+            pane.innerHTML = '<div class="mobile-stack-empty">Notifications unavailable</div>';
+            return;
+        }
+        fetch(window.bellbored.apiUrl, { credentials: 'same-origin' })
             .then(function (r) { return r.json(); })
             .then(function (data) {
                 loaded.notifications = true;
