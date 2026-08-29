@@ -12,12 +12,53 @@ class PluginManager
     private array $capturedHead = [];
     private ?string $capturedAdminHead = null;
     private ?string $capturedFrontendHead = null;
+    private ?Bulletin\Router $router = null;
+    private array $routeRegistrations = [];
+    private array $middlewareRegistrations = [];
 
     public function __construct(string $pluginsDir, string $manifestPath)
     {
         $this->pluginsDir = rtrim($pluginsDir, '/');
         $this->manifestPath = $manifestPath;
         $this->loadManifest();
+    }
+
+    public function setRouter(Bulletin\Router $router): void
+    {
+        $this->router = $router;
+    }
+
+    public function registerRoute(string $method, string $pattern, callable $handler, array $middleware = []): void
+    {
+        $this->routeRegistrations[] = ['method' => $method, 'pattern' => $pattern, 'handler' => $handler, 'middleware' => $middleware];
+    }
+
+    public function registerMiddleware(string $name, callable $fn): void
+    {
+        $this->middlewareRegistrations[] = ['name' => $name, 'fn' => $fn];
+    }
+
+    public function getRouter(): ?Bulletin\Router
+    {
+        return $this->router;
+    }
+
+    public function applyRoutes(): void
+    {
+        if ($this->router === null) {
+            return;
+        }
+        foreach ($this->middlewareRegistrations as $mw) {
+            $this->router = $this->router->registerMiddleware($mw['name'], $mw['fn']);
+        }
+        foreach ($this->routeRegistrations as $route) {
+            $method = strtolower($route['method']);
+            if ($method === 'any') {
+                $this->router = $this->router->any($route['pattern'], $route['handler']);
+            } else {
+                $this->router = $this->router->$method($route['pattern'], $route['handler']);
+            }
+        }
     }
 
     private function loadManifest(): void
@@ -240,9 +281,10 @@ class PluginManager
         return $loaded;
     }
 
-    public function addHook(string $event, callable $callback): void
+    public function addHook(string $event, callable $callback, int $priority = 10): void
     {
-        $this->hooks[$event][] = $callback;
+        $this->hooks[$event][] = ['cb' => $callback, 'prio' => $priority];
+        usort($this->hooks[$event], fn($a, $b) => $a['prio'] <=> $b['prio']);
     }
 
     public function removeHook(string $event, callable $callback): void
@@ -251,11 +293,12 @@ class PluginManager
             return;
         }
         foreach ($this->hooks[$event] as $i => $h) {
-            if ($h === $callback) {
+            if ($h['cb'] === $callback) {
                 unset($this->hooks[$event][$i]);
                 break;
             }
         }
+        $this->hooks[$event] = array_values($this->hooks[$event]);
     }
 
     public function runHook(string $event, mixed ...$args): void
@@ -263,9 +306,9 @@ class PluginManager
         if (!isset($this->hooks[$event])) {
             return;
         }
-        foreach ($this->hooks[$event] as $callback) {
-            if (is_callable($callback)) {
-                call_user_func_array($callback, $args);
+        foreach ($this->hooks[$event] as $h) {
+            if (is_callable($h['cb'])) {
+                call_user_func_array($h['cb'], $args);
             }
         }
     }
@@ -280,9 +323,9 @@ class PluginManager
         if (!isset($this->hooks[$event])) {
             return null;
         }
-        foreach ($this->hooks[$event] as $callback) {
-            if (is_callable($callback)) {
-                $result = call_user_func_array($callback, $args);
+        foreach ($this->hooks[$event] as $h) {
+            if (is_callable($h['cb'])) {
+                $result = call_user_func_array($h['cb'], $args);
                 if ($result !== null) {
                     return $result;
                 }
@@ -291,15 +334,83 @@ class PluginManager
         return null;
     }
 
+    /**
+     * Filter a value through all callbacks registered for an event.
+     * Each callback receives the value and can modify/return it.
+     * Unlike applyHook(), this chains: output of one becomes input of next.
+     *
+     * @param string $event Hook name
+     * @param mixed $value The value to filter
+     * @param mixed ...$args Additional context passed to each callback
+     * @return mixed The filtered value
+     */
+    public function filter(string $event, mixed $value, mixed ...$args): mixed
+    {
+        if (!isset($this->hooks[$event])) {
+            return $value;
+        }
+        foreach ($this->hooks[$event] as $h) {
+            if (is_callable($h['cb'])) {
+                $result = call_user_func($h['cb'], $value, ...$args);
+                if ($result !== null) {
+                    $value = $result;
+                }
+            }
+        }
+        return $value;
+    }
+
+    /**
+     * Check if any callback registered for an event returns truthy.
+     * Useful for permission/authorization hooks where any "veto" blocks the action.
+     *
+     * @param string $event Hook name
+     * @param mixed ...$args
+     * @return bool True if at least one callback returns true
+     */
+    public function checkHook(string $event, mixed ...$args): bool
+    {
+        if (!isset($this->hooks[$event])) {
+            return false;
+        }
+        foreach ($this->hooks[$event] as $h) {
+            if (is_callable($h['cb']) && call_user_func_array($h['cb'], $args)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Check if ALL callbacks registered for an event return truthy.
+     * Useful for multi-factor auth or cumulative permission checks.
+     *
+     * @param string $event Hook name
+     * @param mixed ...$args
+     * @return bool True only if all callbacks return true (or no callbacks exist)
+     */
+    public function checkHookAll(string $event, mixed ...$args): bool
+    {
+        if (!isset($this->hooks[$event])) {
+            return true;
+        }
+        foreach ($this->hooks[$event] as $h) {
+            if (is_callable($h['cb']) && !call_user_func_array($h['cb'], $args)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     public function captureHook(string $event, mixed ...$args): void
     {
         if (!isset($this->hooks[$event])) {
             return;
         }
         ob_start();
-        foreach ($this->hooks[$event] as $callback) {
-            if (is_callable($callback)) {
-                call_user_func_array($callback, $args);
+        foreach ($this->hooks[$event] as $h) {
+            if (is_callable($h['cb'])) {
+                call_user_func_array($h['cb'], $args);
             }
         }
         $this->capturedHead[] = ob_get_clean();

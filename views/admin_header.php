@@ -25,12 +25,16 @@ function render_admin_header($title = 'Admin Panel') {
     <div id="wrapper">
 
         <!-- Sidebar -->
+        <div class="sidebar-overlay d-md-none"></div>
         <nav class="sidebar">
             <!-- Sidebar Brand -->
                 <a class="sidebar-brand" href="<?= url('admin') ?>">
                     <i class="fas fa-cog me-2"></i>
                     <span><?= t('admin_panel') ?></span>
                 </a>
+                <button class="sidebar-close d-md-none" aria-label="Chiudi sidebar">
+                    <i class="fas fa-times"></i>
+                </button>
             <hr class="sidebar-divider my-0">
 
             <!-- Dashboard -->

@@ -239,11 +239,15 @@ function is_admin() { return ($_SESSION['user_role'] ?? '') === 'admin'; }
 function user_has_permission(string $permission): bool {
     if (is_admin()) return true;
     $roleName = $_SESSION['user_role'] ?? 'user';
-    global $pdo;
+    global $pdo, $pluginManager;
     $stmt = $pdo->prepare("SELECT permissions FROM roles WHERE name = ?");
     $stmt->execute([$roleName]);
     $perms = json_decode($stmt->fetchColumn() ?: '[]', true) ?: [];
-    return in_array($permission, $perms, true);
+    if (in_array($permission, $perms, true)) return true;
+    if (isset($pluginManager)) {
+        return $pluginManager->checkHook('permission_' . $permission, $roleName);
+    }
+    return false;
 }
 function redirect($url) { header("Location: $url"); exit; }
 function base_url() {
@@ -284,6 +288,13 @@ function log_security_event(string $event, array $context = []): void {
     @file_put_contents($logDir . '/security.log', $line, FILE_APPEND | LOCK_EX);
 }
 
+function log_admin_action(string $action, array $context = []): void {
+    $userId = $_SESSION['user_id'] ?? 0;
+    $username = $_SESSION['username'] ?? 'unknown';
+    $ctx = array_merge(['admin_id' => $userId, 'admin_user' => $username], $context);
+    log_security_event('admin_' . $action, $ctx);
+}
+
 function generate_csrf_token() {
     if (empty($_SESSION['csrf_token'])) {
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
@@ -291,7 +302,23 @@ function generate_csrf_token() {
     return $_SESSION['csrf_token'];
 }
 function validate_csrf_token($token) {
-    return isset($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $token);
+    if (empty($_SESSION['csrf_token']) || empty($token)) {
+        return false;
+    }
+    return hash_equals($_SESSION['csrf_token'], $token);
+}
+function csrf_validate_request(): bool
+{
+    $token = $_POST['csrf_token'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+    if (!validate_csrf_token($token)) {
+        return false;
+    }
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    return true;
+}
+function csrf_field() {
+    $token = generate_csrf_token();
+    return '<input type="hidden" name="csrf_token" value="' . escape($token) . '">';
 }
 
 /**
@@ -344,22 +371,20 @@ function rate_limit($action, $max = 10, $window = 300, $key = null) {
 }
 
 function validate_input($data) {
+    if (!is_string($data)) {
+        return '';
+    }
     $data = trim($data);
     $data = stripslashes($data);
     $data = htmlspecialchars($data, ENT_QUOTES, 'UTF-8');
     return $data;
 }
 
-// Clean user input for values that are escaped at render time (e.g. thread
-// titles): trim/stripslashes only, WITHOUT htmlspecialchars, so they are not
-// double-escaped when the view calls escape() on output.
 function clean_text($data) {
     if (!is_string($data)) {
         return '';
     }
-    $data = trim($data);
-    $data = stripslashes($data);
-    return $data;
+    return stripslashes(trim($data));
 }
 
 /* ------------------------------------------------------------------

@@ -22,6 +22,7 @@ $insertIgnoreSql = $dbDriver === 'mysql' ? 'INSERT IGNORE' : 'INSERT OR IGNORE';
 
 // Database initialization
 require_once __DIR__ . '/../lib/BbPdo.php';
+require_once __DIR__ . '/../lib/DbQuery.php';
 if ($dbDriver === 'mysql') {
     $dsn = "mysql:host={$config['db_host']};dbname={$config['db_name']};charset=utf8mb4";
     $pdo = new BbPdo($dsn, $config['db_user'], $config['db_pass']);
@@ -63,10 +64,13 @@ if ($dbDriver === 'mysql') {
     } catch (PDOException $e) {}
 
     // Create admin user if not exists
-    $stmt = $pdo->query("SELECT COUNT(*) FROM users WHERE role='admin'");
-    if ($stmt->fetchColumn() == 0) {
-        $pdo->prepare("INSERT INTO users (username, password, role) VALUES (?, ?, 'admin')")
-            ->execute([$config['admin_user'], password_hash($config['admin_pass'], PASSWORD_DEFAULT)]);
+    $db = new DbQuery($pdo);
+    if (!$db->table('users')->where('role', 'admin')->exists()) {
+        $db->table('users')->insert([
+            'username' => $config['admin_user'],
+            'password' => password_hash($config['admin_pass'], PASSWORD_DEFAULT),
+            'role' => 'admin',
+        ]);
     }
 
     // Create default roles if not exists
@@ -76,11 +80,13 @@ if ($dbDriver === 'mysql') {
         ['user', json_encode(['can_create_threads', 'can_create_posts', 'can_edit_own_posts', 'can_delete_own_posts'])],
     ];
     foreach ($defaultRoles as $role) {
-        $pdo->prepare("$insertIgnoreSql INTO roles (name, permissions) VALUES (?, ?)")->execute($role);
+        $db->table('roles')->insertIgnore(['name' => $role[0], 'permissions' => $role[1]]);
     }
 
     // Create default category (idempotent: only if it does not already exist)
-    $pdo->prepare("INSERT INTO categories (name, description, position) SELECT 'General', 'General discussion', 1 WHERE NOT EXISTS (SELECT 1 FROM categories WHERE name = 'General')")->execute();
+    if (!$db->table('categories')->where('name', 'General')->exists()) {
+        $db->table('categories')->insert(['name' => 'General', 'description' => 'General discussion', 'position' => 1]);
+    }
 } else {
     // SQLite handling
     if (!file_exists($dbPath)) {
@@ -301,13 +307,14 @@ if ($dbDriver === 'mysql') {
 
         // Insert default roles if not exists
         try {
+            $db = new DbQuery($pdo);
             $defaultRoles = [
                 ['admin', json_encode(['can_approve_threads', 'can_delete_threads', 'can_delete_posts', 'can_lock_threads', 'can_sticky_threads', 'can_edit_posts', 'can_edit_threads', 'can_ban_users', 'can_manage_roles', 'can_move_threads', 'can_split_threads', 'can_merge_threads', 'can_copy_threads'])],
                 ['moderator', json_encode(['can_approve_threads', 'can_delete_threads', 'can_delete_posts', 'can_lock_threads', 'can_sticky_threads', 'can_edit_posts', 'can_edit_threads', 'can_move_threads', 'can_split_threads', 'can_merge_threads', 'can_copy_threads'])],
                 ['user', json_encode(['can_create_threads', 'can_create_posts', 'can_edit_own_posts', 'can_delete_own_posts'])],
             ];
             foreach ($defaultRoles as $role) {
-        $pdo->prepare("$insertIgnoreSql INTO roles (name, permissions) VALUES (?, ?)")->execute($role);
+                $db->table('roles')->insertIgnore(['name' => $role[0], 'permissions' => $role[1]]);
             }
         } catch (PDOException $e) {}
     }

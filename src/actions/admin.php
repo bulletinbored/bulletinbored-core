@@ -96,7 +96,7 @@ function handle_admin_dashboard(): bool
     $adminError = '';
     $adminSuccess = '';
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
-        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+        if (!csrf_validate_request()) {
             $adminError = 'Invalid CSRF token';
         } else {
             $siteName = trim($_POST['site_name'] ?? $config['site_name']);
@@ -125,7 +125,7 @@ function handle_admin_settings_post(): ?string
 {
     global $config;
 
-    if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+    if (!csrf_validate_request()) {
         return 'CSRF token invalid';
     }
 
@@ -197,7 +197,7 @@ function handle_moderate_post(): bool
 {
     global $pdo;
 
-    if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+    if (!csrf_validate_request()) {
         die('CSRF token invalid');
     }
 
@@ -210,11 +210,13 @@ function handle_moderate_post(): bool
 
     if ($action === 'approve') {
         $pdo->prepare("UPDATE threads SET status = 'visible' WHERE id = ?")->execute([$threadId]);
+        log_admin_action('thread_approve', ['thread_id' => $threadId]);
     } elseif ($action === 'delete') {
         $catIdStmt = $pdo->prepare("SELECT category_id FROM threads WHERE id = ?");
         $catIdStmt->execute([$threadId]);
         $catId = (int)($catIdStmt->fetchColumn() ?: 0);
         $pdo->prepare("DELETE FROM threads WHERE id = ?")->execute([$threadId]);
+        log_admin_action('thread_delete', ['thread_id' => $threadId, 'category_id' => $catId]);
         if ($catId > 0) {
             redirect(url('category', ['id' => $catId]));
         }
@@ -229,7 +231,7 @@ function handle_frontend_moderate_post(): bool
 {
     global $pdo;
 
-    if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+    if (!csrf_validate_request()) {
         die('CSRF token invalid');
     }
     $threadId = (int)($_POST['id'] ?? 0);
@@ -243,19 +245,25 @@ function handle_frontend_moderate_post(): bool
     }
     if ($modAction === 'lock') {
         $pdo->prepare("UPDATE threads SET status = 'locked' WHERE id = ?")->execute([$threadId]);
+        log_admin_action('thread_lock', ['thread_id' => $threadId]);
     } elseif ($modAction === 'unlock') {
         $pdo->prepare("UPDATE threads SET status = 'visible' WHERE id = ?")->execute([$threadId]);
+        log_admin_action('thread_unlock', ['thread_id' => $threadId]);
     } elseif ($modAction === 'sticky') {
         $pdo->prepare("UPDATE threads SET status = 'sticky' WHERE id = ?")->execute([$threadId]);
+        log_admin_action('thread_sticky', ['thread_id' => $threadId]);
     } elseif ($modAction === 'unsticky') {
         $pdo->prepare("UPDATE threads SET status = 'visible' WHERE id = ?")->execute([$threadId]);
+        log_admin_action('thread_unsticky', ['thread_id' => $threadId]);
     } elseif ($modAction === 'hide') {
         $pdo->prepare("UPDATE threads SET status = 'hidden' WHERE id = ?")->execute([$threadId]);
+        log_admin_action('thread_hide', ['thread_id' => $threadId]);
     } elseif ($modAction === 'delete') {
         $catIdStmt = $pdo->prepare("SELECT category_id FROM threads WHERE id = ?");
         $catIdStmt->execute([$threadId]);
         $catId = (int)($catIdStmt->fetchColumn() ?: 0);
         $pdo->prepare("DELETE FROM threads WHERE id = ?")->execute([$threadId]);
+        log_admin_action('thread_delete', ['thread_id' => $threadId, 'category_id' => $catId]);
         if ($catId > 0) {
             redirect(url('category', ['id' => $catId]));
         }
@@ -264,6 +272,7 @@ function handle_frontend_moderate_post(): bool
         $targetCat = (int)($_POST['category_id'] ?? 0);
         if ($targetCat > 0) {
             $pdo->prepare("UPDATE threads SET category_id = ? WHERE id = ?")->execute([$targetCat, $threadId]);
+            log_admin_action('thread_move', ['thread_id' => $threadId, 'category_id' => $targetCat]);
         }
     } elseif ($modAction === 'copy') {
         $targetCat = (int)($_POST['category_id'] ?? 0);
@@ -282,6 +291,7 @@ function handle_frontend_moderate_post(): bool
                 foreach ($posts as $post) {
                     $postIns->execute([$newThreadId, $post['user_id'], $post['content'], $post['created_at']]);
                 }
+                log_admin_action('thread_copy', ['thread_id' => $threadId, 'new_thread_id' => $newThreadId, 'category_id' => $targetCat]);
             }
         }
     }
@@ -296,7 +306,7 @@ function handle_split_thread_post(): bool
 {
     global $pdo;
 
-    if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+    if (!csrf_validate_request()) {
         die('CSRF token invalid');
     }
     $threadId = (int)($_POST['thread_id'] ?? 0);
@@ -363,7 +373,7 @@ function handle_merge_thread_post(): bool
 {
     global $pdo;
 
-    if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+    if (!csrf_validate_request()) {
         die('CSRF token invalid');
     }
     $threadId = (int)($_POST['thread_id'] ?? 0);
@@ -401,7 +411,7 @@ function handle_admin_roles_action_post(): bool
 {
     global $pdo;
 
-    if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+    if (!csrf_validate_request()) {
         die('CSRF token invalid');
     }
     $roleAction = $_POST['do'] ?? '';
@@ -411,6 +421,7 @@ function handle_admin_roles_action_post(): bool
         if ($roleName !== '') {
             $pdo->prepare("INSERT INTO roles (name, permissions) VALUES (?, ?)")
                 ->execute([$roleName, json_encode($permissions)]);
+            log_admin_action('role_create', ['role' => $roleName]);
         }
     } elseif ($roleAction === 'update') {
         $roleId = (int)($_POST['role_id'] ?? 0);
@@ -418,11 +429,13 @@ function handle_admin_roles_action_post(): bool
         if ($roleId > 0) {
             $pdo->prepare("UPDATE roles SET permissions = ? WHERE id = ?")
                 ->execute([json_encode($permissions), $roleId]);
+            log_admin_action('role_update', ['role_id' => $roleId]);
         }
     } elseif ($roleAction === 'delete') {
         $roleId = (int)($_POST['role_id'] ?? 0);
         if ($roleId > 0) {
             $pdo->prepare("DELETE FROM roles WHERE id = ? AND name <> 'admin'")->execute([$roleId]);
+            log_admin_action('role_delete', ['role_id' => $roleId]);
         }
     }
     redirect(url('admin_roles'));
@@ -453,7 +466,7 @@ function handle_admin_user_edit(string $method): bool
         redirect(url('admin_users'));
     }
     if ($method === 'POST') {
-        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+        if (!csrf_validate_request()) {
             die('CSRF token invalid');
         }
         $newUsername = trim($_POST['username'] ?? '');
@@ -463,6 +476,7 @@ function handle_admin_user_edit(string $method): bool
         if ($newUsername !== '') {
             $pdo->prepare("UPDATE users SET username = ?, email = ?, role = ?, status = ? WHERE id = ?")
                 ->execute([$newUsername, $newEmail, $newRole, $newStatus, $editUserId]);
+            log_admin_action('user_update', ['target_id' => $editUserId, 'username' => $newUsername, 'role' => $newRole, 'status' => $newStatus]);
         }
         redirect(url('admin_user_edit', ['id' => $editUserId]));
     }
@@ -474,7 +488,7 @@ function handle_admin_create_user_post(): bool
 {
     global $pdo;
 
-    if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+    if (!csrf_validate_request()) {
         die('CSRF token invalid');
     }
 
@@ -504,6 +518,7 @@ function handle_admin_create_user_post(): bool
         ->execute([$username, password_hash($password, PASSWORD_DEFAULT), $email, $role, $status, $emailVerified]);
 
     $userId = $pdo->lastInsertId();
+    log_admin_action('user_create', ['new_user_id' => $userId, 'username' => $username, 'role' => $role]);
 
     if (!empty($email) && empty($emailVerified)) {
         $token = bin2hex(random_bytes(32));
@@ -535,7 +550,7 @@ function handle_admin_categories(string $method): bool
         die('Admin required');
     }
     if ($method === 'POST') {
-        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+        if (!csrf_validate_request()) {
             die('CSRF token invalid');
         }
         $allowedRoles = $_POST['allowed_roles'] ?? 'all';
@@ -546,12 +561,14 @@ function handle_admin_categories(string $method): bool
             $description = validate_input($_POST['description'] ?? '');
             if ($catId > 0 && $name !== '') {
                 $pdo->prepare("UPDATE categories SET name = ?, description = ?, allowed_roles = ? WHERE id = ?")->execute([$name, $description, $allowedRoles, $catId]);
+                log_admin_action('category_update', ['category_id' => $catId, 'name' => $name]);
             }
         } else {
             $name = validate_input($_POST['name'] ?? '');
             $description = validate_input($_POST['description'] ?? '');
             if ($name !== '') {
                 $pdo->prepare("INSERT INTO categories (name, description, allowed_roles) VALUES (?, ?, ?)")->execute([$name, $description, $allowedRoles]);
+                log_admin_action('category_create', ['name' => $name]);
             }
         }
         redirect(url('admin_categories'));
@@ -564,12 +581,13 @@ function handle_delete_category_post(): bool
 {
     global $pdo;
 
-    if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+    if (!csrf_validate_request()) {
         die('CSRF token invalid');
     }
     $catId = (int)($_GET['id'] ?? 0);
     if ($catId > 0) {
         $pdo->prepare("DELETE FROM categories WHERE id = ?")->execute([$catId]);
+        log_admin_action('category_delete', ['category_id' => $catId]);
     }
     redirect(url('admin_categories'));
     return true;
@@ -579,7 +597,7 @@ function handle_update_category_order_post(): bool
 {
     global $pdo;
 
-    if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+    if (!csrf_validate_request()) {
         http_response_code(403);
         echo json_encode(['success' => false, 'message' => 'CSRF token invalid']);
         exit;
@@ -647,7 +665,7 @@ function handle_admin_langs(string $method): bool
     $langError = $_SESSION['lang_error'] ?? '';
     unset($_SESSION['lang_success'], $_SESSION['lang_error']);
     if ($method === 'POST' && isset($_POST['csrf_token'])) {
-        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+        if (!csrf_validate_request()) {
             $langError = 'Invalid CSRF token';
         } else {
             if (isset($_POST['save_lang_settings'])) {
@@ -899,7 +917,7 @@ function handle_admin_plugins(string $method): bool
     $adminPluginError = '';
     $adminPluginSuccess = '';
     if ($method === 'POST' && isset($_POST['csrf_token'])) {
-        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+        if (!csrf_validate_request()) {
             $adminPluginError = 'Invalid CSRF token';
         } else {
             if (isset($_POST['save_plugin_settings'])) {
@@ -953,6 +971,7 @@ function handle_admin_plugins(string $method): bool
                 $result = $pluginManager->delete($pluginName);
                 if ($result['success']) {
                     $adminPluginSuccess = $result['message'];
+                    log_admin_action('plugin_delete', ['plugin' => $pluginName]);
                 } else {
                     $adminPluginError = $result['message'];
                 }
@@ -961,12 +980,14 @@ function handle_admin_plugins(string $method): bool
                 if ($_POST['action'] === 'enable') {
                     if ($pluginManager->enable($pluginName)) {
                         $adminPluginSuccess = 'Plugin enabled';
+                        log_admin_action('plugin_enable', ['plugin' => $pluginName]);
                     } else {
                         $adminPluginError = 'Plugin not found';
                     }
                 } elseif ($_POST['action'] === 'disable') {
                     if ($pluginManager->disable($pluginName)) {
                         $adminPluginSuccess = 'Plugin disabled';
+                        log_admin_action('plugin_disable', ['plugin' => $pluginName]);
                     } else {
                         $adminPluginError = 'Plugin not found';
                     }
@@ -997,7 +1018,7 @@ function handle_admin_themes(string $method): bool
     $adminThemeError = '';
     $adminThemeSuccess = '';
     if ($method === 'POST' && isset($_POST['csrf_token'])) {
-        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+        if (!csrf_validate_request()) {
             $adminThemeError = 'Invalid CSRF token';
         } else {
             if (isset($_POST['install_theme']) && !empty($_FILES['theme_zip']['tmp_name'])) {
@@ -1043,6 +1064,7 @@ function handle_admin_themes(string $method): bool
                 $themeName = $_POST['theme_name'] ?? '';
                 if ($themeManager->activate($themeName)) {
                     $adminThemeSuccess = 'Theme activated';
+                    log_admin_action('theme_activate', ['theme' => $themeName]);
                 } else {
                     $adminThemeError = 'Theme not found';
                 }
@@ -1051,6 +1073,7 @@ function handle_admin_themes(string $method): bool
                 $result = $themeManager->delete($themeName);
                 if ($result['success']) {
                     $adminThemeSuccess = $result['message'];
+                    log_admin_action('theme_delete', ['theme' => $themeName]);
                 } else {
                     $adminThemeError = $result['message'];
                 }
@@ -1084,7 +1107,7 @@ function handle_admin_catalog(string $method): bool
     $adminCatalogError = '';
     $adminCatalogSuccess = '';
     if ($method === 'POST' && isset($_POST['csrf_token'])) {
-        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+        if (!csrf_validate_request()) {
             $adminCatalogError = 'Invalid CSRF token';
         } elseif (isset($_POST['uninstall_from_catalog'])) {
             $name = strtolower(trim($_POST['name'] ?? ''));
@@ -1217,7 +1240,7 @@ function handle_admin_updates(string $method): bool
     $updateSuccess = '';
 
     if ($method === 'POST' && isset($_POST['check_updates'])) {
-        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+        if (!csrf_validate_request()) {
             $updateError = 'Invalid CSRF token';
         } else {
             $catalogMirrorBase = !empty($config['update_mirror']) ? rtrim($config['update_mirror'], '/') : 'https://extend.bulletinbored.net';
@@ -1231,7 +1254,7 @@ function handle_admin_updates(string $method): bool
     }
 
     if ($method === 'POST' && isset($_POST['apply_update'])) {
-        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+        if (!csrf_validate_request()) {
             $updateError = 'Invalid CSRF token';
         } else {
             $type = $_POST['type'] ?? '';
@@ -1315,7 +1338,7 @@ function handle_delete_user_post(): bool
 {
     global $pdo;
 
-    if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+    if (!csrf_validate_request()) {
         die('CSRF token invalid');
     }
     $userId = (int)($_POST['id'] ?? $_GET['id'] ?? 0);
@@ -1324,6 +1347,8 @@ function handle_delete_user_post(): bool
         $stmt->execute([$userId]);
         if ($stmt->rowCount() === 0) {
             $_SESSION['admin_error'] = t('user_not_deleted') ?? 'User could not be deleted (does not exist or is an admin).';
+        } else {
+            log_admin_action('user_delete', ['target_id' => $userId]);
         }
     } else {
         $_SESSION['admin_error'] = t('invalid_user_id') ?? 'Invalid user id.';
@@ -1336,12 +1361,13 @@ function handle_unban_user_post(): bool
 {
     global $pdo;
 
-    if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+    if (!csrf_validate_request()) {
         die('CSRF token invalid');
     }
     $userId = (int)($_POST['id'] ?? $_GET['id'] ?? 0);
     if ($userId > 0) {
         $pdo->prepare("UPDATE users SET status = 'active', suspension_time = 0 WHERE id = ?")->execute([$userId]);
+        log_admin_action('user_unban', ['target_id' => $userId]);
     }
     redirect(url('admin_users'));
     return true;
@@ -1351,12 +1377,13 @@ function handle_ban_user_post(): bool
 {
     global $pdo;
 
-    if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+    if (!csrf_validate_request()) {
         die('CSRF token invalid');
     }
     $userId = (int)($_POST['id'] ?? $_GET['id'] ?? 0);
     if ($userId > 0) {
         $pdo->prepare("UPDATE users SET status = 'banned' WHERE id = ? AND role <> 'admin'")->execute([$userId]);
+        log_admin_action('user_ban', ['target_id' => $userId]);
     }
     redirect(url('admin_users'));
     return true;
@@ -1366,7 +1393,7 @@ function handle_suspend_user_post(): bool
 {
     global $pdo;
 
-    if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+    if (!csrf_validate_request()) {
         die('CSRF token invalid');
     }
     $userId = (int)($_POST['id'] ?? $_GET['id'] ?? 0);
@@ -1374,6 +1401,7 @@ function handle_suspend_user_post(): bool
     $suspensionTime = time() + ($days * 86400);
     if ($userId > 0) {
         $pdo->prepare("UPDATE users SET status = 'suspended', suspension_time = ? WHERE id = ?")->execute([$suspensionTime, $userId]);
+        log_admin_action('user_suspend', ['target_id' => $userId, 'days' => $days]);
     }
     redirect(url('admin_users'));
     return true;

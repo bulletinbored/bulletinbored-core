@@ -50,6 +50,34 @@ body.admin-layout {
     font-size: 1.5rem;
 }
 
+.sidebar-close {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    background: none;
+    border: none;
+    color: rgba(255,255,255,0.7);
+    font-size: 1.25rem;
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+    z-index: 1000;
+}
+.sidebar-close:hover {
+    color: #fff;
+}
+
+/* Sidebar overlay for mobile */
+.sidebar-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.4);
+    z-index: 998;
+}
+body.sidebar-toggled .sidebar-overlay {
+    display: block;
+}
+
 .sidebar-nav {
     list-style: none;
     padding: 0;
@@ -550,17 +578,13 @@ body.sidebar-toggled #content-wrapper {
     .sidebar {
         margin-left: -225px;
     }
-    
-    .sidebar.show {
-        margin-left: 0;
-    }
-    
-    #content-wrapper {
-        margin-left: 0 !important;
-    }
-    
+
     body.sidebar-toggled .sidebar {
         margin-left: 0;
+    }
+
+    #content-wrapper {
+        margin-left: 0 !important;
     }
 }
 

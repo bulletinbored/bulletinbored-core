@@ -364,6 +364,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install'])) {
             file_put_contents($userIniPath, build_user_ini(), LOCK_EX);
         }
 
+        // Detect server software to show the right post-install instructions.
+        $serverSoftware = $_SERVER['SERVER_SOFTWARE'] ?? '';
+        $isNginx = stripos($serverSoftware, 'nginx') !== false;
+        $isIis = stripos($serverSoftware, 'microsoft-iis') !== false;
+
         $pluginManager = new PluginManager(__DIR__ . '/plugins', __DIR__ . '/data/plugins.json');
         foreach ($availablePlugins as $name => $info) {
             if (!in_array($name, $selected, true)) {
@@ -759,6 +764,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install'])) {
                     (<code>install.php</code>, <code>install2.php</code>, <code>install3.php</code>)
                     from your server now that setup is complete. Leaving them in place is a security risk.
                 </div>
+
+                <?php if ($isNginx): ?>
+                <div class="alert alert-info mt-3">
+                    <i class="fas fa-server me-2"></i>
+                    <strong>Nginx detected:</strong> Copy <code>nginx.conf</code> from the project root to your Nginx site configuration and adjust the <code>server_name</code>, <code>root</code>, and PHP-FPM socket path. Then reload Nginx. See <code>README.md</code> for full instructions.
+                </div>
+                <?php elseif ($isIis): ?>
+                <div class="alert alert-info mt-3">
+                    <i class="fas fa-server me-2"></i>
+                    <strong>IIS detected:</strong> Ensure the <a href="https://www.iis.net/downloads/microsoft/url-rewrite" target="_blank" rel="noopener">URL Rewrite Module</a> is installed. The included <code>web.config</code> handles all rewrite rules automatically.
+                </div>
+                <?php endif; ?>
 
                 <a href="<?= htmlspecialchars(rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'])), '/') . '/', ENT_QUOTES, 'UTF-8') ?>" class="btn btn-brand w-100">
                     Go to your forum<i class="fas fa-arrow-right ms-2"></i>

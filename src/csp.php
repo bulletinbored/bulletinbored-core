@@ -14,8 +14,8 @@ function csp_nonce(): string {
 function send_security_headers(string $nonce): void {
     header('X-Content-Type-Options: nosniff');
     header('X-Frame-Options: DENY');
-    header('Referrer-Policy: strict-origin-when-cross-origin');
+    header('Referrer-Policy: no-referrer-when-downgrade');
     if (!headers_sent()) {
-        header("Content-Security-Policy: default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'nonce-{$nonce}' 'unsafe-hashes'; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com; font-src 'self' https: data:; img-src 'self' data: https:; frame-src https://www.instagram.com https://connect.facebook.net https://www.facebook.com https://facebook.com https://www.youtube.com https://www.youtube-nocookie.com https://platform.twitter.com; connect-src 'self' https://www.instagram.com https://connect.facebook.net https://www.facebook.com https://platform.twitter.com https://www.google.com");
+        header("Content-Security-Policy: default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://www.instagram.com https://connect.facebook.net 'nonce-{$nonce}' 'unsafe-hashes'; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com; font-src 'self' https: data:; img-src 'self' data: https:; frame-src https://www.instagram.com https://connect.facebook.net https://www.facebook.com https://facebook.com https://www.youtube.com https://www.youtube-nocookie.com https://platform.twitter.com; connect-src 'self' https://www.instagram.com https://connect.facebook.net https://www.facebook.com https://platform.twitter.com https://www.google.com https://static.cdninstagram.com");
     }
 }

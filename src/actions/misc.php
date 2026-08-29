@@ -23,7 +23,7 @@ function handle_misc_action(string $action, string $method): bool
  */
 function handle_markdown_preview(): bool
 {
-    if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+    if (!csrf_validate_request()) {
         http_response_code(403);
         echo '<p class="text-danger">CSRF token invalid</p>';
         return true;
@@ -62,7 +62,7 @@ function handle_notifications(string $method): bool
     if (!is_logged_in()) {
         die('Login required');
     }
-    if ($method === 'POST' && validate_csrf_token($_POST['csrf_token'] ?? '')) {
+    if ($method === 'POST' && csrf_validate_request()) {
         if (isset($_POST['do']) && $_POST['do'] === 'mark_read' && isset($_GET['id'])) {
             $id = (int)$_GET['id'];
             if ($id > 0) {
@@ -98,7 +98,7 @@ function handle_messages(string $method): bool
         error_log('ensure_private_messages_table failed: ' . $e->getMessage());
     }
 
-    if ($method === 'POST' && isset($_POST['content']) && validate_csrf_token($_POST['csrf_token'] ?? '')) {
+    if ($method === 'POST' && isset($_POST['content']) && csrf_validate_request()) {
         $recipientId = (int)($_GET['conversation'] ?? 0);
         $content = trim($_POST['content'] ?? '');
         if ($recipientId > 0 && $content !== '') {

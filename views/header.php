@@ -43,9 +43,7 @@ function render_header($title = 'bulletinbored', $options = []) {
     ?>
 </head>
 <body class="<?= (function_exists('is_admin') && is_admin()) ? 'is-admin' : '' ?>">
-    <script>
-        // Always start a thread (or any page) at the top, unless a permalink
-        // hash is present, so the browser does not restore scroll at the bottom.
+    <script nonce="<?= htmlspecialchars(csp_nonce(), ENT_QUOTES, 'UTF-8') ?>">
         if ('scrollRestoration' in history) {
             history.scrollRestoration = 'manual';
         }

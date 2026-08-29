@@ -41,7 +41,7 @@ function handle_upload_image(): bool
         echo json_encode(['ok' => false, 'error' => 'Login required']);
         return true;
     }
-    if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+    if (!csrf_validate_request()) {
         header('Content-Type: application/json');
         echo json_encode(['ok' => false, 'error' => 'CSRF token invalid']);
         return true;
@@ -94,7 +94,7 @@ function handle_upload_image(): bool
 
 function handle_thread_view(): bool
 {
-    global $pdo;
+    global $pdo, $pluginManager;
 
     $threadId = (int)($_POST['thread_id'] ?? $_GET['id'] ?? 0);
     if ($threadId <= 0) {
@@ -117,7 +117,18 @@ function handle_thread_view(): bool
     $thread = $stmt->fetch();
 
     if (!$thread) {
+        if (isset($pluginManager)) {
+            $fallback = $pluginManager->applyHook('thread_not_found', $threadId);
+            if ($fallback !== null) {
+                echo $fallback;
+                return true;
+            }
+        }
         die('Thread not found');
+    }
+
+    if (isset($pluginManager)) {
+        $thread = $pluginManager->filter('thread_before_view', $thread);
     }
 
     $seenThreads = $_SESSION['viewed_threads'] ?? [];
@@ -156,21 +167,34 @@ function handle_thread_view(): bool
     $postsStmt->execute([$threadId]);
     $posts = $postsStmt->fetchAll();
 
+    if (isset($pluginManager)) {
+        $posts = $pluginManager->filter('thread_posts_before_view', $posts, $thread);
+    }
+
     $categories = $pdo->query("SELECT * FROM categories ORDER BY position")->fetchAll();
 
+    if (isset($pluginManager)) {
+        $pluginManager->runHook('thread_before_render', $thread, $posts);
+    }
+
     include __DIR__ . '/../../views/thread.php';
+
+    if (isset($pluginManager)) {
+        $pluginManager->runHook('thread_after_render', $thread, $posts);
+    }
+
     return true;
 }
 
 function handle_new_thread(string $method): bool
 {
-    global $pdo, $config;
+    global $pdo, $config, $pluginManager;
     if (!is_logged_in()) {
         die('Login required');
     }
 
     if ($method === 'POST') {
-        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+        if (!csrf_validate_request()) {
             die('CSRF token invalid');
         }
 
@@ -208,12 +232,31 @@ function handle_new_thread(string $method): bool
             return true;
         }
 
+        $threadData = [
+            'category_id' => $categoryId,
+            'user_id' => $_SESSION['user_id'],
+            'title' => $title,
+            'content' => $content,
+            'created_at' => date('Y-m-d H:i:s'),
+        ];
+
+        if (isset($pluginManager)) {
+            $threadData = $pluginManager->filter('thread_before_create', $threadData);
+            if ($pluginManager->checkHook('thread_create_block', $threadData)) {
+                die(t('thread_creation_blocked'));
+            }
+        }
+
         $stmt = $pdo->prepare("
             INSERT INTO threads (category_id, user_id, title, content, created_at)
             VALUES (?, ?, ?, ?, ?)
         ");
-        $stmt->execute([$categoryId, $_SESSION['user_id'], $title, $content, date('Y-m-d H:i:s')]);
+        $stmt->execute([$threadData['category_id'], $threadData['user_id'], $threadData['title'], $threadData['content'], $threadData['created_at']]);
         $threadId = $pdo->lastInsertId();
+
+        if (isset($pluginManager)) {
+            $pluginManager->runHook('thread_after_create', $threadId, $threadData);
+        }
 
         if (!empty($config['attachments_enabled']) && !empty($_FILES['attachments']['name'][0])) {
             // Attachment handling code would go here
@@ -228,13 +271,13 @@ function handle_new_thread(string $method): bool
 
 function handle_reply_post(): bool
 {
-    global $pdo;
+    global $pdo, $pluginManager;
 
     if (!is_logged_in()) {
         die('Login required');
     }
 
-    if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+    if (!csrf_validate_request()) {
         die('CSRF token invalid');
     }
 
@@ -265,12 +308,30 @@ function handle_reply_post(): bool
         die('Thread is locked');
     }
 
+    $postData = [
+        'thread_id' => $threadId,
+        'user_id' => $_SESSION['user_id'],
+        'content' => $content,
+        'created_at' => date('Y-m-d H:i:s'),
+    ];
+
+    if (isset($pluginManager)) {
+        $postData = $pluginManager->filter('post_before_create', $postData, $thread);
+        if ($pluginManager->checkHook('post_create_block', $postData, $thread)) {
+            die(t('post_creation_blocked'));
+        }
+    }
+
     $stmt = $pdo->prepare("
         INSERT INTO posts (thread_id, user_id, content, created_at)
         VALUES (?, ?, ?, ?)
     ");
-    $stmt->execute([$threadId, $_SESSION['user_id'], $content, date('Y-m-d H:i:s')]);
+    $stmt->execute([$postData['thread_id'], $postData['user_id'], $postData['content'], $postData['created_at']]);
     $postId = $pdo->lastInsertId();
+
+    if (isset($pluginManager)) {
+        $pluginManager->runHook('post_after_create', $postId, $postData, $thread);
+    }
 
     notify_thread_reply($thread, $_SESSION['user_id'], $content);
 
@@ -280,7 +341,7 @@ function handle_reply_post(): bool
 
 function handle_edit_post(string $method): bool
 {
-    global $pdo;
+    global $pdo, $pluginManager;
 
     if (!is_logged_in()) {
         die('Login required');
@@ -306,14 +367,30 @@ function handle_edit_post(string $method): bool
     $editThreadTitle = false;
 
     if ($method === 'POST') {
-        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+        if (!csrf_validate_request()) {
             die('CSRF token invalid');
         }
 
         $content = validate_input($_POST['content'] ?? '');
         if ($content !== '') {
-            $pdo->prepare("UPDATE posts SET content = ? WHERE id = ?")
-                ->execute([$content, $postId]);
+            $updateData = ['content' => $content];
+
+            if (isset($pluginManager)) {
+                $updateData = $pluginManager->filter('post_before_update', $updateData, $post);
+            }
+
+            $setParts = [];
+            $params = [];
+            foreach ($updateData as $col => $val) {
+                $setParts[] = "{$col} = ?";
+                $params[] = $val;
+            }
+            $params[] = $postId;
+            $pdo->prepare("UPDATE posts SET " . implode(', ', $setParts) . " WHERE id = ?")->execute($params);
+
+            if (isset($pluginManager)) {
+                $pluginManager->runHook('post_after_update', $postId, $updateData, $post);
+            }
         }
 
         $threadStmt = $pdo->prepare("SELECT * FROM threads WHERE id = ?");
@@ -329,7 +406,7 @@ function handle_edit_post(string $method): bool
 
 function handle_edit_thread(string $method): bool
 {
-    global $pdo;
+    global $pdo, $pluginManager;
 
     if (!is_logged_in()) {
         die('Login required');
@@ -353,18 +430,36 @@ function handle_edit_thread(string $method): bool
     }
 
     if ($method === 'POST') {
-        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+        if (!csrf_validate_request()) {
             die('CSRF token invalid');
         }
 
         $content = validate_input($_POST['content'] ?? '');
+        $updateData = [];
         if ($content !== '') {
-            $pdo->prepare("UPDATE threads SET content = ? WHERE id = ?")
-                ->execute([$content, $threadId]);
+            $updateData['content'] = $content;
         }
         if (!empty($_POST['title'])) {
-            $pdo->prepare("UPDATE threads SET title = ? WHERE id = ?")
-                ->execute([clean_text($_POST['title']), $threadId]);
+            $updateData['title'] = clean_text($_POST['title']);
+        }
+
+        if (!empty($updateData)) {
+            if (isset($pluginManager)) {
+                $updateData = $pluginManager->filter('thread_before_update', $updateData, $thread);
+            }
+
+            $setParts = [];
+            $params = [];
+            foreach ($updateData as $col => $val) {
+                $setParts[] = "{$col} = ?";
+                $params[] = $val;
+            }
+            $params[] = $threadId;
+            $pdo->prepare("UPDATE threads SET " . implode(', ', $setParts) . " WHERE id = ?")->execute($params);
+
+            if (isset($pluginManager)) {
+                $pluginManager->runHook('thread_after_update', $threadId, $updateData, $thread);
+            }
         }
 
         redirect(url('thread', ['id' => $threadId, 'slug' => slugify($thread['title'] ?? '')]));
@@ -381,13 +476,13 @@ function handle_edit_thread(string $method): bool
 
 function handle_delete_post(): bool
 {
-    global $pdo;
+    global $pdo, $pluginManager;
 
     if (!is_logged_in()) {
         die('Login required');
     }
 
-    if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+    if (!csrf_validate_request()) {
         die('CSRF token invalid');
     }
 
@@ -410,7 +505,19 @@ function handle_delete_post(): bool
 
     $threadId = $post['thread_id'];
 
+    if (isset($pluginManager) && $pluginManager->checkHook('post_delete_block', $post)) {
+        die(t('post_deletion_blocked'));
+    }
+
+    if (isset($pluginManager)) {
+        $pluginManager->runHook('post_before_delete', $postId, $post);
+    }
+
     $pdo->prepare("DELETE FROM posts WHERE id = ?")->execute([$postId]);
+
+    if (isset($pluginManager)) {
+        $pluginManager->runHook('post_after_delete', $postId, $threadId);
+    }
 
     $countStmt = $pdo->prepare("SELECT COUNT(*) FROM posts WHERE thread_id = ?");
     $countStmt->execute([$threadId]);
@@ -428,13 +535,13 @@ function handle_delete_post(): bool
 
 function handle_delete_thread(): bool
 {
-    global $pdo;
+    global $pdo, $pluginManager;
 
     if (!is_logged_in()) {
         die('Login required');
     }
 
-    if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+    if (!csrf_validate_request()) {
         die('CSRF token invalid');
     }
 
@@ -455,8 +562,20 @@ function handle_delete_thread(): bool
         die('Not authorized');
     }
 
+    if (isset($pluginManager) && $pluginManager->checkHook('thread_delete_block', $thread)) {
+        die(t('thread_deletion_blocked'));
+    }
+
+    if (isset($pluginManager)) {
+        $pluginManager->runHook('thread_before_delete', $threadId, $thread);
+    }
+
     $pdo->prepare("DELETE FROM posts WHERE thread_id = ?")->execute([$threadId]);
     $pdo->prepare("DELETE FROM threads WHERE id = ?")->execute([$threadId]);
+
+    if (isset($pluginManager)) {
+        $pluginManager->runHook('thread_after_delete', $threadId, $thread);
+    }
 
     redirect(url('category', ['id' => $thread['category_id']]));
     return true;

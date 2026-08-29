@@ -28,13 +28,13 @@ function handle_users_action(string $action, string $method): bool
 
 function handle_login(string $method): bool
 {
-    global $pdo;
+    global $pdo, $pluginManager;
     if (is_logged_in()) {
         redirect(url('home'));
     }
 
     if ($method === 'POST') {
-        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+        if (!csrf_validate_request()) {
             die('CSRF token invalid');
         }
 
@@ -51,7 +51,18 @@ function handle_login(string $method): bool
         $stmt->execute([$username]);
         $user = $stmt->fetch();
 
+        if (isset($pluginManager)) {
+            $user = $pluginManager->filter('auth_before_verify', $user ?: null, $username, $password);
+        }
+
         if ($user && password_verify($password, $user['password'])) {
+            if (isset($pluginManager) && $pluginManager->checkHook('auth_login_block', $user)) {
+                $error = 'login_blocked';
+                log_security_event('login_blocked_by_plugin', ['username' => $username]);
+                include __DIR__ . '/../../views/login.php';
+                return true;
+            }
+
             if ($user['status'] === 'banned') {
                 $error = 'user_banned';
             } elseif ($user['status'] === 'suspended' && !empty($user['suspension_time']) && time() < $user['suspension_time']) {
@@ -72,12 +83,20 @@ function handle_login(string $method): bool
                     $_SESSION['user_status'] = 'active';
                     $_SESSION['user_suspension_time'] = 0;
                 }
+
+                if (isset($pluginManager)) {
+                    $pluginManager->runHook('auth_after_login', $user['id'], $user);
+                }
+
                 session_write_close();
                 redirect(url('home'));
             }
         } else {
             $error = 'Invalid credentials';
             log_security_event('login_failed', ['username' => $username]);
+            if (isset($pluginManager)) {
+                $pluginManager->runHook('auth_login_failed', $username);
+            }
         }
     }
 
@@ -89,7 +108,7 @@ function handle_register(string $method): bool
 {
     global $pdo, $config, $pluginManager;
     if ($method === 'POST') {
-        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+        if (!csrf_validate_request()) {
             die('CSRF token invalid');
         }
 
@@ -239,7 +258,7 @@ function handle_edit_profile(string $method): bool
     }
 
     if ($method === 'POST') {
-        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+        if (!csrf_validate_request()) {
             die('CSRF token invalid');
         }
 
@@ -354,7 +373,7 @@ function handle_remove_avatar(string $method): bool
     }
 
     if ($method === 'POST') {
-        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+        if (!csrf_validate_request()) {
             die('CSRF token invalid');
         }
 
@@ -382,7 +401,7 @@ function handle_forgot_password(string $method): bool
     global $pdo, $config;
 
     if ($method === 'POST') {
-        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+        if (!csrf_validate_request()) {
             die('CSRF token invalid');
         }
 
@@ -426,7 +445,7 @@ function handle_reset_password(string $method): bool
     global $pdo;
 
     if ($method === 'POST') {
-        if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+        if (!csrf_validate_request()) {
             die('CSRF token invalid');
         }
 

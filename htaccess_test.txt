@@ -1,0 +1,2 @@
+# Test - questo dovrebbe causare un errore 500 se processato
+INVALID_DIRECTIVE_TEST
