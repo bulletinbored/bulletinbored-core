@@ -7,7 +7,8 @@
  *   - Pre/post middleware pipeline
  *   - Separate route groups for API and views
  *   - Named parameters with type constraints
- *   - Immutable route registration (clone-on-add)
+ *   - Automatic JSON response for API routes
+ *   - Content-Type negotiation (JSON vs HTML)
  *
  * Usage:
  *   $router = new Router();
@@ -186,6 +187,7 @@ class Router
         $method = $_SERVER['REQUEST_METHOD'];
         $reqPath = $reqPath === '' ? '/' : $reqPath;
         $matchPath = '/' . ltrim($reqPath, '/');
+        $wantsJson = $this->wantsJson();
 
         foreach ($this->routes as $route) {
             if ($route['method'] !== '*' && $route['method'] !== $method) {
@@ -203,7 +205,7 @@ class Router
                 }
                 $result = ($this->middleware[$mwName])($params);
                 if ($result !== null) {
-                    $this->sendResponse($result['status'], $result['body'], $result['headers'] ?? []);
+                    $this->sendResponse($result['status'], $result['body'], $result['headers'] ?? [], $wantsJson && !isset($result['headers']));
                     return;
                 }
             }
@@ -216,94 +218,49 @@ class Router
             $result = ($route['handler'])($params);
 
             if (is_array($result) && isset($result['status'])) {
-                $this->sendResponse($result['status'], $result['body'] ?? '');
+                $body = $result['body'] ?? '';
+                if ($wantsJson && !is_string($body)) {
+                    $body = json_encode($body, JSON_UNESCAPED_UNICODE);
+                }
+                $this->sendResponse($result['status'], $body, $result['headers'] ?? [], $wantsJson && !isset($result['headers']));
+            } elseif (is_array($result) || is_object($result)) {
+                $this->sendResponse(200, json_encode($result, JSON_UNESCAPED_UNICODE), [], true);
             }
 
             return;
         }
 
-        $this->sendResponse(404, 'Page not found');
+        $this->sendResponse(404, $wantsJson ? json_encode(['error' => 'Not found']) : 'Page not found', [], $wantsJson);
     }
 
-    private function sendResponse(int $status, string $body, array $headers = []): void
+    private function wantsJson(): bool
     {
-        http_response_code($status);
-        foreach ($headers as $h) {
-            header($h);
+        $accept = $_SERVER['HTTP_ACCEPT'] ?? '';
+        if (str_contains($accept, 'application/json')) {
+            return true;
+        }
+        $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
+        if (str_contains($contentType, 'application/json')) {
+            return true;
+        }
+        $reqPath = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH);
+        if (str_starts_with(ltrim($reqPath, '/'), 'api/')) {
+            return true;
+        }
+        return false;
+    }
+
+    private function sendResponse(int $status, string $body, array $headers = [], bool $isJson = false): void
+    {
+        if (!headers_sent()) {
+            http_response_code($status);
+            if ($isJson) {
+                header('Content-Type: application/json; charset=utf-8');
+            }
+            foreach ($headers as $h) {
+                header($h);
+            }
         }
         echo $body;
-    }
-
-    public static function resolve(): array
-    {
-        if (isset($_GET['action'])) {
-            return $_GET;
-        }
-
-        $reqPath = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH);
-        $reqPath = ltrim($reqPath, '/');
-        $base = trim(\base_url(), '/');
-        if ($base !== '') {
-            if ($reqPath === $base) {
-                $reqPath = '';
-            } elseif (str_starts_with($reqPath, $base . '/')) {
-                $reqPath = substr($reqPath, strlen($base) + 1);
-            }
-        }
-
-        $map = [
-            '#^thread/([0-9]+)(?:-[^/]+)?$#'            => fn($m) => ['action' => 'thread', 'id' => $m[1]],
-            '#^category/([0-9]+)(?:-[^/]+)?$#'          => fn($m) => ['action' => 'category', 'id' => $m[1]],
-            '#^u/([^/]+)$#'                              => fn($m) => ['action' => 'profile', 'user' => urldecode($m[1])],
-            '#^edit-post/([0-9]+)$#'                    => fn($m) => ['action' => 'edit_post', 'id' => (int)$m[1]],
-            '#^delete-post/([0-9]+)$#'                  => fn($m) => ['action' => 'delete_post', 'id' => (int)$m[1]],
-            '#^edit-thread/([0-9]+)$#'                  => fn($m) => ['action' => 'edit_thread', 'id' => (int)$m[1]],
-            '#^delete-thread/([0-9]+)$#'                => fn($m) => ['action' => 'delete_thread', 'id' => (int)$m[1]],
-            '#^download/([0-9]+)$#'                     => fn($m) => ['action' => 'download', 'id' => (int)$m[1]],
-            '#^admin$#'                                  => fn()   => ['action' => 'admin'],
-            '#^admin/moderation$#'                       => fn()   => ['action' => 'admin_moderation'],
-            '#^admin/categories$#'                       => fn()   => ['action' => 'admin_categories'],
-            '#^admin/users$#'                            => fn()   => ['action' => 'admin_users'],
-            '#^admin/users/([0-9]+)/edit$#'             => fn($m) => ['action' => 'admin_user_edit', 'id' => (int)$m[1]],
-            '#^admin/create-user$#'                      => fn()   => ['action' => 'admin_create_user'],
-            '#^admin/settings$#'                         => fn()   => ['action' => 'admin_settings'],
-            '#^admin/langs$#'                           => fn()   => ['action' => 'admin_langs'],
-            '#^admin/catalog$#'                         => fn()   => ['action' => 'admin_catalog'],
-            '#^admin/plugins$#'                         => fn()   => ['action' => 'admin_plugins'],
-            '#^admin/themes$#'                          => fn()   => ['action' => 'admin_themes'],
-            '#^admin/diagnostics$#'                     => fn()   => ['action' => 'admin_diagnostics'],
-            '#^admin/updates$#'                         => fn()   => ['action' => 'admin_updates'],
-            '#^admin/roles$#'                           => fn()   => ['action' => 'admin_roles'],
-            '#^admin/roles-action$#'                    => fn()   => ['action' => 'admin_roles_action'],
-            '#^admin/moderate$#'                        => fn()   => ['action' => 'moderate'],
-            '#^admin/delete-category$#'                 => fn()   => ['action' => 'delete_category'],
-            '#^admin/update-category-order$#'            => fn()   => ['action' => 'update_category_order'],
-            '#^admin/delete-user$#'                     => fn()   => ['action' => 'delete_user'],
-            '#^admin/ban-user$#'                        => fn()   => ['action' => 'ban_user'],
-            '#^admin/unban-user$#'                      => fn()   => ['action' => 'unban_user'],
-            '#^edit-profile$#'                          => fn()   => ['action' => 'edit_profile'],
-            '#^remove-avatar$#'                         => fn()   => ['action' => 'remove_avatar'],
-            '#^forgot-password$#'                       => fn()   => ['action' => 'forgot_password'],
-            '#^reset-password$#'                        => fn()   => ['action' => 'reset_password'],
-            '#^verify-email$#'                          => fn()   => ['action' => 'verify_email'],
-            '#^new-thread$#'                            => fn()   => ['action' => 'new_thread'],
-            '#^messages$#'                              => fn()   => ['action' => 'messages'],
-            '#^notifications$#'                        => fn()   => ['action' => 'notifications'],
-        ];
-
-        foreach ($map as $pattern => $apply) {
-            if (preg_match($pattern, $reqPath, $m)) {
-                $_GET = array_merge($_GET, $apply($m));
-                return $_GET;
-            }
-        }
-
-        if ($reqPath === '' || $reqPath === 'index.php') {
-            $_GET['action'] = 'home';
-        } elseif (preg_match('#^[^/]+$#', $reqPath, $m)) {
-            $_GET['action'] = $m[0];
-        }
-
-        return $_GET;
     }
 }

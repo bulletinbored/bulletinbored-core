@@ -161,6 +161,76 @@ function url($action, $params = [], $absolute = false) {
     }
 }
 
+function current_route_action(): string
+{
+    $reqPath = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH);
+    $reqPath = ltrim($reqPath, '/');
+    $base = trim(base_url(), '/');
+    if ($base !== '') {
+        if ($reqPath === $base) {
+            $reqPath = '';
+        } elseif (str_starts_with($reqPath, $base . '/')) {
+            $reqPath = substr($reqPath, strlen($base) + 1);
+        }
+    }
+
+    if ($reqPath === '' || $reqPath === 'index.php') {
+        return 'home';
+    }
+
+    $map = [
+        '#^thread/([0-9]+)(?:-[^/]+)?$#'            => 'thread',
+        '#^category/([0-9]+)(?:-[^/]+)?$#'          => 'category',
+        '#^u/([^/]+)$#'                              => 'profile',
+        '#^edit-post/([0-9]+)$#'                    => 'edit_post',
+        '#^delete-post/([0-9]+)$#'                  => 'delete_post',
+        '#^edit-thread/([0-9]+)$#'                  => 'edit_thread',
+        '#^delete-thread/([0-9]+)$#'                => 'delete_thread',
+        '#^download/([0-9]+)$#'                     => 'download',
+        '#^admin$#'                                  => 'admin',
+        '#^admin/moderation$#'                       => 'admin_moderation',
+        '#^admin/categories$#'                       => 'admin_categories',
+        '#^admin/users$#'                            => 'admin_users',
+        '#^admin/users/([0-9]+)/edit$#'             => 'admin_user_edit',
+        '#^admin/create-user$#'                      => 'admin_create_user',
+        '#^admin/settings$#'                         => 'admin_settings',
+        '#^admin/langs$#'                           => 'admin_langs',
+        '#^admin/catalog$#'                         => 'admin_catalog',
+        '#^admin/plugins$#'                         => 'admin_plugins',
+        '#^admin/themes$#'                          => 'admin_themes',
+        '#^admin/diagnostics$#'                     => 'admin_diagnostics',
+        '#^admin/updates$#'                         => 'admin_updates',
+        '#^admin/roles$#'                           => 'admin_roles',
+        '#^admin/roles-action$#'                    => 'admin_roles_action',
+        '#^admin/moderate$#'                        => 'moderate',
+        '#^admin/delete-category$#'                 => 'delete_category',
+        '#^admin/update-category-order$#'            => 'update_category_order',
+        '#^admin/delete-user$#'                     => 'delete_user',
+        '#^admin/ban-user$#'                        => 'ban_user',
+        '#^admin/unban-user$#'                      => 'unban_user',
+        '#^edit-profile$#'                          => 'edit_profile',
+        '#^remove-avatar$#'                         => 'remove_avatar',
+        '#^forgot-password$#'                       => 'forgot_password',
+        '#^reset-password$#'                        => 'reset_password',
+        '#^verify-email$#'                          => 'verify_email',
+        '#^new-thread$#'                            => 'new_thread',
+        '#^messages$#'                              => 'messages',
+        '#^notifications$#'                        => 'notifications',
+    ];
+
+    foreach ($map as $pattern => $action) {
+        if (preg_match($pattern, $reqPath)) {
+            return $action;
+        }
+    }
+
+    if (preg_match('#^[^/]+$#', $reqPath)) {
+        return $reqPath;
+    }
+
+    return 'home';
+}
+
 function escape($s) { return htmlspecialchars($s, ENT_QUOTES, 'UTF-8'); }
 
 function is_banned() { return ($_SESSION['user_status'] ?? '') === 'banned'; }

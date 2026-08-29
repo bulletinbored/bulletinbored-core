@@ -5,7 +5,7 @@
  */
 $sbCategories = sidebar_categories();
 $sbStats      = forum_statistics();
-$sbAction     = $_GET['action'] ?? 'home';
+$sbAction     = function_exists('current_route_action') ? current_route_action() : ($_GET['action'] ?? 'home');
 $sbCatId      = (int)($_GET['id'] ?? 0);
 $sbInfo       = $GLOBALS['layoutOptions']['info'] ?? [];
 ?>

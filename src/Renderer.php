@@ -8,15 +8,18 @@
  *
  * Usage:
  *   $r = new Renderer(__DIR__ . '/views');
+ *   $r->addGlobal('siteName', 'My Forum');
+ *   $r->composer('home', fn() => ['stats' => getStats()]);
  *   $r->render('thread', ['thread' => $thread, 'posts' => $posts]);
  *
  * In templates:
- *   $this->e($thread['title'])          — escaped output
- *   $this->partial('post', ['post' => $p]) — include partial
- *   $this->slot('sidebar')              — start capturing a slot
- *   $this->endSlot()                    — end capturing
- *   $this->hasSlot('sidebar')           — check if slot has content
- *   $this->slotContent('sidebar')       — output slot content
+ *   $this->e($thread['title'])              — escaped output
+ *   $this->partial('post', ['post' => $p])  — include partial
+ *   $this->slot('sidebar')                  — start capturing a slot
+ *   $this->endSlot()                        — end capturing
+ *   $this->hasSlot('sidebar')               — check if slot has content
+ *   $this->slotContent('sidebar')           — output slot content
+ *   $this->yield('sidebar')                 — output slot content (alias)
  */
 
 namespace Bulletin;
@@ -28,7 +31,8 @@ class Renderer
     private array $slots = [];
     private string $currentSlot = '';
     private array $globals = [];
-    private array $sectionStack = [];
+    private array $composers = [];
+    private ?string $currentTemplate = null;
 
     public function __construct(string $viewsPath)
     {
@@ -42,16 +46,59 @@ class Renderer
         return $clone;
     }
 
+    /**
+     * Register a view composer — a callback that runs before rendering a
+     * specific template, providing additional data automatically.
+     *
+     * @param string   $template Template name
+     * @param callable $callback fn() => array $data
+     */
+    public function composer(string $template, callable $callback): self
+    {
+        $clone = clone $this;
+        $clone->composers[$template][] = $callback;
+        return $clone;
+    }
+
+    /**
+     * Register a composer that runs before every template render.
+     */
+    public function composeAll(callable $callback): self
+    {
+        $clone = clone $this;
+        $clone->composers['*'][] = $callback;
+        return $clone;
+    }
+
     public function render(string $template, array $data = []): string
     {
         $clone = clone $this;
         $clone->slots = [];
+        $clone->currentTemplate = $template;
+        $data = $clone->resolveComposers($template, $data);
         return $clone->renderTemplate($template, $data);
     }
 
     public function display(string $template, array $data = []): void
     {
         echo $this->render($template, $data);
+    }
+
+    private function resolveComposers(string $template, array $data): array
+    {
+        $composers = array_merge(
+            $this->composers['*'] ?? [],
+            $this->composers[$template] ?? []
+        );
+
+        foreach ($composers as $callback) {
+            $composed = $callback();
+            if (is_array($composed)) {
+                $data = array_merge($data, $composed);
+            }
+        }
+
+        return $data;
     }
 
     private function renderTemplate(string $template, array $data): string
@@ -139,21 +186,6 @@ class Renderer
         echo $this->slots[$name] ?? '';
     }
 
-    public function section(string $name): void
-    {
-        $this->sectionStack[] = $name;
-        ob_start();
-    }
-
-    public function endSection(): void
-    {
-        if (empty($this->sectionStack)) {
-            return;
-        }
-        $name = array_pop($this->sectionStack);
-        $this->slots[$name] = ob_get_clean();
-    }
-
     public function yield(string $name, string $default = ''): void
     {
         echo $this->slots[$name] ?? $default;
@@ -166,18 +198,25 @@ class Renderer
 
     public function extend(string $layoutTemplate, array $data = []): string
     {
-        $content = $this->renderTemplate($this->currentTemplate ?? '', $data);
+        if ($this->currentTemplate === null) {
+            throw new \RuntimeException('extend() can only be called during template rendering');
+        }
 
-        if ($this->layout !== '') {
-            $layoutFile = $this->viewsPath . '/' . $this->layout . '.php';
-            if (file_exists($layoutFile)) {
-                $renderer = $this;
-                extract(array_merge($this->globals, $data, ['content' => $content]));
+        $content = $this->renderTemplate($this->currentTemplate, $data);
 
-                ob_start();
+        $layoutFile = $this->viewsPath . '/' . $layoutTemplate . '.php';
+        if (file_exists($layoutFile)) {
+            $renderer = $this;
+            extract(array_merge($this->globals, $data, ['content' => $content]));
+
+            ob_start();
+            try {
                 include $layoutFile;
-                return ob_get_clean();
+            } catch (\Throwable $e) {
+                ob_end_clean();
+                throw $e;
             }
+            return ob_get_clean();
         }
 
         return $content;

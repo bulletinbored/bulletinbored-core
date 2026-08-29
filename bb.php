@@ -15,10 +15,15 @@
  *   plugin:enable <name> Enable a plugin
  *   plugin:disable <name> Disable a plugin
  *   cache:flush          Flush all caches
+ *   doctor               Run system diagnostics
  *   help                 Show this help
+ *
+ * Plugins can register custom CLI commands via the 'cli' hook:
+ *   $pluginManager->addHook('cli', function($registry) {
+ *       $registry->register('mycommand', 'Description', fn($args) => ...);
+ *   });
  */
 
-// Bootstrap: load config and DB connection (minimal, no sessions/headers)
 define('BB_CLI', true);
 define('BB_ROOT', __DIR__);
 
@@ -46,7 +51,6 @@ require_once BB_ROOT . '/lib/DbQuery.php';
 require_once BB_ROOT . '/lib/PluginManager.php';
 require_once BB_ROOT . '/lib/Migrator.php';
 
-// Connect to database
 $dbDriver = $config['db_driver'] ?? 'sqlite';
 if ($dbDriver === 'mysql') {
     $dsn = "mysql:host={$config['db_host']};dbname={$config['db_name']};charset=utf8mb4";
@@ -57,26 +61,11 @@ if ($dbDriver === 'mysql') {
 }
 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
-// Helpers
-function output(string $msg): void
-{
-    echo $msg . "\n";
-}
-
-function error(string $msg): void
-{
-    fwrite(STDERR, "Error: {$msg}\n");
-}
-
-function success(string $msg): void
-{
-    output("  ✓ {$msg}");
-}
-
-function warning(string $msg): void
-{
-    output("  ! {$msg}");
-}
+function output(string $msg): void { echo $msg . "\n"; }
+function error(string $msg): void { fwrite(STDERR, "Error: {$msg}\n"); }
+function success(string $msg): void { output("  ✓ {$msg}"); }
+function warning(string $msg): void { output("  ! {$msg}"); }
+function fail(string $msg): void { output("  ✗ {$msg}"); }
 
 function table(array $headers, array $rows): void
 {
@@ -109,72 +98,49 @@ function table(array $headers, array $rows): void
     output($sep);
 }
 
-// Command dispatcher
-$command = $argv[1] ?? 'help';
-$args = array_slice($argv, 2);
+// --- Command Registry ---
 
-switch ($command) {
-    case 'migrate':
-        cmd_migrate($pdo, $config);
-        break;
+class CommandRegistry
+{
+    private array $commands = [];
 
-    case 'migrate:rollback':
-        cmd_migrate_rollback($pdo, $config);
-        break;
+    public function register(string $name, string $description, callable $handler): void
+    {
+        $this->commands[$name] = [
+            'description' => $description,
+            'handler' => $handler,
+        ];
+    }
 
-    case 'migrate:status':
-        cmd_migrate_status($pdo, $config);
-        break;
+    public function has(string $name): bool
+    {
+        return isset($this->commands[$name]);
+    }
 
-    case 'plugin:list':
-        cmd_plugin_list($config);
-        break;
+    public function execute(string $name, array $args): void
+    {
+        if (!isset($this->commands[$name])) {
+            error("Unknown command: {$name}");
+            exit(1);
+        }
+        ($this->commands[$name]['handler'])($args);
+    }
 
-    case 'plugin:enable':
-        cmd_plugin_enable($args, $config);
-        break;
-
-    case 'plugin:disable':
-        cmd_plugin_disable($args, $config);
-        break;
-
-    case 'cache:flush':
-        cmd_cache_flush($config);
-        break;
-
-    case 'help':
-    default:
-        cmd_help();
-        break;
+    public function getAll(): array
+    {
+        return $this->commands;
+    }
 }
 
-// --- Commands ---
+$registry = new CommandRegistry();
 
-function cmd_help(): void
-{
-    output('');
-    output('bb.php — bulletinbored CLI');
-    output('');
-    output('Usage: php bb.php <command> [options]');
-    output('');
-    output('Commands:');
-    output('  migrate              Run pending migrations');
-    output('  migrate:rollback     Rollback last batch of migrations');
-    output('  migrate:status       Show migration status');
-    output('  plugin:list          List all plugins with status');
-    output('  plugin:enable <name> Enable a plugin');
-    output('  plugin:disable <name> Disable a plugin');
-    output('  cache:flush          Flush all caches');
-    output('  help                 Show this help');
-    output('');
-}
-
-function cmd_migrate(PDO $pdo, array $config): void
-{
+// Register core commands
+$registry->register('migrate', 'Run pending migrations', function($args) use ($pdo, $config) {
     output('');
     output('Running migrations...');
 
     $migrator = new Migrator($pdo, $config);
+    $migrator->addPluginPaths(BB_ROOT . '/plugins');
     $migrator->ensureMigrationsTable();
 
     $pending = $migrator->getPending();
@@ -195,7 +161,6 @@ function cmd_migrate(PDO $pdo, array $config): void
         } catch (Throwable $e) {
             error("{$migration['name']} failed: " . $e->getMessage());
             error("  Rolled back this batch.");
-            // Rollback already-run migrations in this batch
             foreach (array_reverse($ran) as $name) {
                 try {
                     $migrator->rollbackByName($name);
@@ -209,14 +174,14 @@ function cmd_migrate(PDO $pdo, array $config): void
 
     output('');
     output('All migrations completed.');
-}
+});
 
-function cmd_migrate_rollback(PDO $pdo, array $config): void
-{
+$registry->register('migrate:rollback', 'Rollback last batch of migrations', function($args) use ($pdo, $config) {
     output('');
     output('Rolling back last batch...');
 
     $migrator = new Migrator($pdo, $config);
+    $migrator->addPluginPaths(BB_ROOT . '/plugins');
     $migrator->ensureMigrationsTable();
 
     $lastBatch = $migrator->getLastBatch();
@@ -244,14 +209,14 @@ function cmd_migrate_rollback(PDO $pdo, array $config): void
 
     output('');
     output('Rollback completed.');
-}
+});
 
-function cmd_migrate_status(PDO $pdo, array $config): void
-{
+$registry->register('migrate:status', 'Show migration status', function($args) use ($pdo, $config) {
     output('');
     output('Migration status:');
 
     $migrator = new Migrator($pdo, $config);
+    $migrator->addPluginPaths(BB_ROOT . '/plugins');
     $migrator->ensureMigrationsTable();
 
     $all = $migrator->getAllMigrations();
@@ -266,14 +231,14 @@ function cmd_migrate_status(PDO $pdo, array $config): void
     foreach ($all as $migration) {
         $status = in_array($migration['name'], $ran, true) ? 'Ran' : 'Pending';
         $batch = $migrator->getBatchFor($migration['name']);
-        $rows[] = [$migration['name'], $status, $batch ?? '-'];
+        $source = $migration['source'] ?? 'core';
+        $rows[] = [$migration['name'], $source, $status, $batch ?? '-'];
     }
 
-    table(['Migration', 'Status', 'Batch'], $rows);
-}
+    table(['Migration', 'Source', 'Status', 'Batch'], $rows);
+});
 
-function cmd_plugin_list(array $config): void
-{
+$registry->register('plugin:list', 'List all plugins with status', function($args) use ($config) {
     output('');
     output('Plugins:');
 
@@ -296,10 +261,9 @@ function cmd_plugin_list(array $config): void
     }
 
     table(['Plugin', 'Version', 'Status'], $rows);
-}
+});
 
-function cmd_plugin_enable(array $args, array $config): void
-{
+$registry->register('plugin:enable', 'Enable a plugin', function($args) use ($config) {
     $name = $args[0] ?? null;
     if (!$name) {
         error('Usage: php bb.php plugin:enable <name>');
@@ -317,10 +281,9 @@ function cmd_plugin_enable(array $args, array $config): void
         error("Plugin '{$name}' not found.");
         exit(1);
     }
-}
+});
 
-function cmd_plugin_disable(array $args, array $config): void
-{
+$registry->register('plugin:disable', 'Disable a plugin', function($args) use ($config) {
     $name = $args[0] ?? null;
     if (!$name) {
         error('Usage: php bb.php plugin:disable <name>');
@@ -338,10 +301,9 @@ function cmd_plugin_disable(array $args, array $config): void
         error("Plugin '{$name}' not found.");
         exit(1);
     }
-}
+});
 
-function cmd_cache_flush(array $config): void
-{
+$registry->register('cache:flush', 'Flush all caches', function($args) {
     output('');
     output('Flushing caches...');
 
@@ -360,7 +322,6 @@ function cmd_cache_flush(array $config): void
         output('  No cache directory found.');
     }
 
-    // Also clear sessions if requested
     $sessionDir = BB_ROOT . '/data/sessions';
     if (is_dir($sessionDir)) {
         $files = glob($sessionDir . '/sess_*');
@@ -376,4 +337,175 @@ function cmd_cache_flush(array $config): void
 
     output('');
     output('Cache flushed.');
+});
+
+$registry->register('doctor', 'Run system diagnostics', function($args) use ($pdo, $config) {
+    output('');
+    output('=== bulletinbored diagnostics ===');
+    output('');
+
+    $issues = 0;
+    $warnings = 0;
+
+    // PHP version
+    $phpVersion = PHP_VERSION;
+    $phpOk = version_compare(PHP_VERSION, '8.1.0', '>=');
+    if ($phpOk) {
+        success("PHP version: {$phpVersion}");
+    } else {
+        fail("PHP version: {$phpVersion} (requires 8.1+)");
+        $issues++;
+    }
+
+    // Required extensions
+    $required = ['pdo', 'pdo_sqlite', 'json', 'mbstring', 'fileinfo'];
+    foreach ($required as $ext) {
+        if (extension_loaded($ext)) {
+            success("Extension: {$ext}");
+        } else {
+            fail("Extension: {$ext} (missing)");
+            $issues++;
+        }
+    }
+
+    // Optional extensions
+    $optional = ['pdo_mysql', 'zip', 'curl', 'gd'];
+    foreach ($optional as $ext) {
+        if (extension_loaded($ext)) {
+            success("Extension: {$ext} (optional)");
+        } else {
+            warning("Extension: {$ext} (optional, not installed)");
+            $warnings++;
+        }
+    }
+
+    // Directory permissions
+    $directories = [
+        'data' => BB_ROOT . '/data',
+        'data/cache' => BB_ROOT . '/data/cache',
+        'data/sessions' => BB_ROOT . '/data/sessions',
+        'data/logs' => BB_ROOT . '/data/logs',
+        'data/uploads' => BB_ROOT . '/data/uploads',
+        'plugins' => BB_ROOT . '/plugins',
+        'themes' => BB_ROOT . '/themes',
+        'migrations' => BB_ROOT . '/migrations',
+    ];
+
+    output('');
+    output('Directory permissions:');
+    foreach ($directories as $name => $path) {
+        if (!is_dir($path)) {
+            warning("  {$name}: does not exist");
+            $warnings++;
+        } elseif (!is_writable($path)) {
+            fail("  {$name}: not writable");
+            $issues++;
+        } else {
+            success("  {$name}: writable");
+        }
+    }
+
+    // Database connection
+    output('');
+    output('Database:');
+    try {
+        $driver = $config['db_driver'] ?? 'sqlite';
+        if ($driver === 'mysql') {
+            success("  Driver: mysql (connected)");
+        } else {
+            $dbPath = $config['db_path'] ?? BB_ROOT . '/data/database.sqlite';
+            if (file_exists($dbPath)) {
+                success("  Driver: sqlite (database exists)");
+            } else {
+                warning("  Driver: sqlite (database file not found, will be created)");
+                $warnings++;
+            }
+        }
+
+        $tables = $pdo->query("SELECT name FROM sqlite_master WHERE type='table'")->fetchAll(PDO::FETCH_COLUMN);
+        success("  Tables: " . count($tables));
+    } catch (Throwable $e) {
+        fail("  Database error: " . $e->getMessage());
+        $issues++;
+    }
+
+    // Config
+    output('');
+    output('Configuration:');
+    if (file_exists(BB_ROOT . '/config.json')) {
+        success("  config.json exists");
+    } elseif (file_exists(BB_ROOT . '/config.php')) {
+        success("  config.json exists (legacy)");
+    } else {
+        fail("  No config file found");
+        $issues++;
+    }
+
+    // Security checks
+    output('');
+    output('Security:');
+    if (ini_get('display_errors')) {
+        warning("  display_errors is ON (should be OFF in production)");
+        $warnings++;
+    } else {
+        success("  display_errors is OFF");
+    }
+
+    if (ini_get('expose_php')) {
+        warning("  expose_php is ON (reveals PHP version)");
+        $warnings++;
+    } else {
+        success("  expose_php is OFF");
+    }
+
+    // Summary
+    output('');
+    if ($issues === 0 && $warnings === 0) {
+        output('✓ All checks passed!');
+    } elseif ($issues === 0) {
+        output("✓ No critical issues ({$warnings} warning(s))");
+    } else {
+        output("✗ Found {$issues} issue(s) and {$warnings} warning(s)");
+    }
+    output('');
+
+    if ($issues > 0) {
+        exit(1);
+    }
+});
+
+$registry->register('help', 'Show this help', function($args) use ($registry) {
+    output('');
+    output('bb.php — bulletinbored CLI');
+    output('');
+    output('Usage: php bb.php <command> [options]');
+    output('');
+    output('Commands:');
+
+    foreach ($registry->getAll() as $name => $cmd) {
+        $desc = $cmd['description'];
+        output("  {$name}" . str_repeat(' ', 22 - strlen($name)) . $desc);
+    }
+
+    output('');
+});
+
+// Let plugins register their own commands
+$pm = new PluginManager(
+    BB_ROOT . '/plugins',
+    $config['plugin_manifest'] ?? BB_ROOT . '/data/plugins.json'
+);
+$pm->loadEnabled();
+$pm->runHook('cli', $registry);
+
+// Dispatch
+$command = $argv[1] ?? 'help';
+$args = array_slice($argv, 2);
+
+if ($registry->has($command)) {
+    $registry->execute($command, $args);
+} else {
+    error("Unknown command: {$command}");
+    output('Run "php bb.php help" for available commands.');
+    exit(1);
 }

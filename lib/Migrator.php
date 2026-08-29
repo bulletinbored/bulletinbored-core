@@ -6,9 +6,12 @@
  * Migrations are PHP files in migrations/ directory with up() and down() methods.
  * Each migration is tracked in the `migrations` table with name, batch, and timestamp.
  *
+ * Plugins can register their own migration paths via addPath().
+ *
  * Usage:
  *   $migrator = new Migrator($pdo, $config);
  *   $migrator->ensureMigrationsTable();
+ *   $migrator->addPath(__DIR__ . '/plugins/myplugin/migrations');
  *   $migrator->migrate();  // runs all pending
  *   $migrator->rollback(); // rolls back last batch
  */
@@ -18,12 +21,47 @@ class Migrator
     private PDO $pdo;
     private array $config;
     private string $migrationsDir;
+    private array $extraPaths = [];
 
     public function __construct(PDO $pdo, array $config)
     {
         $this->pdo = $pdo;
         $this->config = $config;
         $this->migrationsDir = dirname(__DIR__) . '/migrations';
+    }
+
+    /**
+     * Register an additional directory to scan for migration files.
+     * Used by plugins to provide their own migrations.
+     */
+    public function addPath(string $path): self
+    {
+        $path = rtrim($path, '/');
+        if (is_dir($path) && !in_array($path, $this->extraPaths, true)) {
+            $this->extraPaths[] = $path;
+        }
+        return $this;
+    }
+
+    /**
+     * Register migration paths from all enabled plugins.
+     * Looks for a 'migrations' subdirectory in each plugin folder.
+     */
+    public function addPluginPaths(string $pluginsDir): self
+    {
+        $pluginsDir = rtrim($pluginsDir, '/');
+        if (!is_dir($pluginsDir)) {
+            return $this;
+        }
+
+        foreach (glob($pluginsDir . '/*', GLOB_ONLYDIR) as $dir) {
+            $migrationsDir = $dir . '/migrations';
+            if (is_dir($migrationsDir)) {
+                $this->addPath($migrationsDir);
+            }
+        }
+
+        return $this;
     }
 
     /**
@@ -55,27 +93,33 @@ class Migrator
     }
 
     /**
-     * Get all migration files from the migrations directory.
-     * Returns sorted array of ['name' => ..., 'path' => ...].
+     * Get all migration files from all registered directories.
+     * Returns sorted array of ['name' => ..., 'path' => ..., 'source' => ...].
+     * Source indicates origin: 'core' or plugin folder name.
      */
     public function getAllMigrations(): array
     {
-        if (!is_dir($this->migrationsDir)) {
-            return [];
-        }
-
-        $files = glob($this->migrationsDir . '/*.php');
+        $directories = array_merge([$this->migrationsDir], $this->extraPaths);
         $migrations = [];
 
-        foreach ($files as $file) {
-            $name = basename($file, '.php');
-            $migrations[] = [
-                'name' => $name,
-                'path' => $file,
-            ];
+        foreach ($directories as $dir) {
+            if (!is_dir($dir)) {
+                continue;
+            }
+
+            $files = glob($dir . '/*.php');
+            $source = ($dir === $this->migrationsDir) ? 'core' : basename(dirname($dir));
+
+            foreach ($files as $file) {
+                $name = basename($file, '.php');
+                $migrations[] = [
+                    'name' => $name,
+                    'path' => $file,
+                    'source' => $source,
+                ];
+            }
         }
 
-        // Sort by filename (which should be date-prefixed)
         usort($migrations, fn($a, $b) => strcmp($a['name'], $b['name']));
 
         return $migrations;
@@ -164,7 +208,6 @@ class Migrator
         $instance = $this->loadMigration($migration['path']);
         $instance->up($this->pdo);
 
-        // Record the migration
         $stmt = $this->pdo->prepare("INSERT INTO migrations (migration, batch) VALUES (?, ?)");
         $stmt->execute([$migration['name'], $batch]);
     }
@@ -177,7 +220,6 @@ class Migrator
         $instance = $this->loadMigration($migration['path']);
         $instance->down($this->pdo);
 
-        // Remove the migration record
         $stmt = $this->pdo->prepare("DELETE FROM migrations WHERE migration = ?");
         $stmt->execute([$migration['name']]);
     }
@@ -221,12 +263,10 @@ class Migrator
     {
         $basename = basename($path, '.php');
 
-        // Remove date prefix (YYYYMMDD_)
         if (preg_match('/^\d{8}_(.+)$/', $basename, $matches)) {
             $basename = $matches[1];
         }
 
-        // Convert snake_case to PascalCase
         $parts = explode('_', $basename);
         return implode('', array_map('ucfirst', $parts));
     }
