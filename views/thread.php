@@ -469,9 +469,6 @@ render_header($thread['title'] ?? 'Thread', ['info' => $sidebarInfo]);
                     document.activeElement.blur();
                 }
             }
-            if (!location.hash) {
-                window.scrollTo(0, 0);
-            }
         }
         if (document.readyState === 'complete') {
             defocusReply();

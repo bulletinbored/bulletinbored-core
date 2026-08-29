@@ -47,9 +47,6 @@ function render_header($title = 'bulletinbored', $options = []) {
         if ('scrollRestoration' in history) {
             history.scrollRestoration = 'manual';
         }
-        if (!location.hash) {
-            window.scrollTo(0, 0);
-        }
     </script>
     <nav class="navbar navbar-expand-lg navbar-forum fixed-top">
         <div class="container">

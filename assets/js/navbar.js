@@ -5,26 +5,33 @@
 
     let lastY = window.scrollY;
     let ticking = false;
+    let scrollingDown = false;
 
     function update() {
         const y = window.scrollY;
 
         if (window.matchMedia('(max-width: 991.98px)').matches) {
-            // Hide the navbar when scrolling down; show it again ONLY when back
-            // at the very top of the page (not on any upward scroll).
+            // Hide navbar when scrolling down (past 80px), show on scroll up.
             if (y > 80 && y > lastY) {
-                nav.classList.add('nav-hidden');
-                if (tabbar) tabbar.classList.add('tabbar-top');
-                document.body.classList.add('tabbar-pinned');
-            } else if (y <= 2) {
-                nav.classList.remove('nav-hidden');
-                if (tabbar) tabbar.classList.remove('tabbar-top');
-                document.body.classList.remove('tabbar-pinned');
+                if (!scrollingDown) {
+                    nav.classList.add('nav-hidden');
+                    if (tabbar) tabbar.classList.add('tabbar-top');
+                    document.body.classList.add('tabbar-pinned');
+                    scrollingDown = true;
+                }
+            } else if (y < lastY) {
+                if (scrollingDown) {
+                    nav.classList.remove('nav-hidden');
+                    if (tabbar) tabbar.classList.remove('tabbar-top');
+                    document.body.classList.remove('tabbar-pinned');
+                    scrollingDown = false;
+                }
             }
         } else {
             nav.classList.remove('nav-hidden');
             if (tabbar) tabbar.classList.remove('tabbar-top');
             document.body.classList.remove('tabbar-pinned');
+            scrollingDown = false;
         }
 
         nav.classList.toggle('scrolled', y > 20);

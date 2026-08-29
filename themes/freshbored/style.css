@@ -22,12 +22,20 @@
 }
 
 /* ---------- base ---------- */
+html {
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+}
+@media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+}
 body {
     background-color: var(--fb-bg);
     color: var(--fb-text);
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     font-size: .95rem;
     padding-top: var(--fb-navbar-h);
+    overflow-x: hidden;
 }
 
 a { color: var(--fb-brand); text-decoration: none; }
@@ -106,8 +114,10 @@ hr { border-color: var(--fb-border); opacity: 1; }
     height: var(--fb-navbar-h);
     background: rgba(255, 255, 255, 0.85);
     backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-    transition: box-shadow 0.3s ease;
+    transition: box-shadow 0.3s ease, transform 0.3s ease;
+    will-change: transform;
 }
 .navbar-forum.scrolled {
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
@@ -217,7 +227,21 @@ hr { border-color: var(--fb-border); opacity: 1; }
 
 /* ---------- sidebar ---------- */
 .sidebar-col { position: relative; }
-.sidebar { position: sticky; top: calc(var(--fb-navbar-h) + 1.75rem); }
+.sidebar {
+    position: sticky;
+    top: calc(var(--fb-navbar-h) + 1.75rem);
+    max-height: calc(100vh - var(--fb-navbar-h) - 2.5rem);
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: var(--fb-border) transparent;
+    padding-right: 4px;
+    margin-right: -4px;
+}
+.sidebar::-webkit-scrollbar { width: 4px; }
+.sidebar::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--fb-border); border-radius: 4px; }
+.sidebar::-webkit-scrollbar-thumb:hover { background: var(--fb-muted-soft); }
 
 .btn-new-thread { padding: .6rem 1rem; font-weight: 600; margin-bottom: 1rem; }
 .sidebar-toggle { margin-bottom: 1rem; }
@@ -878,11 +902,11 @@ hr { border-color: var(--fb-border); opacity: 1; }
     /* On scroll-down the main navbar hides and the tab bar pins to the top */
     .navbar-forum.nav-hidden {
         transform: translateY(-100%);
-        transition: transform .25s ease;
+        transition: transform .3s cubic-bezier(.4,0,.2,1);
     }
     .mobile-tabbar.tabbar-top {
         top: 0;
-        transition: top .25s ease;
+        transition: top .3s cubic-bezier(.4,0,.2,1);
     }
     body.tabbar-pinned { padding-top: 56px; }
 
@@ -972,7 +996,8 @@ hr { border-color: var(--fb-border); opacity: 1; }
     .page-title { font-size: 1.35rem; }
     .profile-head { flex-wrap: wrap; }
     .profile-head-actions { margin-left: 0; width: 100%; }
-    .sort-bar { overflow-x: auto; flex-wrap: nowrap; }
+    .sort-bar { overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%); mask-image: linear-gradient(90deg, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%); }
+    .sort-bar::-webkit-scrollbar { display: none; }
     .sort-link { white-space: nowrap; }
 }
 

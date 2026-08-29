@@ -26,10 +26,19 @@
         });
     }
 
+    var scrollY = 0;
+
     function openStack(tab) {
         stack.classList.add('open');
         stack.setAttribute('aria-hidden', 'false');
-        document.body.style.overflow = 'hidden';
+        if (document.body.style.overflow !== 'hidden') {
+            scrollY = window.scrollY;
+            document.body.style.overflow = 'hidden';
+            document.body.style.position = 'fixed';
+            document.body.style.top = '-' + scrollY + 'px';
+            document.body.style.left = '0';
+            document.body.style.right = '0';
+        }
         if (tab && stack.querySelector('.mobile-stack-tab[data-tab="' + tab + '"]')) {
             selectTab(tab);
         } else {
@@ -42,6 +51,11 @@
         stack.classList.remove('open');
         stack.setAttribute('aria-hidden', 'true');
         document.body.style.overflow = '';
+        document.body.style.position = '';
+        document.body.style.top = '';
+        document.body.style.left = '';
+        document.body.style.right = '';
+        window.scrollTo(0, scrollY);
     }
 
     function selectTab(tab) {
