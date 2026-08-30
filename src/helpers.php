@@ -104,6 +104,8 @@ function url($action, $params = [], $absolute = false) {
             return $base . '/admin/create-user' . (!empty($query) ? '?' . http_build_query($query) : '');
         case 'admin_settings':
             return $base . '/admin/settings' . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'admin_smtp':
+            return $base . '/admin/smtp' . (!empty($query) ? '?' . http_build_query($query) : '');
         case 'admin_langs':
             return $base . '/admin/langs' . (!empty($query) ? '?' . http_build_query($query) : '');
         case 'admin_plugins':

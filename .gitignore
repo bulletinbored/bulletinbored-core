@@ -32,5 +32,6 @@ data/logs/
 !/themes/freshbored/**
 
 roadmap-to-v1.md
+RELEASE-NOTES.md
 
 EMAIL_INVIE.md

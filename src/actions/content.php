@@ -1,6 +1,6 @@
 <?php
 
-function handle_content_action(string $action, string $method): bool
+function handle_content_action(string $action, string $method): \Bulletin\Response|bool
 {
     switch ($action) {
         case 'search':
@@ -14,7 +14,7 @@ function handle_content_action(string $action, string $method): bool
     }
 }
 
-function handle_search(): bool
+function handle_search(): \Bulletin\Response|bool
 {
     global $pdo;
 
@@ -35,7 +35,7 @@ function handle_search(): bool
     return true;
 }
 
-function handle_category(): bool
+function handle_category(): \Bulletin\Response|bool
 {
     global $pdo;
     global $pdo;
@@ -64,7 +64,7 @@ function handle_category(): bool
     return true;
 }
 
-function handle_download(): bool
+function handle_download(): \Bulletin\Response|bool
 {
     global $pdo;
     global $pdo;

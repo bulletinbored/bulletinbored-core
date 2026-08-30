@@ -20,8 +20,8 @@
 
     <?php if ($updateStatus !== null): ?>
         <div class="card shadow mb-4">
-            <div class="card-header py-3">
-                <h6 class="m-0 font-weight-bold text-primary"><?= t('update_status') ?></h6>
+            <div class="card-header">
+                <h5 class="card-title mb-0"><i class="fas fa-info-circle me-2"></i><?= t('update_status') ?></h5>
             </div>
             <div class="card-body">
                 <div class="row">

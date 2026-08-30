@@ -5,9 +5,9 @@
             <h2 class="page-heading mb-0"><?= t('smtp_configuration') ?></h2>
             <p class="text-gray-500 mb-0 small"><?= t('smtp_settings') ?></p>
         </div>
-        <a href="<?= url('admin_settings') ?>" class="btn btn-outline-secondary btn-sm">
-            <i class="fas fa-arrow-left me-1"></i> <?= t('back_to_settings') ?>
-        </a>
+        <button type="submit" form="smtpForm" class="btn btn-primary">
+            <i class="fas fa-save me-1"></i> <?= t('save_smtp_settings') ?>
+        </button>
     </div>
 
     <?php if (!empty($_SESSION['smtp_saved'])): ?>
@@ -32,17 +32,17 @@
         <?php unset($_SESSION['smtp_test_error']); ?>
     <?php endif; ?>
 
-    <form method="POST">
+    <form method="POST" id="smtpForm">
         <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
 
-        <!-- Mail Method -->
-        <div class="card shadow-sm mb-4">
-            <div class="card-header d-flex align-items-center">
-                <i class="fas fa-server me-2"></i> <?= t('smtp_send_method') ?>
-            </div>
-            <div class="card-body">
-                <div class="row g-3">
-                    <div class="col-md-6">
+        <!-- Row 1: Mail Method + From Email -->
+        <div class="row mb-4">
+            <div class="col-md-5">
+                <div class="card shadow-sm h-100">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0"><i class="fas fa-server me-2"></i><?= t('smtp_send_method') ?></h5>
+                    </div>
+                    <div class="card-body">
                         <label class="form-label"><?= t('smtp_send_method') ?></label>
                         <select name="mail_method" class="form-select" id="mailMethodSelect">
                             <option value="mail" <?= ($config['mail_method'] ?? 'mail') === 'mail' ? 'selected' : '' ?>><?= t('mail_method_php') ?></option>
@@ -52,12 +52,58 @@
                     </div>
                 </div>
             </div>
+            <div class="col-md-7">
+                <div class="card shadow-sm h-100">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0"><i class="fas fa-envelope me-2"></i><?= t('smtp_from_email') ?></h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label"><?= t('smtp_from_email') ?></label>
+                            <input type="email" name="mail_from" class="form-control" value="<?= escape($config['mail_from'] ?? '') ?>" placeholder="noreply@tuodominio.it">
+                            <div class="form-text"><?= t('smtp_from_email_hint') ?></div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label"><?= t('smtp_from_name') ?></label>
+                            <input type="text" name="mail_from_name" class="form-control" value="<?= escape($config['mail_from_name'] ?? '') ?>" placeholder="My Forum">
+                            <div class="form-text"><?= t('smtp_from_name_hint') ?></div>
+                        </div>
+                        <div class="mb-0">
+                            <label class="form-label"><?= t('notify_admin_email') ?></label>
+                            <input type="email" name="notify_admin_email" class="form-control" value="<?= escape($config['notify_admin_email'] ?? '') ?>" placeholder="<?= escape($config['mail_from'] ?? '') ?>">
+                            <div class="form-text"><?= t('notify_admin_email_hint') ?></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
-        <!-- SMTP Configuration -->
+        <!-- Row 2: Test Email -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0"><i class="fas fa-flask me-2"></i><?= t('smtp_test_email') ?></h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-8">
+                        <label class="form-label"><?= t('smtp_test_email_to') ?></label>
+                        <input type="email" name="smtp_test_to" class="form-control" value="<?= escape($config['mail_from'] ?? '') ?>" placeholder="test@example.com">
+                        <div class="form-text"><?= t('smtp_test_email_hint') ?></div>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label d-block invisible"><?= t('smtp_test_email') ?></label>
+                        <button type="submit" name="send_smtp_test" value="1" class="btn btn-outline-primary w-100">
+                            <i class="fas fa-paper-plane me-1"></i> <?= t('smtp_test_email') ?>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Row 3: SMTP Configuration (shown only when SMTP is selected) -->
         <div class="card shadow-sm mb-4" id="smtpConfigCard" <?= ($config['mail_method'] ?? 'mail') !== 'smtp' ? 'style="display:none;"' : '' ?>>
-            <div class="card-header d-flex align-items-center">
-                <i class="fas fa-cog me-2"></i> <?= t('smtp_configuration') ?>
+            <div class="card-header">
+                <h5 class="card-title mb-0"><i class="fas fa-cog me-2"></i><?= t('smtp_configuration') ?></h5>
             </div>
             <div class="card-body">
                 <div class="row g-3">
@@ -72,6 +118,16 @@
                         <div class="form-text"><?= t('smtp_port_hint') ?></div>
                     </div>
                     <div class="col-md-6">
+                        <label class="form-label"><?= t('smtp_username') ?></label>
+                        <input type="text" name="mail_username" class="form-control" value="<?= escape($config['mail_username'] ?? '') ?>" placeholder="user@example.com">
+                        <div class="form-text"><?= t('smtp_username_hint') ?></div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label"><?= t('smtp_password') ?></label>
+                        <input type="password" name="mail_password" class="form-control" placeholder="••••••••" autocomplete="off">
+                        <div class="form-text"><?= t('smtp_password_hint') ?></div>
+                    </div>
+                    <div class="col-md-6">
                         <label class="form-label"><?= t('smtp_encryption') ?></label>
                         <select name="mail_secure" class="form-select">
                             <option value="" <?= ($config['mail_secure'] ?? '') === '' ? 'selected' : '' ?>><?= t('smtp_encryption_none') ?></option>
@@ -83,66 +139,8 @@
                         <label class="form-label"><?= t('smtp_timeout') ?></label>
                         <input type="number" name="mail_timeout" class="form-control" value="<?= escape($config['mail_timeout'] ?? '10') ?>" placeholder="10" min="1" max="120">
                     </div>
-                    <div class="col-md-6">
-                        <label class="form-label"><?= t('smtp_username') ?></label>
-                        <input type="text" name="mail_username" class="form-control" value="<?= escape($config['mail_username'] ?? '') ?>" placeholder="user@example.com">
-                        <div class="form-text"><?= t('smtp_username_hint') ?></div>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label"><?= t('smtp_password') ?></label>
-                        <input type="password" name="mail_password" class="form-control" placeholder="••••••••" autocomplete="off">
-                        <div class="form-text"><?= t('smtp_password_hint') ?></div>
-                    </div>
                 </div>
             </div>
-        </div>
-
-        <!-- From Settings -->
-        <div class="card shadow-sm mb-4">
-            <div class="card-header d-flex align-items-center">
-                <i class="fas fa-envelope me-2"></i> <?= t('smtp_from_email') ?>
-            </div>
-            <div class="card-body">
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <label class="form-label"><?= t('smtp_from_email') ?></label>
-                        <input type="email" name="mail_from" class="form-control" value="<?= escape($config['mail_from'] ?? '') ?>" placeholder="noreply@tuodominio.it">
-                        <div class="form-text"><?= t('smtp_from_email_hint') ?></div>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label"><?= t('smtp_from_name') ?></label>
-                        <input type="text" name="mail_from_name" class="form-control" value="<?= escape($config['mail_from_name'] ?? '') ?>" placeholder="My Forum">
-                        <div class="form-text"><?= t('smtp_from_name_hint') ?></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Test Email -->
-        <div class="card shadow-sm mb-4">
-            <div class="card-header d-flex align-items-center">
-                <i class="fas fa-flask me-2"></i> <?= t('smtp_test_email') ?>
-            </div>
-            <div class="card-body">
-                <div class="row g-3 align-items-end">
-                    <div class="col-md-6">
-                        <label class="form-label"><?= t('smtp_test_email_to') ?></label>
-                        <input type="email" name="smtp_test_to" class="form-control" value="<?= escape($config['mail_from'] ?? '') ?>" placeholder="test@example.com">
-                        <div class="form-text"><?= t('smtp_test_email_hint') ?></div>
-                    </div>
-                    <div class="col-md-6">
-                        <button type="submit" name="send_smtp_test" value="1" class="btn btn-outline-primary">
-                            <i class="fas fa-paper-plane me-1"></i> <?= t('smtp_test_email') ?>
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="d-flex justify-content-between align-items-center">
-            <button type="submit" class="btn btn-primary">
-                <i class="fas fa-save me-1"></i> <?= t('save_smtp_settings') ?>
-            </button>
         </div>
     </form>
 </div>

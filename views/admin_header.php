@@ -18,6 +18,7 @@ function render_admin_header($title = 'Admin Panel') {
     <title><?= escape($title) ?> - <?= escape(strip_tags($siteName)) ?></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
     <link href="<?= base_url() ?>/assets/admin.css" rel="stylesheet">
 </head>
 <body class="admin-layout">
@@ -47,38 +48,38 @@ function render_admin_header($title = 'Admin Panel') {
                 </li>
             </ul>
             <hr class="sidebar-divider">
- 
+
             <!-- Moderation -->
             <div class="sidebar-heading"><?= t('moderation') ?></div>
             <ul class="sidebar-nav">
                 <li><a href="<?= url('admin_moderation') ?>" class="<?= $active('admin_moderation') ?>"><i class="fas fa-clock"></i> <span><?= t('pending_threads') ?></span></a></li>
             </ul>
             <hr class="sidebar-divider">
- 
-            <!-- Management -->
-            <div class="sidebar-heading"><?= t('management') ?></div>
+
+            <!-- Community -->
+            <div class="sidebar-heading"><?= t('community') ?></div>
             <ul class="sidebar-nav">
-                <li><a href="<?= url('admin_categories') ?>" class="<?= $active('admin_categories') ?>"><i class="fas fa-folder"></i> <span><?= t('categories') ?></span></a></li>
                 <li><a href="<?= url('admin_users') ?>" class="<?= $active(['admin_users','admin_user_edit','admin_create_user']) ?>"><i class="fas fa-users"></i> <span><?= t('users') ?></span></a></li>
                 <li><a href="<?= url('admin_roles') ?>" class="<?= $active(['admin_roles','admin_roles_action']) ?>"><i class="fas fa-shield-halved"></i> <span><?= t('roles_permissions') ?></span></a></li>
-                <li><a href="<?= url('admin_plugins') ?>" class="<?= $active('admin_plugins') ?>"><i class="fas fa-puzzle-piece"></i> <span><?= t('plugins') ?></span></a></li>
-                <li><a href="<?= url('admin_themes') ?>" class="<?= $active('admin_themes') ?>"><i class="fas fa-palette"></i> <span><?= t('themes') ?></span></a></li>
+                <li><a href="<?= url('admin_categories') ?>" class="<?= $active('admin_categories') ?>"><i class="fas fa-folder"></i> <span><?= t('categories') ?></span></a></li>
             </ul>
             <hr class="sidebar-divider">
- 
+
             <!-- Extensions -->
             <div class="sidebar-heading"><?= t('extensions') ?></div>
             <ul class="sidebar-nav">
-                <li><a href="<?= url('admin_updates') ?>" class="<?= $active('admin_updates') ?>"><i class="fas fa-arrow-up"></i> <span><?= t('updates') ?></span></a></li>
+                <li><a href="<?= url('admin_plugins') ?>" class="<?= $active('admin_plugins') ?>"><i class="fas fa-puzzle-piece"></i> <span><?= t('plugins') ?></span></a></li>
+                <li><a href="<?= url('admin_themes') ?>" class="<?= $active('admin_themes') ?>"><i class="fas fa-palette"></i> <span><?= t('themes') ?></span></a></li>
                 <li><a href="<?= url('admin_langs') ?>" class="<?= $active('admin_langs') ?>"><i class="fas fa-language"></i> <span><?= t('languages') ?></span></a></li>
             </ul>
             <hr class="sidebar-divider">
- 
+
             <!-- System -->
             <div class="sidebar-heading"><?= t('system') ?></div>
             <ul class="sidebar-nav">
                 <li><a href="<?= url('admin_settings') ?>" class="<?= $active('admin_settings') ?>"><i class="fas fa-cogs"></i> <span><?= t('settings') ?></span></a></li>
                 <li><a href="<?= url('admin_smtp') ?>" class="<?= $active('admin_smtp') ?>"><i class="fas fa-paper-plane"></i> <span><?= t('smtp_settings') ?></span></a></li>
+                <li><a href="<?= url('admin_updates') ?>" class="<?= $active('admin_updates') ?>"><i class="fas fa-arrow-up"></i> <span><?= t('updates') ?></span></a></li>
                 <li><a href="<?= url('admin_diagnostics') ?>" class="<?= $active('admin_diagnostics') ?>"><i class="fas fa-stethoscope"></i> <span><?= t('diagnostics') ?></span></a></li>
                 <li><a href="<?= url('home') ?>"><i class="fas fa-arrow-left"></i> <span><?= t('back_to_forum') ?></span></a></li>
             </ul>

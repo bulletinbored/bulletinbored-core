@@ -1,6 +1,6 @@
 <?php
 
-function handle_misc_action(string $action, string $method): bool
+function handle_misc_action(string $action, string $method): \Bulletin\Response|bool
 {
     switch ($action) {
         case 'preview':
@@ -17,7 +17,7 @@ function handle_misc_action(string $action, string $method): bool
  * real posts (bb_render_content), so the preview can never show something the
  * server would not also emit — no client-side parsing, no XSS surface.
  */
-function handle_markdown_preview(): bool
+function handle_markdown_preview(): \Bulletin\Response|bool
 {
     if (!csrf_validate_request()) {
         http_response_code(403);
@@ -34,7 +34,7 @@ function handle_markdown_preview(): bool
  * Username autocomplete for @mentions. Returns a small JSON list of matching
  * usernames. Input is a strict \w+ query so it cannot be abused for leakage.
  */
-function handle_mention_users(): bool
+function handle_mention_users(): \Bulletin\Response|bool
 {
     global $pdo;
     $q = preg_replace('/[^\w]/', '', (string)($_GET['q'] ?? ''));

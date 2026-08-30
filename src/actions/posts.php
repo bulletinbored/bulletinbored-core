@@ -1,6 +1,6 @@
 <?php
 
-function handle_posts_action(string $action, string $method): bool
+function handle_posts_action(string $action, string $method): \Bulletin\Response|bool
 {
     switch ($action) {
         case 'thread':
@@ -33,7 +33,7 @@ function handle_posts_action(string $action, string $method): bool
  * validate_uploaded_file() (real MIME + getimagesize, never the extension),
  * store it under uploads/ and record it in the uploads table. Returns JSON.
  */
-function handle_upload_image(): bool
+function handle_upload_image(): \Bulletin\Response|bool
 {
     global $pdo;
     if (!is_logged_in()) {
@@ -92,7 +92,7 @@ function handle_upload_image(): bool
     return true;
 }
 
-function handle_thread_view(): bool
+function handle_thread_view(): \Bulletin\Response|bool
 {
     global $pdo, $pluginManager;
 
@@ -186,7 +186,7 @@ function handle_thread_view(): bool
     return true;
 }
 
-function handle_new_thread(string $method): bool
+function handle_new_thread(string $method): \Bulletin\Response|bool
 {
     global $pdo, $config, $pluginManager;
 
@@ -281,7 +281,7 @@ function handle_new_thread(string $method): bool
     return true;
 }
 
-function handle_reply_post(): bool
+function handle_reply_post(): \Bulletin\Response|bool
 {
     global $pdo, $pluginManager;
 
@@ -352,10 +352,9 @@ function handle_reply_post(): bool
     notify_thread_reply($thread, $_SESSION['user_id'], $content);
 
     return redirect(url('thread', ['id' => $threadId, 'slug' => slugify($thread['title'] ?? '')]));
-    return true;
 }
 
-function handle_edit_post(string $method): bool
+function handle_edit_post(string $method): \Bulletin\Response|bool
 {
     global $pdo, $pluginManager;
 
@@ -420,7 +419,7 @@ function handle_edit_post(string $method): bool
     return true;
 }
 
-function handle_edit_thread(string $method): bool
+function handle_edit_thread(string $method): \Bulletin\Response|bool
 {
     global $pdo, $pluginManager;
 
@@ -490,7 +489,7 @@ function handle_edit_thread(string $method): bool
     return true;
 }
 
-function handle_delete_post(): bool
+function handle_delete_post(): \Bulletin\Response|bool
 {
     global $pdo, $pluginManager;
 
@@ -549,7 +548,7 @@ function handle_delete_post(): bool
     return true;
 }
 
-function handle_delete_thread(): bool
+function handle_delete_thread(): \Bulletin\Response|bool
 {
     global $pdo, $pluginManager;
 
@@ -594,10 +593,9 @@ function handle_delete_thread(): bool
     }
 
     return redirect(url('category', ['id' => $thread['category_id']]));
-    return true;
 }
 
-function handle_watch(): bool
+function handle_watch(): \Bulletin\Response|bool
 {
     global $pdo;
 
@@ -616,10 +614,9 @@ function handle_watch(): bool
 
     $referer = $_SERVER['HTTP_REFERER'] ?? url('thread', ['id' => $threadId]);
     return redirect($referer);
-    return true;
 }
 
-function handle_unwatch(): bool
+function handle_unwatch(): \Bulletin\Response|bool
 {
     global $pdo;
 
@@ -636,5 +633,4 @@ function handle_unwatch(): bool
 
     $referer = $_SERVER['HTTP_REFERER'] ?? url('thread', ['id' => $threadId]);
     return redirect($referer);
-    return true;
 }

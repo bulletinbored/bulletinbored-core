@@ -1,7 +1,10 @@
 <?php include __DIR__.'/admin_header.php'; render_admin_header(t('diagnostics')); ?>
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2><?= t('system_diagnostics') ?></h2>
+        <div>
+            <h2 class="page-heading mb-0"><?= t('system_diagnostics') ?></h2>
+            <p class="text-gray-500 mb-0 small"><?= t('diagnostics') ?></p>
+        </div>
     </div>
 
     <?php if ($diag['can_install']): ?>
@@ -17,8 +20,8 @@
     <?php endif; ?>
 
     <div class="card shadow mb-4">
-        <div class="card-header py-3">
-            <h6 class="m-0 font-weight-bold text-primary"><?= t('requirements') ?></h6>
+        <div class="card-header">
+            <h5 class="card-title mb-0"><i class="fas fa-check-circle me-2"></i><?= t('requirements') ?></h5>
         </div>
         <div class="card-body">
             <table class="table table-bordered">
@@ -61,8 +64,8 @@
     </div>
 
     <div class="card shadow mb-4">
-        <div class="card-header py-3">
-            <h6 class="m-0 font-weight-bold text-primary"><?= t('recommendations') ?></h6>
+        <div class="card-header">
+            <h5 class="card-title mb-0"><i class="fas fa-clipboard-list me-2"></i><?= t('recommendations') ?></h5>
         </div>
         <div class="card-body">
             <?php if (empty($recommendations)): ?>
@@ -76,7 +79,5 @@
             <?php endif; ?>
         </div>
     </div>
-
-    <a href="<?= url('admin_plugins') ?>" class="btn btn-outline-secondary"><i class="fas fa-arrow-left me-1"></i><?= t('back_to_plugins') ?></a>
 </div>
 <?php include __DIR__.'/admin_footer.php'; ?>

@@ -1,6 +1,6 @@
 <?php
 
-function handle_users_action(string $action, string $method): bool
+function handle_users_action(string $action, string $method): \Bulletin\Response|bool
 {
     switch ($action) {
         case 'login':
@@ -26,7 +26,7 @@ function handle_users_action(string $action, string $method): bool
     }
 }
 
-function handle_login(string $method): bool
+function handle_login(string $method): \Bulletin\Response|bool
 {
     global $pdo, $pluginManager;
     if (is_logged_in()) {
@@ -110,7 +110,7 @@ function handle_login(string $method): bool
     return true;
 }
 
-function handle_register(string $method): bool
+function handle_register(string $method): \Bulletin\Response|bool
 {
     global $pdo, $config, $pluginManager;
     $error = '';
@@ -185,15 +185,14 @@ function handle_register(string $method): bool
     return true;
 }
 
-function handle_logout(): bool
+function handle_logout(): \Bulletin\Response|bool
 {
     session_regenerate_id(true);
     session_destroy();
     return redirect(url('home'));
-    return true;
 }
 
-function handle_verify_email(): bool
+function handle_verify_email(): \Bulletin\Response|bool
 {
     global $pdo;
 
@@ -229,7 +228,7 @@ function handle_verify_email(): bool
     return true;
 }
 
-function handle_profile(): bool
+function handle_profile(): \Bulletin\Response|bool
 {
     global $pdo;
 
@@ -269,7 +268,7 @@ function handle_profile(): bool
     return true;
 }
 
-function handle_edit_profile(string $method): bool
+function handle_edit_profile(string $method): \Bulletin\Response|bool
 {
     global $pdo, $config;
 
@@ -390,7 +389,7 @@ function handle_edit_profile(string $method): bool
     return true;
 }
 
-function handle_remove_avatar(string $method): bool
+function handle_remove_avatar(string $method): \Bulletin\Response|bool
 {
     global $pdo;
 
@@ -422,7 +421,7 @@ function handle_remove_avatar(string $method): bool
     return redirect(url('edit_profile'));
 }
 
-function handle_forgot_password(string $method): bool
+function handle_forgot_password(string $method): \Bulletin\Response|bool
 {
     global $pdo, $config;
 
@@ -468,7 +467,7 @@ function handle_forgot_password(string $method): bool
     return true;
 }
 
-function handle_reset_password(string $method): bool
+function handle_reset_password(string $method): \Bulletin\Response|bool
 {
     global $pdo;
 

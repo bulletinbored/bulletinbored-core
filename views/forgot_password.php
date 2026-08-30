@@ -4,7 +4,7 @@
             <h1 class="auth-title"><?= t('password_reset_request') ?></h1>
             <p class="auth-subtitle"><?= t('forgot_subtitle') ?></p>
 
-            <?php if (isset($error)): ?>
+            <?php if (!empty($error)): ?>
                 <div class="alert alert-danger"><i class="fas fa-exclamation-circle me-2"></i><?= escape($error) ?></div>
             <?php endif; ?>
             <?php if (isset($success)): ?>

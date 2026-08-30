@@ -16,7 +16,7 @@ $users = $pdo->query("SELECT * FROM users ORDER BY id ASC")->fetchAll();
     </div>
 
     <div class="card shadow mb-4">
-        <div class="card-header py-3">
+        <div class="card-header">
             <h5 class="card-title mb-0"><i class="fas fa-user-plus me-2"></i><?= t('create_user') ?></h5>
         </div>
         <div class="card-body">

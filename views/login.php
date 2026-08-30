@@ -8,7 +8,7 @@
                 <div class="alert alert-success"><i class="fas fa-check-circle me-2"></i><?= t('register_check_email') ?></div>
             <?php endif; ?>
 
-            <?php if (isset($error)): ?>
+            <?php if (!empty($error)): ?>
                 <div class="alert alert-danger"><i class="fas fa-exclamation-circle me-2"></i><?= escape(t($error)) ?></div>
             <?php endif; ?>
 

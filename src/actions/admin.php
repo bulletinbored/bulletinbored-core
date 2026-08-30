@@ -1,6 +1,6 @@
 <?php
 
-function handle_admin_action(string $action, string $method): bool
+function handle_admin_action(string $action, string $method): \Bulletin\Response|bool
 {
     // Only handle admin-prefixed actions and a few legacy moderation actions.
     // Return false for anything else so the router can try the next handler.
@@ -87,7 +87,7 @@ function handle_admin_action(string $action, string $method): bool
 // SECTION: Dashboard
 // ============================================================================
 
-function handle_admin_dashboard(): bool
+function handle_admin_dashboard(): \Bulletin\Response|bool
 {
     global $pdo, $config;
 
@@ -146,25 +146,6 @@ function handle_admin_settings_post(): ?string
         exit;
     }
 
-    if (isset($_POST['send_test_email'])) {
-        $testEmail = trim($_POST['test_email_address'] ?? '');
-        if (empty($testEmail) || !filter_var($testEmail, FILTER_VALIDATE_EMAIL)) {
-            $_SESSION['email_test_error'] = t('invalid_email_address');
-        } else {
-            $subject = 'Test email from ' . ($config['site_name'] ?? 'bulletinbored');
-            $body = '<p>This is a test email sent from your forum\'s admin panel.</p>'
-                  . '<p>If you received this, email sending is configured correctly.</p>';
-            $sent = send_email($testEmail, $subject, $body);
-            if ($sent) {
-                $_SESSION['email_test_success'] = $testEmail;
-            } else {
-                $err = error_get_last();
-                $_SESSION['email_test_error'] = $err['message'] ?? 'Unknown error';
-            }
-        }
-        return redirect(url('admin_settings'));
-    }
-
     $siteName = trim($_POST['site_name'] ?? $config['site_name']);
     $siteTagline = trim($_POST['site_tagline'] ?? $config['site_tagline']);
     $siteIcon = trim($_POST['site_icon'] ?? $config['site_icon']);
@@ -173,9 +154,6 @@ function handle_admin_settings_post(): ?string
     $timezone = trim($_POST['timezone'] ?? $config['timezone']);
     $dateFormat = trim($_POST['date_format'] ?? $config['date_format']);
     $timeFormat = trim($_POST['time_format'] ?? $config['time_format']);
-    $mailFrom = trim($_POST['mail_from'] ?? $config['mail_from'] ?? '');
-    $mailFromName = trim($_POST['mail_from_name'] ?? $config['mail_from_name'] ?? '');
-    $notifyAdminEmail = trim($_POST['notify_admin_email'] ?? $config['notify_admin_email'] ?? '');
     $attachmentsEnabled = !empty($_POST['attachments_enabled']) ? 1 : 0;
     $allowCatalogOnly = !empty($_POST['allow_catalog_only']) ? 1 : 0;
     $pluginVerifyFiles = !empty($_POST['plugin_verify_files']) ? 1 : 0;
@@ -188,9 +166,6 @@ function handle_admin_settings_post(): ?string
     $config['timezone'] = $timezone;
     $config['date_format'] = $dateFormat;
     $config['time_format'] = $timeFormat;
-    $config['mail_from'] = $mailFrom;
-    $config['mail_from_name'] = $mailFromName;
-    $config['notify_admin_email'] = $notifyAdminEmail;
     $config['attachments_enabled'] = $attachmentsEnabled;
     $config['allow_catalog_only'] = $allowCatalogOnly;
     $config['plugin_verify_files'] = $pluginVerifyFiles;
@@ -209,14 +184,14 @@ function handle_admin_settings_post(): ?string
     return null;
 }
 
-function handle_admin_settings_get(): bool
+function handle_admin_settings_get(): \Bulletin\Response|bool
 {
     global $config;
     include __DIR__ . '/../../views/admin_settings.php';
     return true;
 }
 
-function handle_admin_upload_site_image(): bool
+function handle_admin_upload_site_image(): \Bulletin\Response|bool
 {
     global $config;
 
@@ -270,7 +245,7 @@ function handle_admin_upload_site_image(): bool
     exit;
 }
 
-function handle_admin_get_images(): bool
+function handle_admin_get_images(): \Bulletin\Response|bool
 {
     global $pdo;
 
@@ -286,7 +261,7 @@ function handle_admin_get_images(): bool
     exit;
 }
 
-function handle_admin_smtp_get(): bool
+function handle_admin_smtp_get(): \Bulletin\Response|bool
 {
     include __DIR__ . '/../../views/admin_smtp.php';
     return true;
@@ -331,6 +306,7 @@ function handle_admin_smtp_post(): ?string
     $config['mail_timeout'] = (int)($_POST['mail_timeout'] ?? ($config['mail_timeout'] ?? 10));
     $config['mail_from'] = trim($_POST['mail_from'] ?? ($config['mail_from'] ?? ''));
     $config['mail_from_name'] = trim($_POST['mail_from_name'] ?? ($config['mail_from_name'] ?? ''));
+    $config['notify_admin_email'] = trim($_POST['notify_admin_email'] ?? ($config['notify_admin_email'] ?? ''));
 
     file_put_contents(__DIR__ . '/../../config.json', json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
     $_SESSION['smtp_saved'] = true;
@@ -343,13 +319,13 @@ function handle_admin_smtp_post(): ?string
 // SECTION: Moderation
 // ============================================================================
 
-function handle_admin_moderation_get(): bool
+function handle_admin_moderation_get(): \Bulletin\Response|bool
 {
     include __DIR__ . '/../../views/admin_moderation.php';
     return true;
 }
 
-function handle_moderate_post(): bool
+function handle_moderate_post(): \Bulletin\Response|bool
 {
     global $pdo;
 
@@ -380,10 +356,9 @@ function handle_moderate_post(): bool
     }
 
     return redirect(url('admin_moderation'));
-    return true;
 }
 
-function handle_frontend_moderate_post(): bool
+function handle_frontend_moderate_post(): \Bulletin\Response|bool
 {
     global $pdo;
 
@@ -455,10 +430,9 @@ function handle_frontend_moderate_post(): bool
     $threadTitleStmt->execute([$threadId]);
     $threadTitle = $threadTitleStmt->fetchColumn();
     return redirect(url('thread', ['id' => $threadId, 'slug' => slugify($threadTitle ?? '')]));
-    return true;
 }
 
-function handle_split_thread_post(): bool
+function handle_split_thread_post(): \Bulletin\Response|bool
 {
     global $pdo;
 
@@ -522,10 +496,9 @@ function handle_split_thread_post(): bool
         return redirect(url('home'));
     }
     return redirect(url('thread', ['id' => $newThreadId, 'slug' => slugify($newTitle)]));
-    return true;
 }
 
-function handle_merge_thread_post(): bool
+function handle_merge_thread_post(): \Bulletin\Response|bool
 {
     global $pdo;
 
@@ -554,20 +527,19 @@ function handle_merge_thread_post(): bool
     $pdo->prepare("UPDATE posts SET thread_id = ? WHERE thread_id = ?")->execute([$targetThreadId, $threadId]);
     $pdo->prepare("DELETE FROM threads WHERE id = ?")->execute([$threadId]);
     return redirect(url('thread', ['id' => $targetThreadId, 'slug' => slugify($targetThread['title'] ?? '')]));
-    return true;
 }
 
 // ============================================================================
 // SECTION: Roles
 // ============================================================================
 
-function handle_admin_roles_get(): bool
+function handle_admin_roles_get(): \Bulletin\Response|bool
 {
     include __DIR__ . '/../../views/admin_roles.php';
     return true;
 }
 
-function handle_admin_roles_action_post(): bool
+function handle_admin_roles_action_post(): \Bulletin\Response|bool
 {
     global $pdo;
 
@@ -599,20 +571,19 @@ function handle_admin_roles_action_post(): bool
         }
     }
     return redirect(url('admin_roles'));
-    return true;
 }
 
 // ============================================================================
 // SECTION: Users
 // ============================================================================
 
-function handle_admin_users_get(): bool
+function handle_admin_users_get(): \Bulletin\Response|bool
 {
     include __DIR__ . '/../../views/admin_users.php';
     return true;
 }
 
-function handle_admin_user_edit(string $method): bool
+function handle_admin_user_edit(string $method): \Bulletin\Response|bool
 {
     global $pdo;
 
@@ -648,7 +619,7 @@ function handle_admin_user_edit(string $method): bool
     return true;
 }
 
-function handle_admin_create_user_post(): bool
+function handle_admin_create_user_post(): \Bulletin\Response|bool
 {
     global $pdo;
 
@@ -707,14 +678,13 @@ function handle_admin_create_user_post(): bool
     notify_admin_new_user($username, $email);
 
     return redirect(url('admin_users'));
-    return true;
 }
 
 // ============================================================================
 // SECTION: Categories
 // ============================================================================
 
-function handle_admin_categories(string $method): bool
+function handle_admin_categories(string $method): \Bulletin\Response|bool
 {
     global $pdo;
 
@@ -749,7 +719,7 @@ function handle_admin_categories(string $method): bool
     return true;
 }
 
-function handle_delete_category_post(): bool
+function handle_delete_category_post(): \Bulletin\Response|bool
 {
     global $pdo;
 
@@ -762,10 +732,9 @@ function handle_delete_category_post(): bool
         log_admin_action('category_delete', ['category_id' => $catId]);
     }
     return redirect(url('admin_categories'));
-    return true;
 }
 
-function handle_update_category_order_post(): bool
+function handle_update_category_order_post(): \Bulletin\Response|bool
 {
     global $pdo;
 
@@ -799,7 +768,7 @@ function handle_update_category_order_post(): bool
 // SECTION: Languages
 // ============================================================================
 
-function handle_admin_langs(string $method): bool
+function handle_admin_langs(string $method)
 {
     global $config, $pdo;
 
@@ -1017,7 +986,7 @@ function handle_admin_langs(string $method): bool
 // SECTION: Diagnostics
 // ============================================================================
 
-function handle_admin_diagnostics_get(): bool
+function handle_admin_diagnostics_get(): \Bulletin\Response|bool
 {
     global $config;
 
@@ -1094,7 +1063,7 @@ function handle_admin_diagnostics_get(): bool
 // SECTION: Plugins
 // ============================================================================
 
-function handle_admin_plugins(string $method): bool
+function handle_admin_plugins(string $method): \Bulletin\Response|bool
 {
     global $config, $pluginManager;
 
@@ -1199,7 +1168,7 @@ function handle_admin_plugins(string $method): bool
 // SECTION: Themes
 // ============================================================================
 
-function handle_admin_themes(string $method): bool
+function handle_admin_themes(string $method): \Bulletin\Response|bool
 {
     global $config, $themeManager;
 
@@ -1288,7 +1257,7 @@ function handle_admin_themes(string $method): bool
 // SECTION: Catalog & Updates
 // ============================================================================
 
-function handle_admin_catalog(string $method): bool
+function handle_admin_catalog(string $method): \Bulletin\Response|bool
 {
     global $config, $updateManager;
 
@@ -1423,7 +1392,7 @@ function handle_admin_catalog(string $method): bool
     return true;
 }
 
-function handle_admin_updates(string $method): bool
+function handle_admin_updates(string $method): \Bulletin\Response|bool
 {
     global $config, $pluginManager, $themeManager, $updateManager;
 
@@ -1530,7 +1499,7 @@ function handle_admin_updates(string $method): bool
 // SECTION: User Actions (ban/unban/suspend/delete)
 // ============================================================================
 
-function handle_delete_user_post(): bool
+function handle_delete_user_post(): \Bulletin\Response|bool
 {
     global $pdo;
 
@@ -1550,10 +1519,9 @@ function handle_delete_user_post(): bool
         $_SESSION['admin_error'] = t('invalid_user_id') ?? 'Invalid user id.';
     }
     return redirect(url('admin_users'));
-    return true;
 }
 
-function handle_unban_user_post(): bool
+function handle_unban_user_post(): \Bulletin\Response|bool
 {
     global $pdo;
 
@@ -1566,10 +1534,9 @@ function handle_unban_user_post(): bool
         log_admin_action('user_unban', ['target_id' => $userId]);
     }
     return redirect(url('admin_users'));
-    return true;
 }
 
-function handle_ban_user_post(): bool
+function handle_ban_user_post(): \Bulletin\Response|bool
 {
     global $pdo;
 
@@ -1582,10 +1549,9 @@ function handle_ban_user_post(): bool
         log_admin_action('user_ban', ['target_id' => $userId]);
     }
     return redirect(url('admin_users'));
-    return true;
 }
 
-function handle_suspend_user_post(): bool
+function handle_suspend_user_post(): \Bulletin\Response|bool
 {
     global $pdo;
 
@@ -1600,5 +1566,4 @@ function handle_suspend_user_post(): bool
         log_admin_action('user_suspend', ['target_id' => $userId, 'days' => $days]);
     }
     return redirect(url('admin_users'));
-    return true;
 }

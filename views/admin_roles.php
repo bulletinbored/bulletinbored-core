@@ -30,7 +30,7 @@ $allPermissions = [
     <div class="row g-4">
         <div class="col-lg-8">
             <div class="card shadow mb-4">
-                <div class="card-header py-3">
+                <div class="card-header">
                     <h5 class="card-title mb-0"><i class="fas fa-shield-halved me-2"></i><?= t('roles') ?></h5>
                 </div>
                 <div class="card-body">
@@ -113,7 +113,7 @@ $allPermissions = [
 
         <div class="col-lg-4">
             <div class="card shadow mb-4">
-                <div class="card-header py-3">
+                <div class="card-header">
                     <h5 class="card-title mb-0"><i class="fas fa-plus-circle me-2"></i><?= t('create_role') ?></h5>
                 </div>
                 <div class="card-body">
