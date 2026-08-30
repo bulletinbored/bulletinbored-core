@@ -66,9 +66,16 @@ if ($dbDriver === 'mysql') {
     // Create admin user if not exists
     $db = new DbQuery($pdo);
     if (!$db->table('users')->where('role', 'admin')->exists()) {
+        $adminPassword = $config['admin_pass'] ?? null;
+        if (empty($adminPassword)) {
+            // No admin password in config — generate a random one and log it.
+            // This should only happen on legacy/manual setups.
+            $adminPassword = bin2hex(random_bytes(12));
+            error_log('bulletinbored: No admin user exists and no admin_pass in config. Generated temporary password: ' . $adminPassword . ' — CHANGE THIS IMMEDIATELY.');
+        }
         $db->table('users')->insert([
             'username' => $config['admin_user'],
-            'password' => password_hash($config['admin_pass'], PASSWORD_DEFAULT),
+            'password' => password_hash($adminPassword, PASSWORD_DEFAULT),
             'role' => 'admin',
         ]);
     }
@@ -177,7 +184,12 @@ if ($dbDriver === 'mysql') {
         ");
 
         // Insert default data
-        $pdo->exec("INSERT INTO users (username, password, role) VALUES ('admin', '" . password_hash($config['admin_pass'], PASSWORD_DEFAULT) . "', 'admin')");
+        $adminPassword = $config['admin_pass'] ?? null;
+        if (empty($adminPassword)) {
+            $adminPassword = bin2hex(random_bytes(12));
+            error_log('bulletinbored: No admin_pass in config. Generated temporary password: ' . $adminPassword . ' — CHANGE THIS IMMEDIATELY.');
+        }
+        $pdo->exec("INSERT INTO users (username, password, role) VALUES ('admin', '" . password_hash($adminPassword, PASSWORD_DEFAULT) . "', 'admin')");
         $pdo->exec("INSERT INTO categories (name, description, position) SELECT 'General', 'General discussion', 1 FROM dual WHERE NOT EXISTS (SELECT 1 FROM categories WHERE name = 'General')");
     } else {
         // Existing database - just connect

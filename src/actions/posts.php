@@ -98,7 +98,7 @@ function handle_thread_view(): bool
 
     $threadId = (int)($_POST['thread_id'] ?? $_GET['id'] ?? 0);
     if ($threadId <= 0) {
-        redirect(url('home'));
+        return redirect(url('home'));
     }
 
     $stmt = $pdo->prepare("
@@ -189,18 +189,22 @@ function handle_thread_view(): bool
 function handle_new_thread(string $method): bool
 {
     global $pdo, $config, $pluginManager;
+
     if (!is_logged_in()) {
-        die('Login required');
+        return redirect(url('login')) ?? true;
     }
 
     if ($method === 'POST') {
         if (!csrf_validate_request()) {
-            die('CSRF token invalid');
+            $_SESSION['new_thread_error'] = 'CSRF token invalid';
+            include __DIR__ . '/../../views/new_thread.php';
+            return true;
         }
 
         if (!rate_limit('new_thread', 20, 3600, (string)($_SESSION['user_id'] ?? 0))) {
-            http_response_code(429);
-            die('You are posting too fast. Please try again later.');
+            $_SESSION['new_thread_error'] = 'You are posting too fast. Please try again later.';
+            include __DIR__ . '/../../views/new_thread.php';
+            return true;
         }
 
         $title = clean_text($_POST['title'] ?? '');
@@ -212,13 +216,19 @@ function handle_new_thread(string $method): bool
         $allowedRoles = $catStmt->fetchColumn();
         if ($allowedRoles && $allowedRoles !== 'all' && !is_admin()) {
             if ($allowedRoles === 'moderator' && !in_array($_SESSION['user_role'] ?? 'user', ['admin', 'moderator'], true)) {
-                die(t('not_authorized_category'));
+                $_SESSION['new_thread_error'] = t('not_authorized_category');
+                include __DIR__ . '/../../views/new_thread.php';
+                return true;
             } elseif ($allowedRoles === 'admin' && ($_SESSION['user_role'] ?? 'user') !== 'admin') {
-                die(t('not_authorized_category'));
+                $_SESSION['new_thread_error'] = t('not_authorized_category');
+                include __DIR__ . '/../../views/new_thread.php';
+                return true;
             } else {
                 $allowed = json_decode($allowedRoles, true);
                 if ($allowed && is_array($allowed) && !in_array($_SESSION['user_role'] ?? 'user', $allowed)) {
-                    die(t('not_authorized_category'));
+                    $_SESSION['new_thread_error'] = t('not_authorized_category');
+                    include __DIR__ . '/../../views/new_thread.php';
+                    return true;
                 }
             }
         }
@@ -243,7 +253,9 @@ function handle_new_thread(string $method): bool
         if (isset($pluginManager)) {
             $threadData = $pluginManager->filter('thread_before_create', $threadData);
             if ($pluginManager->checkHook('thread_create_block', $threadData)) {
-                die(t('thread_creation_blocked'));
+                $_SESSION['new_thread_error'] = t('thread_creation_blocked');
+                include __DIR__ . '/../../views/new_thread.php';
+                return true;
             }
         }
 
@@ -262,7 +274,7 @@ function handle_new_thread(string $method): bool
             // Attachment handling code would go here
         }
 
-        redirect(url('thread', ['id' => $threadId, 'slug' => slugify($title)]));
+        return redirect(url('thread', ['id' => $threadId, 'slug' => slugify($title)]));
     }
 
     include __DIR__ . '/../../views/new_thread.php';
@@ -274,16 +286,17 @@ function handle_reply_post(): bool
     global $pdo, $pluginManager;
 
     if (!is_logged_in()) {
-        die('Login required');
+        return redirect(url('login')) ?? true;
     }
 
     if (!csrf_validate_request()) {
-        die('CSRF token invalid');
+        $_SESSION['reply_error'] = 'CSRF token invalid';
+        return redirect(url('thread', ['id' => (int)($_POST['thread_id'] ?? 0)]));
     }
 
     if (!rate_limit('reply', 30, 3600, (string)($_SESSION['user_id'] ?? 0))) {
-        http_response_code(429);
-        die('You are posting too fast. Please try again later.');
+        $_SESSION['reply_error'] = 'You are posting too fast. Please try again later.';
+        return redirect(url('thread', ['id' => (int)($_POST['thread_id'] ?? 0)]));
     }
 
     $threadId = (int)($_POST['thread_id'] ?? 0);
@@ -292,8 +305,7 @@ function handle_reply_post(): bool
     if ($threadId <= 0 || $content === '') {
         $_SESSION['reply_error'] = 'Content is required';
         $_SESSION['reply_content'] = $_POST['content'] ?? '';
-        redirect(url('thread', ['id' => $threadId]));
-        return true;
+        return redirect(url('thread', ['id' => $threadId]));
     }
 
     $threadStmt = $pdo->prepare("SELECT * FROM threads WHERE id = ?");
@@ -301,11 +313,14 @@ function handle_reply_post(): bool
     $thread = $threadStmt->fetch();
 
     if (!$thread) {
-        die('Thread not found');
+        http_response_code(404);
+        echo 'Thread not found';
+        return true;
     }
 
     if ($thread['status'] === 'locked' && !is_admin()) {
-        die('Thread is locked');
+        $_SESSION['reply_error'] = 'Thread is locked';
+        return redirect(url('thread', ['id' => $threadId]));
     }
 
     $postData = [
@@ -318,7 +333,8 @@ function handle_reply_post(): bool
     if (isset($pluginManager)) {
         $postData = $pluginManager->filter('post_before_create', $postData, $thread);
         if ($pluginManager->checkHook('post_create_block', $postData, $thread)) {
-            die(t('post_creation_blocked'));
+            $_SESSION['reply_error'] = t('post_creation_blocked');
+            return redirect(url('thread', ['id' => $threadId]));
         }
     }
 
@@ -335,7 +351,7 @@ function handle_reply_post(): bool
 
     notify_thread_reply($thread, $_SESSION['user_id'], $content);
 
-    redirect(url('thread', ['id' => $threadId, 'slug' => slugify($thread['title'] ?? '')]));
+    return redirect(url('thread', ['id' => $threadId, 'slug' => slugify($thread['title'] ?? '')]));
     return true;
 }
 
@@ -349,7 +365,7 @@ function handle_edit_post(string $method): bool
 
     $postId = (int)($_POST['post_id'] ?? $_GET['id'] ?? 0);
     if ($postId <= 0) {
-        redirect(url('home'));
+        return redirect(url('home'));
     }
 
     $postStmt = $pdo->prepare("SELECT * FROM posts WHERE id = ?");
@@ -357,7 +373,7 @@ function handle_edit_post(string $method): bool
     $post = $postStmt->fetch();
 
     if (!$post) {
-        redirect(url('home'));
+        return redirect(url('home'));
     }
 
     if ($post['user_id'] !== $_SESSION['user_id'] && !is_admin()) {
@@ -397,7 +413,7 @@ function handle_edit_post(string $method): bool
         $threadStmt->execute([$post['thread_id']]);
         $thread = $threadStmt->fetch();
 
-        redirect(url('thread', ['id' => $post['thread_id'], 'slug' => slugify($thread['title'] ?? '')]));
+        return redirect(url('thread', ['id' => $post['thread_id'], 'slug' => slugify($thread['title'] ?? '')]));
     }
 
     include __DIR__ . '/../../views/edit_post.php';
@@ -414,7 +430,7 @@ function handle_edit_thread(string $method): bool
 
     $threadId = (int)($_GET['id'] ?? 0);
     if ($threadId <= 0) {
-        redirect(url('home'));
+        return redirect(url('home'));
     }
 
     $threadStmt = $pdo->prepare("SELECT * FROM threads WHERE id = ?");
@@ -422,7 +438,7 @@ function handle_edit_thread(string $method): bool
     $thread = $threadStmt->fetch();
 
     if (!$thread) {
-        redirect(url('home'));
+        return redirect(url('home'));
     }
 
     if ($thread['user_id'] !== $_SESSION['user_id'] && !is_admin()) {
@@ -462,7 +478,7 @@ function handle_edit_thread(string $method): bool
             }
         }
 
-        redirect(url('thread', ['id' => $threadId, 'slug' => slugify($thread['title'] ?? '')]));
+        return redirect(url('thread', ['id' => $threadId, 'slug' => slugify($thread['title'] ?? '')]));
     }
 
     $editThreadTitle = true;
@@ -488,7 +504,7 @@ function handle_delete_post(): bool
 
     $postId = (int)($_GET['id'] ?? 0);
     if ($postId <= 0) {
-        redirect(url('home'));
+        return redirect(url('home'));
     }
 
     $postStmt = $pdo->prepare("SELECT * FROM posts WHERE id = ?");
@@ -496,7 +512,7 @@ function handle_delete_post(): bool
     $post = $postStmt->fetch();
 
     if (!$post) {
-        redirect(url('home'));
+        return redirect(url('home'));
     }
 
     if ($post['user_id'] !== $_SESSION['user_id'] && !is_admin()) {
@@ -526,10 +542,10 @@ function handle_delete_post(): bool
         $threadStmt->execute([$threadId]);
         $thread = $threadStmt->fetch();
         $pdo->prepare("DELETE FROM threads WHERE id = ?")->execute([$threadId]);
-        redirect(url('category', ['id' => $thread['category_id']]));
+        return redirect(url('category', ['id' => $thread['category_id']]));
     }
 
-    redirect(url('thread', ['id' => $threadId]));
+    return redirect(url('thread', ['id' => $threadId]));
     return true;
 }
 
@@ -547,7 +563,7 @@ function handle_delete_thread(): bool
 
     $threadId = (int)($_GET['id'] ?? 0);
     if ($threadId <= 0) {
-        redirect(url('home'));
+        return redirect(url('home'));
     }
 
     $threadStmt = $pdo->prepare("SELECT * FROM threads WHERE id = ?");
@@ -555,7 +571,7 @@ function handle_delete_thread(): bool
     $thread = $threadStmt->fetch();
 
     if (!$thread) {
-        redirect(url('home'));
+        return redirect(url('home'));
     }
 
     if ($thread['user_id'] !== $_SESSION['user_id'] && !is_admin()) {
@@ -577,7 +593,7 @@ function handle_delete_thread(): bool
         $pluginManager->runHook('thread_after_delete', $threadId, $thread);
     }
 
-    redirect(url('category', ['id' => $thread['category_id']]));
+    return redirect(url('category', ['id' => $thread['category_id']]));
     return true;
 }
 
@@ -599,7 +615,7 @@ function handle_watch(): bool
     }
 
     $referer = $_SERVER['HTTP_REFERER'] ?? url('thread', ['id' => $threadId]);
-    redirect($referer);
+    return redirect($referer);
     return true;
 }
 
@@ -619,6 +635,6 @@ function handle_unwatch(): bool
     }
 
     $referer = $_SERVER['HTTP_REFERER'] ?? url('thread', ['id' => $threadId]);
-    redirect($referer);
+    return redirect($referer);
     return true;
 }

@@ -91,4 +91,65 @@ class Request
         }
         return stripslashes(trim($value));
     }
+
+    /**
+     * Get a typed string value.
+     */
+    public static function string(string $key, string $default = ''): string
+    {
+        $value = self::input($key);
+        if ($value === null) {
+            return $default;
+        }
+        return (string) $value;
+    }
+
+    /**
+     * Get a typed integer value.
+     */
+    public static function int(string $key, int $default = 0): int
+    {
+        $value = self::input($key);
+        if ($value === null || $value === '') {
+            return $default;
+        }
+        return (int) $value;
+    }
+
+    /**
+     * Get a typed boolean value (from checkbox/radio).
+     */
+    public static function bool(string $key, bool $default = false): bool
+    {
+        $value = self::input($key);
+        if ($value === null) {
+            return $default;
+        }
+        return in_array($value, [true, 1, '1', 'on', 'yes'], true);
+    }
+
+    /**
+     * Get a validated email address, or empty string if invalid.
+     */
+    public static function email(string $key): string
+    {
+        $value = self::input($key);
+        if ($value === null) {
+            return '';
+        }
+        $filtered = filter_var($value, FILTER_VALIDATE_EMAIL);
+        return $filtered !== false ? $filtered : '';
+    }
+
+    /**
+     * Get a value that must be one of the allowed options.
+     */
+    public static function enum(string $key, array $allowed, mixed $default = null): mixed
+    {
+        $value = self::input($key);
+        if ($value === null) {
+            return $default;
+        }
+        return in_array($value, $allowed, true) ? $value : $default;
+    }
 }

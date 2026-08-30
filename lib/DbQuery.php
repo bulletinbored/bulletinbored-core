@@ -155,8 +155,9 @@ class DbQuery
 
     public function first(): ?array
     {
-        $this->limitVal = 1;
-        $result = $this->get();
+        $clone = clone $this;
+        $clone->limitVal = 1;
+        $result = $clone->get();
         return $result[0] ?? null;
     }
 
@@ -274,8 +275,9 @@ class DbQuery
 
     public function pluck(string $column): array
     {
-        $this->selectCols = [$column];
-        $rows = $this->get();
+        $clone = clone $this;
+        $clone->selectCols = [$column];
+        $rows = $clone->get();
         return array_column($rows, $column);
     }
 
@@ -286,9 +288,10 @@ class DbQuery
         $perPage = max(1, $perPage);
         $offset = ($page - 1) * $perPage;
 
-        $this->limitVal = $perPage;
-        $this->offsetVal = $offset;
-        $items = $this->get();
+        $clone = clone $this;
+        $clone->limitVal = $perPage;
+        $clone->offsetVal = $offset;
+        $items = $clone->get();
 
         return [
             'items' => $items,

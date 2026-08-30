@@ -5,6 +5,7 @@
  */
 
 require_once __DIR__ . '/../src/helpers.php';
+require_once __DIR__ . '/../lib/AuthZ.php';
 
 function test_password_hashing(): Test
 {
@@ -178,4 +179,48 @@ $suite->addTest(test_user_has_permission());
 $suite->addTest(test_is_logged_in());
 $suite->addTest(test_is_banned_suspended());
 $suite->addTest(test_input_validation());
+$suite->addTest(test_authz_service());
 $suite->run();
+
+function test_authz_service(): Test
+{
+    $t = new Test('AuthZ - Permission Service');
+
+    $pdo = new PDO('sqlite::memory:');
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    $pdo->exec("CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT, role TEXT)");
+    $pdo->exec("CREATE TABLE roles (id INTEGER PRIMARY KEY, name TEXT UNIQUE, permissions TEXT)");
+    $pdo->exec("INSERT INTO users (id, username, role) VALUES (1, 'admin1', 'admin')");
+    $pdo->exec("INSERT INTO users (id, username, role) VALUES (2, 'mod1', 'moderator')");
+    $pdo->exec("INSERT INTO users (id, username, role) VALUES (3, 'user1', 'user')");
+    $pdo->exec("INSERT INTO roles (name, permissions) VALUES ('admin', '[\"posts.edit\",\"posts.delete\",\"users.ban\"]')");
+    $pdo->exec("INSERT INTO roles (name, permissions) VALUES ('moderator', '[\"posts.edit\",\"posts.delete\"]')");
+    $pdo->exec("INSERT INTO roles (name, permissions) VALUES ('user', '[\"posts.create\",\"posts.edit_own\"]')");
+
+    $authz = new AuthZ($pdo);
+
+    // Admin has all permissions
+    $t->assertTrue('Admin can posts.edit', $authz->can(1, 'posts.edit'));
+    $t->assertTrue('Admin can users.ban', $authz->can(1, 'users.ban'));
+    $t->assertTrue('Admin can anything', $authz->can(1, 'nonexistent'));
+
+    // Moderator has specific permissions
+    $t->assertTrue('Moderator can posts.edit', $authz->can(2, 'posts.edit'));
+    $t->assertTrue('Moderator can posts.delete', $authz->can(2, 'posts.delete'));
+    $t->assertFalse('Moderator cannot users.ban', $authz->can(2, 'users.ban'));
+
+    // User has limited permissions
+    $t->assertTrue('User can posts.create', $authz->can(3, 'posts.create'));
+    $t->assertFalse('User cannot posts.delete', $authz->can(3, 'posts.delete'));
+
+    // Ownership checks
+    $t->assertTrue('User can edit own post', $authz->canOnOwned(3, 'posts.edit', 3));
+    $t->assertFalse('User cannot edit others post', $authz->canOnOwned(3, 'posts.edit', 2));
+    $t->assertTrue('Moderator can edit any post', $authz->canOnOwned(2, 'posts.edit', 3));
+
+    // Role resolution
+    $t->assertEquals('Get admin role', 'admin', $authz->getUserRole(1));
+    $t->assertEquals('Get user role', 'user', $authz->getUserRole(3));
+
+    return $t;
+}

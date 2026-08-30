@@ -269,16 +269,158 @@ class PluginManager
     {
         $loaded = [];
         foreach ($this->getEnabled() as $key => $plugin) {
-            if (!empty($plugin['file']) && file_exists($plugin['file'])) {
+            if (empty($plugin['file']) || !file_exists($plugin['file'])) {
+                continue;
+            }
+            try {
                 include $plugin['file'];
                 $initFunction = $key . '_init';
                 if (function_exists($initFunction)) {
                     $initFunction();
                 }
                 $loaded[] = $key;
+            } catch (\Throwable $e) {
+                // Isolate failure: one broken plugin must not crash the forum.
+                error_log("Plugin '{$key}' failed to load: " . $e->getMessage());
+                $this->plugins[$key]['enabled'] = false;
+                $this->plugins[$key]['failed'] = true;
+                $this->plugins[$key]['fail_reason'] = $e->getMessage();
+                // Run admin notification hook so the admin knows.
+                $this->runHook('plugin_load_failed', $key, $e);
             }
         }
         return $loaded;
+    }
+
+    /**
+     * Validate a plugin manifest against the v1 schema.
+     * Backward compatible: accepts both legacy format (name only) and v1 (id + name).
+     * Returns ['valid' => true] or ['valid' => false, 'errors' => [...]].
+     */
+    public function validateManifest(array $manifest): array
+    {
+        $errors = [];
+
+        // 'id' is optional in v1 — defaults to 'name' for backward compatibility.
+        // If present, it must be a valid lowercase alphanumeric + hyphens string.
+        if (isset($manifest['id'])) {
+            if (!is_string($manifest['id']) || !preg_match('/^[a-z][a-z0-9-]*$/', $manifest['id'])) {
+                $errors[] = "Invalid 'id' format: must be lowercase alphanumeric + hyphens, starting with a letter";
+            }
+        }
+
+        // 'name' is required (used as fallback for 'id' in legacy manifests)
+        if (empty($manifest['name']) || !is_string($manifest['name'])) {
+            $errors[] = "Missing or invalid 'name' (required, string)";
+        }
+
+        if (empty($manifest['version']) || !is_string($manifest['version'])) {
+            $errors[] = "Missing or invalid 'version' (required, semver string)";
+        }
+
+        // Optional fields with validation
+        if (isset($manifest['core']) && !is_string($manifest['core'])) {
+            $errors[] = "Invalid 'core' (should be a version constraint string like '>=0.5.0 <2.0.0')";
+        }
+
+        if (isset($manifest['php']) && !is_string($manifest['php'])) {
+            $errors[] = "Invalid 'php' (should be a version constraint string like '>=8.1')";
+        }
+
+        if (isset($manifest['permissions']) && !is_array($manifest['permissions'])) {
+            $errors[] = "Invalid 'permissions' (should be an array of permission strings)";
+        }
+
+        if (isset($manifest['bootstrap']) && !is_string($manifest['bootstrap'])) {
+            $errors[] = "Invalid 'bootstrap' (should be a filename string)";
+        }
+
+        // Check core compatibility
+        if (empty($errors) && !empty($manifest['core'])) {
+            $coreVersion = trim(file_get_contents(__DIR__ . '/../VERSION'));
+            if (!$this->satisfiesConstraint($coreVersion, $manifest['core'])) {
+                $errors[] = "Core version {$coreVersion} does not satisfy constraint '{$manifest['core']}'";
+            }
+        }
+
+        // Check PHP compatibility
+        if (empty($errors) && !empty($manifest['php'])) {
+            if (!$this->satisfiesConstraint(PHP_VERSION, $manifest['php'])) {
+                $errors[] = "PHP version " . PHP_VERSION . " does not satisfy constraint '{$manifest['php']}'";
+            }
+        }
+
+        return [
+            'valid' => empty($errors),
+            'errors' => $errors,
+        ];
+    }
+
+    /**
+     * Normalize a manifest: derive 'id' from 'name' if not set (backward compat).
+     */
+    public function normalizeManifest(array $manifest): array
+    {
+        if (empty($manifest['id']) && !empty($manifest['name'])) {
+            $id = strtolower($manifest['name']);
+            $id = preg_replace('/[^a-z0-9-]+/', '-', $id);
+            $id = trim($id, '-');
+            $manifest['id'] = $id;
+        }
+        return $manifest;
+    }
+    private function satisfiesConstraint(string $version, string $constraint): bool
+    {
+        $constraints = preg_split('/\s+/', trim($constraint));
+        foreach ($constraints as $c) {
+            $c = trim($c);
+            if ($c === '') continue;
+            if (!preg_match('/^(>=|<=|>|<|==|!=)(.+)$/', $c, $m)) {
+                continue;
+            }
+            $op = $m[1];
+            $target = trim($m[2]);
+            if (!version_compare($version, $target, $op)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Get the current state of a plugin.
+     * Possible states: enabled, disabled, incompatible, corrupted, failed, not_found
+     */
+    public function getPluginState(string $name): string
+    {
+        $key = strtolower($name);
+        $plugin = $this->getAll()[$key] ?? null;
+
+        if ($plugin === null) {
+            return 'not_found';
+        }
+
+        if (!empty($plugin['failed'])) {
+            return 'failed';
+        }
+
+        if (!empty($plugin['file']) && !file_exists($plugin['file'])) {
+            return 'corrupted';
+        }
+
+        // Check compatibility
+        if (!empty($plugin['folder'])) {
+            $dir = $this->pluginsDir . '/' . $plugin['folder'];
+            $manifest = $this->parseManifest($dir);
+            if ($manifest) {
+                $validation = $this->validateManifest($manifest);
+                if (!$validation['valid']) {
+                    return 'incompatible';
+                }
+            }
+        }
+
+        return !empty($plugin['enabled']) ? 'enabled' : 'disabled';
     }
 
     public function addHook(string $event, callable $callback, int $priority = 10): void
@@ -704,27 +846,30 @@ class PluginManager
         return $removed;
     }
 
-    private function deleteDir(string $dir): void
+    private function deleteDir(string $dir): bool
     {
         if (!is_dir($dir)) {
-            return;
+            return true;
         }
-        foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS), RecursiveIteratorIterator::CHILD_FIRST) as $item) {
-            $item->isDir() ? @rmdir($item->getPathname()) : @unlink($item->getPathname());
-        }
-        @rmdir($dir);
-        if (is_dir($dir)) {
-            // On Windows a leftover directory can be locked or carry ACLs that
-            // prevent deletion. Force ownership/permissions then remove it.
-            if (stripos(PHP_OS, 'WIN') === 0 && function_exists('exec')) {
-                exec('takeown /f ' . escapeshellarg($dir) . ' /r /d y 2>nul');
-                exec('icacls ' . escapeshellarg($dir) . ' /grant administrators:F /t 2>nul');
-                exec('cmd /c rmdir /s /q ' . escapeshellarg($dir) . ' 2>nul');
+
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::CHILD_FIRST
+        );
+
+        foreach ($iterator as $item) {
+            if ($item->isDir()) {
+                if (!@rmdir($item->getPathname())) {
+                    return false;
+                }
             } else {
-                exec('cmd /c rmdir /s /q ' . escapeshellarg($dir) . ' 2>&1', $out, $code);
+                if (!@unlink($item->getPathname())) {
+                    return false;
+                }
             }
-            clearstatcache();
         }
+
+        return @rmdir($dir);
     }
 
     public function installFromRepo(string $repoUrl, ?string $tag = null, ?string $expectedName = null): array

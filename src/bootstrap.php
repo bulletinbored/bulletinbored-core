@@ -38,10 +38,17 @@ if (!isset($config) || !is_array($config)) {
         $config = [];
     }
 }
+// --- Trusted proxies --------------------------------------------------------
+require_once __DIR__ . '/TrustedProxies.php';
+$proxyInfo = trusted_proxies_detect();
+$GLOBALS['forwarded_proto'] = $forwardedProto = $proxyInfo['forwarded_proto'];
+$GLOBALS['forwarded_ssl'] = $forwardedSsl = $proxyInfo['forwarded_ssl'];
+$GLOBALS['forwarded_for'] = $forwardedFor = $proxyInfo['forwarded_for'];
+
 $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
     || (isset($_SERVER['SERVER_PORT']) && (int) $_SERVER['SERVER_PORT'] === 443)
-    || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower($_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https')
-    || (!empty($_SERVER['HTTP_X_FORWARDED_SSL']) && strtolower($_SERVER['HTTP_X_FORWARDED_SSL']) === 'on');
+    || ($forwardedProto === 'https')
+    || ($forwardedSsl === 'on');
 // The redirect can be disabled with "force_https": false in config.json. That
 // escape hatch matters on hosts where the domain has no valid certificate yet
 // (or during local development): without it every URL would 301 to an https://
@@ -58,50 +65,9 @@ if ($redirectHttps) {
     }
 }
 
-// --- Session storage --------------------------------------------------------
-// Use an app-owned, writable directory for session files. The system default
-// (/var/lib/php/sessions) is frequently not writable for the site user on
-// shared hosting, which makes every request start a fresh session and breaks
-// CSRF validation (login, posting, etc.). Fall back to data/sessions whenever
-// the PHP default is not usable, so this works out of the box on new installs.
-// Must run before session_start().
-$sessionDir = realpath(__DIR__ . '/../data/sessions') ?: (__DIR__ . '/../data/sessions');
-if (!is_dir($sessionDir)) {
-    @mkdir($sessionDir, 0755, true);
-}
-if (is_dir($sessionDir) && is_writable($sessionDir)) {
-    session_save_path($sessionDir);
-}
-
-// --- Session hardening ------------------------------------------------------
-// Use a dedicated session cookie name (BBSESSID) instead of the PHP default
-// PHPSESSID. On shared/legacy deployments an old non-secure PHPSESSID cookie
-// can linger on the domain; when we then try to set a Secure PHPSESSID the
-// browser rejects it ("cookie rejected because a secure cookie already exists"
-// reversed), which silently breaks the session and every CSRF check. A new
-// name sidesteps that stale-cookie conflict without manual browser cleanup.
-// The Secure flag is taken from config so it is deterministic per deployment
-// (no flaky HTTPS detection behind proxies), defaulting to on when the site
-// is served over HTTPS.
-session_name('BBSESSID');
-
-$configIsHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-    || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower($_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https')
-    || (!empty($_SERVER['HTTP_X_FORWARDED_SSL']) && strtolower($_SERVER['HTTP_X_FORWARDED_SSL']) === 'on');
-$sessionSecure = $config['cookie_secure'] ?? ($configIsHttps && $forceHttps);
-
-session_set_cookie_params([
-    'lifetime' => 0,
-    'path'     => '/',
-    'domain'   => '',
-    'secure'   => (bool) $sessionSecure,
-    'httponly' => true,
-    'samesite' => 'Lax',
-]);
-
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+// --- Session setup ----------------------------------------------------------
+require_once __DIR__ . '/session_setup.php';
+session_setup();
 
 $installerPages = ['install.php', 'install2.php', 'install3.php'];
 $scriptName = basename($_SERVER['SCRIPT_NAME'] ?? '');

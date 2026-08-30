@@ -83,6 +83,10 @@ function handle_admin_action(string $action, string $method): bool
     }
 }
 
+// ============================================================================
+// SECTION: Dashboard
+// ============================================================================
+
 function handle_admin_dashboard(): bool
 {
     global $pdo, $config;
@@ -120,12 +124,16 @@ function handle_admin_dashboard(): bool
             }
         }
 
-        redirect(url('admin_settings'));
+        return redirect(url('admin_settings'));
     }
 
     include __DIR__ . '/../../views/admin.php';
     return true;
 }
+
+// ============================================================================
+// SECTION: Settings & SMTP
+// ============================================================================
 
 function handle_admin_settings_post(): ?string
 {
@@ -154,7 +162,7 @@ function handle_admin_settings_post(): ?string
                 $_SESSION['email_test_error'] = $err['message'] ?? 'Unknown error';
             }
         }
-        redirect(url('admin_settings'));
+        return redirect(url('admin_settings'));
     }
 
     $siteName = trim($_POST['site_name'] ?? $config['site_name']);
@@ -308,7 +316,7 @@ function handle_admin_smtp_post(): ?string
                 $_SESSION['smtp_test_error'] = $err['message'] ?? 'Unknown error';
             }
         }
-        redirect(url('admin_smtp'));
+        return redirect(url('admin_smtp'));
     }
 
     $config['mail_method'] = ($_POST['mail_method'] ?? '') === 'smtp' ? 'smtp' : 'mail';
@@ -326,10 +334,14 @@ function handle_admin_smtp_post(): ?string
 
     file_put_contents(__DIR__ . '/../../config.json', json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
     $_SESSION['smtp_saved'] = true;
-    redirect(url('admin_smtp'));
+    return redirect(url('admin_smtp'));
 
     return null;
 }
+
+// ============================================================================
+// SECTION: Moderation
+// ============================================================================
 
 function handle_admin_moderation_get(): bool
 {
@@ -362,12 +374,12 @@ function handle_moderate_post(): bool
         $pdo->prepare("DELETE FROM threads WHERE id = ?")->execute([$threadId]);
         log_admin_action('thread_delete', ['thread_id' => $threadId, 'category_id' => $catId]);
         if ($catId > 0) {
-            redirect(url('category', ['id' => $catId]));
+            return redirect(url('category', ['id' => $catId]));
         }
-        redirect(url('home'));
+        return redirect(url('home'));
     }
 
-    redirect(url('admin_moderation'));
+    return redirect(url('admin_moderation'));
     return true;
 }
 
@@ -409,9 +421,9 @@ function handle_frontend_moderate_post(): bool
         $pdo->prepare("DELETE FROM threads WHERE id = ?")->execute([$threadId]);
         log_admin_action('thread_delete', ['thread_id' => $threadId, 'category_id' => $catId]);
         if ($catId > 0) {
-            redirect(url('category', ['id' => $catId]));
+            return redirect(url('category', ['id' => $catId]));
         }
-        redirect(url('home'));
+        return redirect(url('home'));
     } elseif ($modAction === 'move') {
         $targetCat = (int)($_POST['category_id'] ?? 0);
         if ($targetCat > 0) {
@@ -442,7 +454,7 @@ function handle_frontend_moderate_post(): bool
     $threadTitleStmt = $pdo->prepare("SELECT title FROM threads WHERE id = ?");
     $threadTitleStmt->execute([$threadId]);
     $threadTitle = $threadTitleStmt->fetchColumn();
-    redirect(url('thread', ['id' => $threadId, 'slug' => slugify($threadTitle ?? '')]));
+    return redirect(url('thread', ['id' => $threadId, 'slug' => slugify($threadTitle ?? '')]));
     return true;
 }
 
@@ -507,9 +519,9 @@ function handle_split_thread_post(): bool
     $countStmt->execute([$threadId]);
     if (empty($countStmt->fetchColumn())) {
         $pdo->prepare("DELETE FROM threads WHERE id = ?")->execute([$threadId]);
-        redirect(url('home'));
+        return redirect(url('home'));
     }
-    redirect(url('thread', ['id' => $newThreadId, 'slug' => slugify($newTitle)]));
+    return redirect(url('thread', ['id' => $newThreadId, 'slug' => slugify($newTitle)]));
     return true;
 }
 
@@ -541,9 +553,13 @@ function handle_merge_thread_post(): bool
     }
     $pdo->prepare("UPDATE posts SET thread_id = ? WHERE thread_id = ?")->execute([$targetThreadId, $threadId]);
     $pdo->prepare("DELETE FROM threads WHERE id = ?")->execute([$threadId]);
-    redirect(url('thread', ['id' => $targetThreadId, 'slug' => slugify($targetThread['title'] ?? '')]));
+    return redirect(url('thread', ['id' => $targetThreadId, 'slug' => slugify($targetThread['title'] ?? '')]));
     return true;
 }
+
+// ============================================================================
+// SECTION: Roles
+// ============================================================================
 
 function handle_admin_roles_get(): bool
 {
@@ -582,9 +598,13 @@ function handle_admin_roles_action_post(): bool
             log_admin_action('role_delete', ['role_id' => $roleId]);
         }
     }
-    redirect(url('admin_roles'));
+    return redirect(url('admin_roles'));
     return true;
 }
+
+// ============================================================================
+// SECTION: Users
+// ============================================================================
 
 function handle_admin_users_get(): bool
 {
@@ -601,13 +621,13 @@ function handle_admin_user_edit(string $method): bool
     }
     $editUserId = (int)($_GET['id'] ?? 0);
     if ($editUserId <= 0) {
-        redirect(url('admin_users'));
+        return redirect(url('admin_users'));
     }
     $editUser = $pdo->prepare("SELECT * FROM users WHERE id = ?");
     $editUser->execute([$editUserId]);
     $editUser = $editUser->fetch();
     if (!$editUser) {
-        redirect(url('admin_users'));
+        return redirect(url('admin_users'));
     }
     if ($method === 'POST') {
         if (!csrf_validate_request()) {
@@ -622,7 +642,7 @@ function handle_admin_user_edit(string $method): bool
                 ->execute([$newUsername, $newEmail, $newRole, $newStatus, $editUserId]);
             log_admin_action('user_update', ['target_id' => $editUserId, 'username' => $newUsername, 'role' => $newRole, 'status' => $newStatus]);
         }
-        redirect(url('admin_user_edit', ['id' => $editUserId]));
+        return redirect(url('admin_user_edit', ['id' => $editUserId]));
     }
     include __DIR__ . '/../../views/admin_user_edit.php';
     return true;
@@ -645,6 +665,10 @@ function handle_admin_create_user_post(): bool
 
     if ($username === '' || $password === '') {
         die('Username and password are required');
+    }
+
+    if (strlen($password) < 12) {
+        die('Password must be at least 12 characters.');
     }
 
     $existsStmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE username = ?");
@@ -682,9 +706,13 @@ function handle_admin_create_user_post(): bool
 
     notify_admin_new_user($username, $email);
 
-    redirect(url('admin_users'));
+    return redirect(url('admin_users'));
     return true;
 }
+
+// ============================================================================
+// SECTION: Categories
+// ============================================================================
 
 function handle_admin_categories(string $method): bool
 {
@@ -715,7 +743,7 @@ function handle_admin_categories(string $method): bool
                 log_admin_action('category_create', ['name' => $name]);
             }
         }
-        redirect(url('admin_categories'));
+        return redirect(url('admin_categories'));
     }
     include __DIR__ . '/../../views/admin_categories.php';
     return true;
@@ -733,7 +761,7 @@ function handle_delete_category_post(): bool
         $pdo->prepare("DELETE FROM categories WHERE id = ?")->execute([$catId]);
         log_admin_action('category_delete', ['category_id' => $catId]);
     }
-    redirect(url('admin_categories'));
+    return redirect(url('admin_categories'));
     return true;
 }
 
@@ -766,6 +794,10 @@ function handle_update_category_order_post(): bool
     exit;
     return true;
 }
+
+// ============================================================================
+// SECTION: Languages
+// ============================================================================
 
 function handle_admin_langs(string $method): bool
 {
@@ -822,7 +854,7 @@ function handle_admin_langs(string $method): bool
                 $config['available_langs'] = array_values(array_unique($installedLangs));
                 file_put_contents(__DIR__ . '/../../config.json', json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
                 $_SESSION['lang_success'] = 'Language settings saved';
-                redirect(url('admin_langs'));
+                return redirect(url('admin_langs'));
             } elseif (isset($_POST['upload_lang']) && !empty($_FILES['lang_file']['tmp_name'])) {
                 $langCode = preg_replace('/[^a-z_]/', '', strtolower($_POST['lang_code'] ?? ''));
                 if ($langCode === '') {
@@ -853,7 +885,7 @@ function handle_admin_langs(string $method): bool
                                 $langError = 'Language file must be a JSON array of "key": "translation" strings';
                             } elseif (move_uploaded_file($_FILES['lang_file']['tmp_name'], $dest)) {
                                 $_SESSION['lang_success'] = 'Language file uploaded: '.escape($langCode);
-                                redirect(url('admin_langs'));
+                                return redirect(url('admin_langs'));
                             } else {
                                 $langError = 'Failed to upload language file';
                             }
@@ -946,7 +978,7 @@ function handle_admin_langs(string $method): bool
                                         $_SESSION['lang_success'] = ($isUpdate ? 'Language file updated: ' : 'Language file installed: ') . escape($langCode);
                                         ob_end_clean();
                                         @ini_set('display_errors', $prevDisplayErrors);
-                                        redirect(url('admin_langs'));
+                                        return redirect(url('admin_langs'));
                                     }
                                 }
                         }
@@ -963,7 +995,7 @@ function handle_admin_langs(string $method): bool
                 } elseif (file_exists($dest)) {
                     @unlink($dest);
                     $_SESSION['lang_success'] = 'Language file deleted: '.escape($langCode);
-                    redirect(url('admin_langs'));
+                    return redirect(url('admin_langs'));
                 } else {
                     $langError = 'Language file not found';
                 }
@@ -980,6 +1012,10 @@ function handle_admin_langs(string $method): bool
     include __DIR__ . '/../../views/admin_langs.php';
     return true;
 }
+
+// ============================================================================
+// SECTION: Diagnostics
+// ============================================================================
 
 function handle_admin_diagnostics_get(): bool
 {
@@ -1053,6 +1089,10 @@ function handle_admin_diagnostics_get(): bool
     include __DIR__ . '/../../views/admin_diagnostics.php';
     return true;
 }
+
+// ============================================================================
+// SECTION: Plugins
+// ============================================================================
 
 function handle_admin_plugins(string $method): bool
 {
@@ -1155,6 +1195,10 @@ function handle_admin_plugins(string $method): bool
     return true;
 }
 
+// ============================================================================
+// SECTION: Themes
+// ============================================================================
+
 function handle_admin_themes(string $method): bool
 {
     global $config, $themeManager;
@@ -1239,6 +1283,10 @@ function handle_admin_themes(string $method): bool
     include __DIR__ . '/../../views/admin_themes.php';
     return true;
 }
+
+// ============================================================================
+// SECTION: Catalog & Updates
+// ============================================================================
 
 function handle_admin_catalog(string $method): bool
 {
@@ -1478,6 +1526,10 @@ function handle_admin_updates(string $method): bool
     return true;
 }
 
+// ============================================================================
+// SECTION: User Actions (ban/unban/suspend/delete)
+// ============================================================================
+
 function handle_delete_user_post(): bool
 {
     global $pdo;
@@ -1497,7 +1549,7 @@ function handle_delete_user_post(): bool
     } else {
         $_SESSION['admin_error'] = t('invalid_user_id') ?? 'Invalid user id.';
     }
-    redirect(url('admin_users'));
+    return redirect(url('admin_users'));
     return true;
 }
 
@@ -1513,7 +1565,7 @@ function handle_unban_user_post(): bool
         $pdo->prepare("UPDATE users SET status = 'active', suspension_time = 0 WHERE id = ?")->execute([$userId]);
         log_admin_action('user_unban', ['target_id' => $userId]);
     }
-    redirect(url('admin_users'));
+    return redirect(url('admin_users'));
     return true;
 }
 
@@ -1529,7 +1581,7 @@ function handle_ban_user_post(): bool
         $pdo->prepare("UPDATE users SET status = 'banned' WHERE id = ? AND role <> 'admin'")->execute([$userId]);
         log_admin_action('user_ban', ['target_id' => $userId]);
     }
-    redirect(url('admin_users'));
+    return redirect(url('admin_users'));
     return true;
 }
 
@@ -1547,6 +1599,6 @@ function handle_suspend_user_post(): bool
         $pdo->prepare("UPDATE users SET status = 'suspended', suspension_time = ? WHERE id = ?")->execute([$suspensionTime, $userId]);
         log_admin_action('user_suspend', ['target_id' => $userId, 'days' => $days]);
     }
-    redirect(url('admin_users'));
+    return redirect(url('admin_users'));
     return true;
 }

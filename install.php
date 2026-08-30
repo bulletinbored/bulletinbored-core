@@ -106,6 +106,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['install_db_pass'] = $dbPass;
             $_SESSION['install_db_path'] = $dbPath;
 
+            session_regenerate_id(true);
             header('Location: install2.php');
             exit;
         } catch (PDOException $e) {

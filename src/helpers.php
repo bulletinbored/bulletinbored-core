@@ -7,6 +7,8 @@
  * anywhere once the bootstrap has run.
  */
 
+require_once __DIR__ . '/Security.php';
+
 function slugify($text) {
     $text = preg_replace('~[^\pL\d]+~u', '-', $text);
     $text = iconv('utf-8', 'us-ascii//TRANSLIT', $text);
@@ -360,8 +362,15 @@ function get_uploaded_images(): array {
 
 function is_logged_in() { return isset($_SESSION['user_id']); }
 function is_admin() { return ($_SESSION['user_role'] ?? '') === 'admin'; }
-function user_has_permission(string $permission): bool {
+function user_has_permission(string $permission): bool
+{
     if (is_admin()) return true;
+    $userId = $_SESSION['user_id'] ?? 0;
+    global $authz;
+    if (isset($authz) && $userId > 0) {
+        return $authz->can($userId, $permission);
+    }
+    // Fallback: role-based check without user_id
     $roleName = $_SESSION['user_role'] ?? 'user';
     global $pdo, $pluginManager;
     $stmt = $pdo->prepare("SELECT permissions FROM roles WHERE name = ?");
@@ -373,7 +382,10 @@ function user_has_permission(string $permission): bool {
     }
     return false;
 }
-function redirect($url) { header("Location: $url"); exit; }
+function redirect(string $url, int $status = 302): \Bulletin\Response
+{
+    return \Bulletin\Response::redirect($url, $status);
+}
 function base_url() {
     static $baseUrl = null;
     if ($baseUrl === null) {
@@ -388,110 +400,6 @@ function base_url() {
         }
     }
     return $baseUrl;
-}
-
-function log_security_event(string $event, array $context = []): void {
-    static $logDir = null;
-    if ($logDir === null) {
-        $logDir = __DIR__ . '/../data/logs';
-        if (!is_dir($logDir)) {
-            @mkdir($logDir, 0755, true);
-        }
-    }
-    if (!is_dir($logDir) || !is_writable($logDir)) {
-        return;
-    }
-    $ip = $_SERVER['REMOTE_ADDR'] ?? ($_SERVER['HTTP_X_FORWARDED_FOR'] ?? '');
-    $line = sprintf(
-        "[%s] %s ip=%s %s\n",
-        date('c'),
-        $event,
-        $ip,
-        json_encode($context, JSON_UNESCAPED_UNICODE)
-    );
-    @file_put_contents($logDir . '/security.log', $line, FILE_APPEND | LOCK_EX);
-}
-
-function log_admin_action(string $action, array $context = []): void {
-    $userId = $_SESSION['user_id'] ?? 0;
-    $username = $_SESSION['username'] ?? 'unknown';
-    $ctx = array_merge(['admin_id' => $userId, 'admin_user' => $username], $context);
-    log_security_event('admin_' . $action, $ctx);
-}
-
-function generate_csrf_token() {
-    if (empty($_SESSION['csrf_token'])) {
-        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-    }
-    return $_SESSION['csrf_token'];
-}
-function validate_csrf_token($token) {
-    if (empty($_SESSION['csrf_token']) || empty($token)) {
-        return false;
-    }
-    return hash_equals($_SESSION['csrf_token'], $token);
-}
-function csrf_validate_request(): bool
-{
-    $token = $_POST['csrf_token'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
-    if (!validate_csrf_token($token)) {
-        return false;
-    }
-    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-    return true;
-}
-function csrf_field() {
-    $token = generate_csrf_token();
-    return '<input type="hidden" name="csrf_token" value="' . escape($token) . '">';
-}
-
-/**
- * File-based rate limiter (no dependencies).
- *
- * Tracks attempts per (action, key) within a sliding window and returns false
- * once the limit is exceeded. The key is normally the client IP, optionally
- * combined with the user id for login-style limits. State lives under
- * data/ratelimit/ as one small JSON file per bucket.
- *
- * @param string $action   Logical bucket, e.g. 'login', 'register', 'post'.
- * @param int    $max      Max attempts allowed in the window.
- * @param int    $window   Window length in seconds.
- * @param string $key      Bucket discriminator (defaults to client IP).
- * @return bool            true if the request is allowed, false if throttled.
- */
-function rate_limit($action, $max = 10, $window = 300, $key = null) {
-    $ip = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
-    if (is_string($ip) && str_contains($ip, ',')) {
-        $ip = trim(explode(',', $ip)[0]);
-    }
-    $key = $key ?? $ip;
-    $bucket = preg_replace('/[^a-z0-9._-]/i', '_', $action . '_' . $key);
-
-    $dir = __DIR__ . '/../data/ratelimit';
-    if (!is_dir($dir)) {
-        @mkdir($dir, 0755, true);
-    }
-    $file = $dir . '/' . $bucket . '.json';
-
-    $now = time();
-    $hits = [];
-    if (is_file($file)) {
-        $decoded = json_decode(@file_get_contents($file), true);
-        if (is_array($decoded)) {
-            // Keep only timestamps inside the window.
-            $hits = array_values(array_filter($decoded, function ($ts) use ($now, $window) {
-                return is_int($ts) && ($now - $ts) < $window;
-            }));
-        }
-    }
-
-    if (count($hits) >= $max) {
-        return false;
-    }
-
-    $hits[] = $now;
-    @file_put_contents($file, json_encode($hits), LOCK_EX);
-    return true;
 }
 
 function validate_input($data) {

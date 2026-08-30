@@ -7,8 +7,7 @@
     "db_pass": "",
     "site_name": "bulletinbored",
     "admin_user": "admin",
-    "admin_pass": "changeme123",
-    "mail_from": "noreply@tuodominio.it",
+    "mail_from": "noreply@example.com",
     "mail_from_name": "bulletinbored",
     "mail_method": "mail",
     "theme": "freshbored",
@@ -32,5 +31,6 @@
     "update_mirror": "https://extend.bulletinbored.net",
     "plugin_verify_files": true,
     "theme_verify_files": true,
-    "allow_catalog_only": true
+    "allow_catalog_only": true,
+    "trusted_proxies": ["127.0.0.1", "::1"]
 }

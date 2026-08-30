@@ -171,6 +171,34 @@ class Router
         return $this;
     }
 
+    /**
+     * Register the dynamic "can:permission" middleware handler.
+     * Checks if the current user has the required permission.
+     */
+    public function registerCanMiddleware(\AuthZ $authz): self
+    {
+        $this->middleware['can'] = function (array $params) use ($authz): ?array {
+            $permission = $params['_can_permission'] ?? '';
+            $userId = $_SESSION['user_id'] ?? 0;
+            $ownerId = $params['_can_owner_id'] ?? null;
+
+            if (!is_logged_in()) {
+                return ['status' => 302, 'body' => '', 'headers' => ['Location: ' . \url('login')]];
+            }
+
+            $allowed = $ownerId !== null
+                ? $authz->canOnOwned($userId, $permission, (int)$ownerId)
+                : $authz->can($userId, $permission);
+
+            if (!$allowed) {
+                return ['status' => 403, 'body' => 'Forbidden'];
+            }
+
+            return null;
+        };
+        return $this;
+    }
+
     public function dispatch(): void
     {
         $reqPath = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH);
@@ -201,10 +229,18 @@ class Router
             $params = array_filter($matches, 'is_string', ARRAY_FILTER_USE_KEY);
 
             foreach ($route['middleware'] as $mwName) {
-                if (!isset($this->middleware[$mwName])) {
+                $handler = null;
+                if (isset($this->middleware[$mwName])) {
+                    $handler = $this->middleware[$mwName];
+                } elseif (str_starts_with($mwName, 'can:') && isset($this->middleware['can'])) {
+                    $permission = substr($mwName, 4);
+                    $params['_can_permission'] = $permission;
+                    $handler = $this->middleware['can'];
+                }
+                if ($handler === null) {
                     continue;
                 }
-                $result = ($this->middleware[$mwName])($params);
+                $result = ($handler)($params);
                 if ($result !== null) {
                     $this->sendResponse($result['status'], $result['body'], $result['headers'] ?? [], $wantsJson && !isset($result['headers']));
                     return;
@@ -218,7 +254,9 @@ class Router
 
             $result = ($route['handler'])($params);
 
-            if (is_array($result) && isset($result['status'])) {
+            if ($result instanceof \Bulletin\Response) {
+                $result->send();
+            } elseif (is_array($result) && isset($result['status'])) {
                 $body = $result['body'] ?? '';
                 if ($wantsJson && !is_string($body)) {
                     $body = json_encode($body, JSON_UNESCAPED_UNICODE);

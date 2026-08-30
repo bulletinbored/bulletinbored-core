@@ -15,6 +15,7 @@ require __DIR__ . '/src/setup.php';
 require __DIR__ . '/lib/PluginManager.php';
 require __DIR__ . '/lib/ThemeManager.php';
 require __DIR__ . '/lib/UpdateManager.php';
+require __DIR__ . '/lib/AuthZ.php';
 
 $pluginManager = new PluginManager(__DIR__ . '/plugins', $config['plugin_manifest'] ?? __DIR__ . '/data/plugins.json');
 $GLOBALS['pluginManager'] = $pluginManager;
@@ -54,13 +55,18 @@ require __DIR__ . '/src/actions/admin.php';
 // Redirect banned/suspended users
 if (is_logged_in() && (is_banned() || is_suspended())) {
     session_destroy();
-    redirect(url('home'));
+    return redirect(url('home'));
 }
 
 // Create router and let plugins register their routes/middleware
 $router = new Bulletin\Router();
 $pluginManager->setRouter($router);
 $pluginManager->applyRoutes();
+
+// Register authorization service and can: middleware
+$authz = new AuthZ($pdo);
+$GLOBALS['authz'] = $authz;
+$router->registerCanMiddleware($authz);
 
 // --- Public routes ---
 $router->get('/', function() {
@@ -161,6 +167,13 @@ $router->middleware('admin')->group(function($router) {
     $router->post('/admin/ban-user', fn() => handle_ban_user_post());
     $router->post('/admin/unban-user', fn() => handle_unban_user_post());
     $router->post('/admin/suspend-user', fn() => handle_suspend_user_post());
+});
+
+// --- Permission-based routes (moderators + admins) ---
+$router->middleware('auth')->group(function($router) {
+    $router->middleware('can:moderation.manage')->group(function($router) {
+        $router->post('/moderate/{id:\d+}', fn($p) => handle_moderate_post());
+    });
 });
 
 $router->dispatch();

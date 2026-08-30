@@ -30,18 +30,24 @@ function handle_login(string $method): bool
 {
     global $pdo, $pluginManager;
     if (is_logged_in()) {
-        redirect(url('home'));
+        return redirect(url('home'));
     }
+
+    $error = '';
 
     if ($method === 'POST') {
         if (!csrf_validate_request()) {
-            die('CSRF token invalid');
+            $error = 'CSRF token invalid';
+            log_security_event('csrf_fail', ['action' => 'login']);
+            include __DIR__ . '/../../views/login.php';
+            return true;
         }
 
-        $rlKey = ($_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0') . '|' . ($_POST['username'] ?? '');
+        $rlKey = rate_limit_client_ip() . '|' . ($_POST['username'] ?? '');
         if (!rate_limit('login', 5, 900, $rlKey)) {
-            http_response_code(429);
-            die('Too many login attempts. Please try again later.');
+            $error = 'Too many login attempts. Please try again later.';
+            include __DIR__ . '/../../views/login.php';
+            return true;
         }
 
         $username = $_POST['username'] ?? '';
@@ -89,7 +95,7 @@ function handle_login(string $method): bool
                 }
 
                 session_write_close();
-                redirect(url('home'));
+                return redirect(url('home'));
             }
         } else {
             $error = 'Invalid credentials';
@@ -107,28 +113,43 @@ function handle_login(string $method): bool
 function handle_register(string $method): bool
 {
     global $pdo, $config, $pluginManager;
+    $error = '';
+
     if ($method === 'POST') {
         if (!csrf_validate_request()) {
-            die('CSRF token invalid');
+            $error = 'CSRF token invalid';
+            include __DIR__ . '/../../views/register.php';
+            return true;
         }
 
         if (!rate_limit('register', 5, 3600)) {
-            http_response_code(429);
-            die('Too many registration attempts. Please try again later.');
+            $error = 'Too many registration attempts. Please try again later.';
+            include __DIR__ . '/../../views/register.php';
+            return true;
         }
 
         $username = validate_input($_POST['username'] ?? '');
         $password = $_POST['password'] ?? '';
 
         if ($username === '' || $password === '') {
-            die('Username and password are required');
+            $error = 'Username and password are required';
+            include __DIR__ . '/../../views/register.php';
+            return true;
+        }
+
+        if (strlen($password) < 12) {
+            $error = 'Password must be at least 12 characters.';
+            include __DIR__ . '/../../views/register.php';
+            return true;
         }
 
         $existsStmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE username = ?");
         $existsStmt->execute([$username]);
         $exists = $existsStmt->fetchColumn();
         if ($exists > 0) {
-            die('Username already taken');
+            $error = 'Username already taken';
+            include __DIR__ . '/../../views/register.php';
+            return true;
         }
 
         $email = validate_input($_POST['email'] ?? '');
@@ -157,7 +178,7 @@ function handle_register(string $method): bool
 
         notify_admin_new_user($username, $email);
 
-        redirect(url('login', ['registered' => 1]));
+        return redirect(url('login', ['registered' => 1]));
     }
 
     include __DIR__ . '/../../views/register.php';
@@ -166,14 +187,14 @@ function handle_register(string $method): bool
 
 function handle_logout(): bool
 {
+    session_regenerate_id(true);
     session_destroy();
-    redirect(url('home'));
+    return redirect(url('home'));
     return true;
 }
 
 function handle_verify_email(): bool
 {
-    global $pdo;
     global $pdo;
 
     $token = $_GET['token'] ?? '';
@@ -181,7 +202,7 @@ function handle_verify_email(): bool
     if (empty($token)) {
         $error = 'verify_email_invalid';
         include __DIR__ . '/../../views/verify_email.php';
-        exit;
+        return true;
     }
 
     $tokensStmt = $pdo->prepare("SELECT * FROM email_verifications WHERE used = 0 AND expires_at > CURRENT_TIMESTAMP ORDER BY created_at DESC");
@@ -197,7 +218,7 @@ function handle_verify_email(): bool
     if (!$validToken) {
         $error = 'verify_email_invalid';
         include __DIR__ . '/../../views/verify_email.php';
-        exit;
+        return true;
     }
 
     $pdo->prepare("UPDATE users SET email_verified = 1 WHERE id = ?")->execute([$validToken['user_id']]);
@@ -205,13 +226,11 @@ function handle_verify_email(): bool
 
     $success = 'verify_email_success';
     include __DIR__ . '/../../views/verify_email.php';
-    exit;
     return true;
 }
 
 function handle_profile(): bool
 {
-    global $pdo;
     global $pdo;
 
     $username = $_GET['user'] ?? '';
@@ -220,7 +239,9 @@ function handle_profile(): bool
     $profileUser = $profileStmt->fetch();
 
     if (!$profileUser) {
-        die('User not found');
+        http_response_code(404);
+        echo 'User not found';
+        return true;
     }
 
     $userThreadsStmt = $pdo->prepare("
@@ -251,15 +272,15 @@ function handle_profile(): bool
 function handle_edit_profile(string $method): bool
 {
     global $pdo, $config;
-    global $pdo, $config;
 
     if (!is_logged_in()) {
-        die('Login required');
+        return redirect(url('login')) ?? true;
     }
 
     if ($method === 'POST') {
         if (!csrf_validate_request()) {
-            die('CSRF token invalid');
+            $_SESSION['profile_error'] = 'CSRF token invalid';
+            return redirect(url('edit_profile'));
         }
 
         if (!empty($_FILES['avatar']['name'])) {
@@ -270,7 +291,7 @@ function handle_edit_profile(string $method): bool
 
             if (empty($_FILES['avatar']['name']) || $_FILES['avatar']['error'] !== UPLOAD_ERR_OK) {
                 $_SESSION['avatar_upload_error'] = 'No file uploaded or upload error occurred.';
-                redirect(url('edit_profile'));
+                return redirect(url('edit_profile'));
             }
 
             $allowed = $config['avatar_allowed_types'] ?? ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
@@ -281,12 +302,12 @@ function handle_edit_profile(string $method): bool
 
             if (!in_array($mime, $allowed)) {
                 $_SESSION['avatar_upload_error'] = 'Invalid file type. Allowed: JPG, PNG, GIF, WebP.';
-                redirect(url('edit_profile'));
+                return redirect(url('edit_profile'));
             }
 
             if ($_FILES['avatar']['size'] > $maxSize) {
                 $_SESSION['avatar_upload_error'] = 'File is too large. Max 2MB.';
-                redirect(url('edit_profile'));
+                return redirect(url('edit_profile'));
             }
 
             $ext = match($mime) {
@@ -318,7 +339,7 @@ function handle_edit_profile(string $method): bool
                 $_SESSION['avatar_upload_error'] = 'Failed to move uploaded file. Check directory permissions.';
             }
 
-            redirect(url('edit_profile'));
+            return redirect(url('edit_profile'));
         } else {
             $updates = [];
             $params = [];
@@ -329,7 +350,8 @@ function handle_edit_profile(string $method): bool
                 $existingStmt->execute([$newUsername, $_SESSION['user_id']]);
                 $existing = $existingStmt->fetchColumn();
                 if ($existing) {
-                    die('Username already taken');
+                    $_SESSION['profile_error'] = 'Username already taken';
+                    return redirect(url('edit_profile'));
                 }
                 $updates[] = "username = ?";
                 $params[] = $newUsername;
@@ -342,6 +364,10 @@ function handle_edit_profile(string $method): bool
             }
 
             if (!empty($_POST['password'])) {
+                if (strlen($_POST['password']) < 12) {
+                    $_SESSION['profile_error'] = 'Password must be at least 12 characters.';
+                    return redirect(url('edit_profile'));
+                }
                 $updates[] = "password = ?";
                 $params[] = password_hash($_POST['password'], PASSWORD_DEFAULT);
             }
@@ -356,7 +382,7 @@ function handle_edit_profile(string $method): bool
                 }
             }
 
-            redirect(url('profile', ['user' => $_SESSION['username']]));
+            return redirect(url('profile', ['user' => $_SESSION['username']]));
         }
     }
 
@@ -369,12 +395,13 @@ function handle_remove_avatar(string $method): bool
     global $pdo;
 
     if (!is_logged_in()) {
-        die('Login required');
+        return redirect(url('login')) ?? true;
     }
 
     if ($method === 'POST') {
         if (!csrf_validate_request()) {
-            die('CSRF token invalid');
+            $_SESSION['avatar_upload_error'] = 'CSRF token invalid';
+            return redirect(url('edit_profile'));
         }
 
         $avatarDir = __DIR__ . '/../../uploads/avatars/';
@@ -392,22 +419,24 @@ function handle_remove_avatar(string $method): bool
         }
     }
 
-    redirect(url('edit_profile'));
+    return redirect(url('edit_profile'));
 }
 
 function handle_forgot_password(string $method): bool
 {
     global $pdo, $config;
-    global $pdo, $config;
 
     if ($method === 'POST') {
         if (!csrf_validate_request()) {
-            die('CSRF token invalid');
+            $error = 'CSRF token invalid';
+            include __DIR__ . '/../../views/forgot_password.php';
+            return true;
         }
 
         if (!rate_limit('forgot_password', 5, 3600)) {
-            http_response_code(429);
-            die('Too many requests. Please try again later.');
+            $error = 'Too many requests. Please try again later.';
+            include __DIR__ . '/../../views/forgot_password.php';
+            return true;
         }
 
         $email = validate_input($_POST['email'] ?? '');
@@ -442,16 +471,18 @@ function handle_forgot_password(string $method): bool
 function handle_reset_password(string $method): bool
 {
     global $pdo;
-    global $pdo;
 
     if ($method === 'POST') {
         if (!csrf_validate_request()) {
-            die('CSRF token invalid');
+            $error = 'CSRF token invalid';
+            include __DIR__ . '/../../views/reset_password.php';
+            return true;
         }
 
         if (!rate_limit('reset_password', 10, 3600)) {
-            http_response_code(429);
-            die('Too many attempts. Please try again later.');
+            $error = 'Too many attempts. Please try again later.';
+            include __DIR__ . '/../../views/reset_password.php';
+            return true;
         }
 
         $token = $_POST['token'] ?? '';
@@ -463,8 +494,8 @@ function handle_reset_password(string $method): bool
             include __DIR__ . '/../../views/reset_password.php';
             exit;
         }
-        if (strlen($password) < 6) {
-            $error = 'Password must be at least 6 characters.';
+        if (strlen($password) < 12) {
+            $error = 'Password must be at least 12 characters.';
             include __DIR__ . '/../../views/reset_password.php';
             exit;
         }
@@ -500,13 +531,13 @@ function handle_reset_password(string $method): bool
             send_email($user['email'], $subject, $body);
         }
 
-        redirect(url('login'));
+        return redirect(url('login'));
     }
 
     if (!isset($_GET['token'])) {
         http_response_code(404);
         echo 'Page not found';
-        exit;
+        return true;
     }
 
     include __DIR__ . '/../../views/reset_password.php';

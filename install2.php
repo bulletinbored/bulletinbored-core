@@ -72,8 +72,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'All fields are required.';
     } elseif ($adminPass !== $adminPassConfirm) {
         $error = 'Passwords do not match.';
-    } elseif (strlen($adminPass) < 6) {
-        $error = 'Password must be at least 6 characters.';
+    } elseif (strlen($adminPass) < 12) {
+        $error = 'Password must be at least 12 characters.';
     } elseif (!filter_var($adminEmail, FILTER_VALIDATE_EMAIL)) {
         $error = 'Please enter a valid email address.';
     } elseif (file_exists(__DIR__ . '/config.json')) {
@@ -84,6 +84,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['install_admin_pass'] = $adminPass;
         $_SESSION['install_admin_email'] = $adminEmail;
 
+        session_regenerate_id(true);
         header('Location: install3.php');
         exit;
     }
@@ -350,7 +351,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="mb-3">
                     <label class="form-label" for="admin_pass">Admin Password</label>
                     <input type="password" class="form-control" id="admin_pass" name="admin_pass" required>
-                    <div class="text-muted small mt-1">Minimum 6 characters.</div>
+                     <div class="text-muted small mt-1">Minimum 12 characters. A passphrase is recommended.</div>
                 </div>
 
                 <div class="mb-3">

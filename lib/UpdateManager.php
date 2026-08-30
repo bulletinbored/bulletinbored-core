@@ -358,14 +358,34 @@ class UpdateManager
             return false;
         }
 
-        $root = rtrim(__DIR__ . '/../', '/');
-
-        // GitHub archives nest everything under <repo>-<ref>/. If the extraction
-        // produced exactly one top-level directory, flatten it so files land in
-        // $root instead of $root/<repo>-<ref>/.
+        // Verify the extracted package has expected structure
         $topDirs = glob($tmpExtract . '*', GLOB_ONLYDIR);
         $sourceDir = (count($topDirs) === 1) ? $topDirs[0] : $tmpExtract;
-        $this->copyRecursive($sourceDir, $root);
+        if (!file_exists($sourceDir . '/index.php') || !file_exists($sourceDir . '/VERSION')) {
+            $this->deleteRecursive($tmpExtract);
+            error_log('BB CORE FAIL invalid package structure');
+            return false;
+        }
+
+        // Create backup before applying
+        $backupPath = $this->backupCore();
+        if ($backupPath === null) {
+            error_log('BB CORE WARN: backup failed, proceeding without backup');
+        }
+
+        $root = rtrim(__DIR__ . '/../', '/');
+
+        try {
+            $this->copyRecursive($sourceDir, $root);
+        } catch (\Throwable $e) {
+            // Recovery: restore backup on failure
+            if ($backupPath !== null) {
+                $this->restoreCoreBackup($backupPath);
+            }
+            $this->deleteRecursive($tmpExtract);
+            error_log('BB CORE FAIL copy error: ' . $e->getMessage());
+            return false;
+        }
         $this->deleteRecursive($tmpExtract);
 
         // Self-healing: if a previous (buggy) run left the nested
@@ -535,6 +555,112 @@ class UpdateManager
         $this->setVersion($type . 's', $name, $tag);
         $this->clearCache();
         return true;
+    }
+
+    /**
+     * Create a backup of the core files before an update.
+     * Returns the backup directory path, or null on failure.
+     */
+    public function backupCore(): ?string
+    {
+        $root = rtrim(__DIR__ . '/../', '/');
+        $backupDir = dirname($this->manifestPath) . '/backups';
+        if (!is_dir($backupDir)) {
+            @mkdir($backupDir, 0755, true);
+        }
+
+        $backupPath = $backupDir . '/core_' . date('Ymd_His') . '_' . uniqid();
+        if (!mkdir($backupPath, 0755, true)) {
+            return null;
+        }
+
+        // Backup core files (exclude data, plugins, themes, uploads, config)
+        $exclude = ['data', 'plugins', 'themes', 'uploads', 'vendor'];
+        $items = glob($root . '/*');
+        foreach ($items as $item) {
+            $basename = basename($item);
+            if (in_array($basename, $exclude, true)) {
+                continue;
+            }
+            $dest = $backupPath . '/' . $basename;
+            if (is_dir($item)) {
+                $this->copyRecursive($item, $dest);
+            } else {
+                copy($item, $dest);
+            }
+        }
+
+        // Clean old backups (keep last 3)
+        $backups = glob($backupDir . '/core_*', GLOB_ONLYDIR);
+        if (count($backups) > 3) {
+            usort($backups, fn($a, $b) => filemtime($a) <=> filemtime($b));
+            $toDelete = array_slice($backups, 0, count($backups) - 3);
+            foreach ($toDelete as $old) {
+                $this->deleteRecursive($old);
+            }
+        }
+
+        return $backupPath;
+    }
+
+    /**
+     * Restore a core backup. Returns true on success.
+     */
+    public function restoreCoreBackup(string $backupPath): bool
+    {
+        if (!is_dir($backupPath)) {
+            return false;
+        }
+
+        $root = rtrim(__DIR__ . '/../', '/');
+        $items = glob($backupPath . '/*');
+        foreach ($items as $item) {
+            $basename = basename($item);
+            $dest = $root . '/' . $basename;
+            if (is_dir($item)) {
+                if (is_dir($dest)) {
+                    $this->deleteRecursive($dest);
+                }
+                $this->copyRecursive($item, $dest);
+            } else {
+                copy($item, $dest);
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * List available core backups.
+     */
+    public function listBackups(): array
+    {
+        $backupDir = dirname($this->manifestPath) . '/backups';
+        if (!is_dir($backupDir)) {
+            return [];
+        }
+
+        $backups = [];
+        foreach (glob($backupDir . '/core_*', GLOB_ONLYDIR) as $dir) {
+            $backups[] = [
+                'path' => $dir,
+                'name' => basename($dir),
+                'date' => date('Y-m-d H:i:s', filemtime($dir)),
+                'size' => $this->dirSize($dir),
+            ];
+        }
+
+        usort($backups, fn($a, $b) => strcmp($b['name'], $a['name']));
+        return $backups;
+    }
+
+    private function dirSize(string $dir): int
+    {
+        $size = 0;
+        foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($dir, \RecursiveDirectoryIterator::SKIP_DOTS)) as $file) {
+            $size += $file->getSize();
+        }
+        return $size;
     }
 
     private function copyRecursive(string $src, string $dst): void

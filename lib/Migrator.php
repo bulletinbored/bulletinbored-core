@@ -201,15 +201,39 @@ class Migrator
     }
 
     /**
-     * Run a single migration's up() method.
+     * Run a single migration's up() method within a transaction.
+     * On failure, the migration is NOT recorded and the transaction is rolled back.
      */
     public function runUp(array $migration, int $batch): void
     {
         $instance = $this->loadMigration($migration['path']);
-        $instance->up($this->pdo);
 
-        $stmt = $this->pdo->prepare("INSERT INTO migrations (migration, batch) VALUES (?, ?)");
-        $stmt->execute([$migration['name'], $batch]);
+        $driver = $this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+        $supportsTransactionalDdl = ($driver === 'mysql');
+
+        try {
+            if ($supportsTransactionalDdl) {
+                $this->pdo->beginTransaction();
+            }
+
+            $instance->up($this->pdo);
+
+            $stmt = $this->pdo->prepare("INSERT INTO migrations (migration, batch) VALUES (?, ?)");
+            $stmt->execute([$migration['name'], $batch]);
+
+            if ($supportsTransactionalDdl) {
+                $this->pdo->commit();
+            }
+        } catch (\Throwable $e) {
+            if ($supportsTransactionalDdl && $this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw new RuntimeException(
+                "Migration '{$migration['name']}' failed: " . $e->getMessage(),
+                0,
+                $e
+            );
+        }
     }
 
     /**
@@ -237,6 +261,87 @@ class Migrator
             }
         }
         throw new RuntimeException("Migration not found: {$name}");
+    }
+
+    /**
+     * Run all pending migrations with file-based locking.
+     * Prevents concurrent migration runs on the same database.
+     *
+     * @return array Names of migrations that were run.
+     * @throws RuntimeException if locking fails or a migration fails.
+     */
+    public function migrate(): array
+    {
+        $this->ensureMigrationsTable();
+        $pending = $this->getPending();
+
+        if (empty($pending)) {
+            return [];
+        }
+
+        $lockFile = $this->getLockFile();
+        $lockHandle = fopen($lockFile, 'c');
+
+        if ($lockHandle === false) {
+            throw new RuntimeException("Cannot create migration lock file: {$lockFile}");
+        }
+
+        if (!flock($lockHandle, LOCK_EX | LOCK_NB)) {
+            fclose($lockHandle);
+            throw new RuntimeException("Another migration is already running. Lock file: {$lockFile}");
+        }
+
+        try {
+            $batch = $this->getNextBatch();
+            $ran = [];
+
+            foreach ($pending as $migration) {
+                $this->runUp($migration, $batch);
+                $ran[] = $migration['name'];
+            }
+
+            return $ran;
+        } finally {
+            flock($lockHandle, LOCK_UN);
+            fclose($lockHandle);
+        }
+    }
+
+    /**
+     * Rollback the last batch of migrations.
+     *
+     * @return Array of migration names that were rolled back.
+     */
+    public function rollback(): array
+    {
+        $this->ensureMigrationsTable();
+        $lastBatch = $this->getLastBatch();
+
+        if ($lastBatch === null) {
+            return [];
+        }
+
+        $migrations = $this->getMigrationsByBatch($lastBatch);
+        $rolledBack = [];
+
+        foreach ($migrations as $migration) {
+            $this->runDown($migration);
+            $rolledBack[] = $migration['name'];
+        }
+
+        return $rolledBack;
+    }
+
+    /**
+     * Get the path to the migration lock file.
+     */
+    private function getLockFile(): string
+    {
+        $dir = dirname($this->migrationsDir) . '/data';
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0755, true);
+        }
+        return $dir . '/.migration_lock';
     }
 
     /**

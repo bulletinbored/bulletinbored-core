@@ -325,7 +325,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install'])) {
             'db_pass' => $dbPass,
             'site_name' => $siteName,
             'admin_user' => $adminUser,
-            'admin_pass' => $adminPass,
             'mail_from' => $adminEmail,
             'mail_from_name' => $siteName,
             'mail_method' => 'mail',

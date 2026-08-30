@@ -168,4 +168,99 @@ $suite->addTest(test_plugin_manager_filter());
 $suite->addTest(test_plugin_manager_check());
 $suite->addTest(test_plugin_manager_priority());
 $suite->addTest(test_plugin_manager_remove_hook());
+$suite->addTest(test_plugin_manager_delete_dir());
+$suite->addTest(test_plugin_manager_validate_manifest());
 $suite->run();
+
+function test_plugin_manager_validate_manifest(): Test
+{
+    $t = new Test('PluginManager - Manifest Validation');
+
+    $pm = new PluginManager(__DIR__ . '/tmp_plugins', __DIR__ . '/tmp_manifest_test.json');
+
+    // Valid v1 manifest (with id)
+    $valid = [
+        'id' => 'test-plugin',
+        'name' => 'Test Plugin',
+        'version' => '1.0.0',
+        'php' => '>=8.1',
+    ];
+    $result = $pm->validateManifest($valid);
+    $t->assertTrue('Valid v1 manifest passes', $result['valid']);
+
+    // Legacy manifest (name only, no id) — backward compatible
+    $legacy = [
+        'name' => 'Test Plugin',
+        'version' => '1.0.0',
+    ];
+    $result = $pm->validateManifest($legacy);
+    $t->assertTrue('Legacy manifest (no id) passes', $result['valid']);
+
+    // Normalize legacy: id derived from name
+    $normalized = $pm->normalizeManifest($legacy);
+    $t->assertEquals('id derived from name', 'test-plugin', $normalized['id']);
+
+    // Missing name fails
+    $invalid = $valid;
+    unset($invalid['name']);
+    $result = $pm->validateManifest($invalid);
+    $t->assertFalse('Missing name fails', $result['valid']);
+    $t->assert('Error mentions name', str_contains($result['errors'][0], 'name'));
+
+    // Invalid id format (uppercase)
+    $invalid = $valid;
+    $invalid['id'] = 'Test_Plugin';
+    $result = $pm->validateManifest($invalid);
+    $t->assertFalse('Uppercase id fails', $result['valid']);
+
+    // Missing name
+    $invalid = $valid;
+    unset($invalid['name']);
+    $result = $pm->validateManifest($invalid);
+    $t->assertFalse('Missing name fails', $result['valid']);
+
+    return $t;
+}
+
+function test_plugin_manager_delete_dir(): Test
+{
+    $t = new Test('PluginManager - deleteDir()');
+
+    $tmpDir = __DIR__ . '/tmp_delete_dir';
+    if (is_dir($tmpDir)) {
+        // Clean up from previous runs
+        foreach (glob($tmpDir . '/*') as $f) {
+            @unlink($f);
+        }
+        @rmdir($tmpDir);
+    }
+
+    $pm = new PluginManager(__DIR__ . '/tmp_plugins', __DIR__ . '/tmp_delete_manifest.json');
+
+    // Use reflection to access private method
+    $ref = new ReflectionMethod($pm, 'deleteDir');
+    $ref->setAccessible(true);
+
+    // Test 1: non-existent directory returns true
+    $result = $ref->invoke($pm, $tmpDir . '/nonexistent');
+    $t->assertTrue('deleteDir returns true for non-existent dir', $result === true);
+
+    // Test 2: create nested directory structure and delete it
+    mkdir($tmpDir . '/sub1/sub2/sub3', 0755, true);
+    file_put_contents($tmpDir . '/file1.txt', 'hello');
+    file_put_contents($tmpDir . '/sub1/file2.txt', 'world');
+    file_put_contents($tmpDir . '/sub1/sub2/file3.txt', 'nested');
+    file_put_contents($tmpDir . '/sub1/sub2/sub3/file4.txt', 'deep');
+
+    $result = $ref->invoke($pm, $tmpDir);
+    $t->assertTrue('deleteDir returns true on success', $result === true);
+    $t->assertFalse('deleteDir removes nested directory', is_dir($tmpDir));
+
+    // Test 3: delete empty directory
+    mkdir($tmpDir, 0755);
+    $result = $ref->invoke($pm, $tmpDir);
+    $t->assertTrue('deleteDir handles empty dir', $result === true);
+    $t->assertFalse('empty dir removed', is_dir($tmpDir));
+
+    return $t;
+}
