@@ -102,11 +102,54 @@
             </div>
             <div class="card-body">
                 <div class="row g-3">
-                    <div class="col-md-12">
-                        <label class="form-label"><?= t('site_icon') ?></label>
-                        <input type="text" name="site_icon" class="form-control" value="<?= escape($config['site_icon'] ?? '') ?>">
-                        <div class="form-text"><?= t('site_icon_hint') ?></div>
+                    <!-- Site Logo -->
+                    <div class="col-md-6">
+                        <label class="form-label"><?= t('site_logo') ?></label>
+                        <div id="logoPreview" class="mb-2 <?= empty($config['site_logo']) ? 'd-none' : '' ?>">
+                            <img src="<?= escape($config['site_logo'] ?? '') ?>" alt="Logo" style="max-height:60px; max-width:200px;" class="img-thumbnail">
+                        </div>
+                        <div id="noLogoMsg" class="text-muted small mb-2 <?= !empty($config['site_logo']) ? 'd-none' : '' ?>">
+                            <?= t('no_logo_set') ?>
+                        </div>
+                        <input type="hidden" name="site_logo" id="siteLogoInput" value="<?= escape($config['site_logo'] ?? '') ?>">
+                        <div class="d-flex gap-2 flex-wrap">
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="uploadLogoBtn">
+                                <i class="fas fa-upload me-1"></i> <?= t('upload_logo') ?>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" id="libraryLogoBtn">
+                                <i class="fas fa-images me-1"></i> <?= t('choose_from_library') ?>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-danger <?= empty($config['site_logo']) ? 'd-none' : '' ?>" id="removeLogoBtn">
+                                <i class="fas fa-trash me-1"></i> <?= t('remove_logo') ?>
+                            </button>
+                        </div>
+                        <div class="form-text"><?= t('site_logo_hint') ?></div>
                     </div>
+
+                    <!-- Favicon -->
+                    <div class="col-md-6">
+                        <label class="form-label"><?= t('favicon') ?></label>
+                        <div id="faviconPreview" class="mb-2 <?= empty($config['site_favicon']) ? 'd-none' : '' ?>">
+                            <img src="<?= escape($config['site_favicon'] ?? '') ?>" alt="Favicon" style="width:32px; height:32px;" class="img-thumbnail">
+                        </div>
+                        <div id="noFaviconMsg" class="text-muted small mb-2 <?= !empty($config['site_favicon']) ? 'd-none' : '' ?>">
+                            <?= t('no_favicon_set') ?>
+                        </div>
+                        <input type="hidden" name="site_favicon" id="siteFaviconInput" value="<?= escape($config['site_favicon'] ?? '') ?>">
+                        <div class="d-flex gap-2 flex-wrap">
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="uploadFaviconBtn">
+                                <i class="fas fa-upload me-1"></i> <?= t('upload_favicon') ?>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" id="libraryFaviconBtn">
+                                <i class="fas fa-images me-1"></i> <?= t('choose_from_library') ?>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-danger <?= empty($config['site_favicon']) ? 'd-none' : '' ?>" id="removeFaviconBtn">
+                                <i class="fas fa-trash me-1"></i> <?= t('remove_favicon') ?>
+                            </button>
+                        </div>
+                        <div class="form-text"><?= t('favicon_hint') ?></div>
+                    </div>
+
                 </div>
             </div>
         </div>
@@ -184,3 +227,233 @@
         </button>
     </div>
 </form>
+
+<!-- Hidden file inputs -->
+<input type="file" id="logoUploadInput" accept="image/*" class="d-none">
+<input type="file" id="faviconUploadInput" accept="image/*,.ico,.svg" class="d-none">
+
+<!-- Media Library Modal -->
+<div class="modal fade" id="mediaLibraryModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><?= t('media_library') ?></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="<?= t('close') ?>"></button>
+            </div>
+            <div class="modal-body">
+                <div id="mediaLibraryLoading" class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="text-muted mt-2"><?= t('loading_available_languages') ?></p>
+                </div>
+                <div id="mediaLibraryEmpty" class="text-center py-4 d-none">
+                    <i class="fas fa-images fa-2x text-muted mb-2"></i>
+                    <p class="text-muted"><?= t('media_library_empty') ?></p>
+                </div>
+                <div id="mediaLibraryGrid" class="row g-3 d-none"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script nonce="<?= htmlspecialchars(csp_nonce(), ENT_QUOTES, 'UTF-8') ?>">
+var currentTarget = null;
+var mediaModal = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+    mediaModal = new bootstrap.Modal(document.getElementById('mediaLibraryModal'));
+
+    var uploadLogoBtn = document.getElementById('uploadLogoBtn');
+    if (uploadLogoBtn) uploadLogoBtn.addEventListener('click', uploadLogo);
+
+    var uploadFaviconBtn = document.getElementById('uploadFaviconBtn');
+    if (uploadFaviconBtn) uploadFaviconBtn.addEventListener('click', uploadFavicon);
+
+    var libraryLogoBtn = document.getElementById('libraryLogoBtn');
+    if (libraryLogoBtn) libraryLogoBtn.addEventListener('click', function() { openMediaLibrary('logo'); });
+
+    var libraryFaviconBtn = document.getElementById('libraryFaviconBtn');
+    if (libraryFaviconBtn) libraryFaviconBtn.addEventListener('click', function() { openMediaLibrary('favicon'); });
+
+    var removeLogoBtn = document.getElementById('removeLogoBtn');
+    if (removeLogoBtn) removeLogoBtn.addEventListener('click', removeLogo);
+
+    var removeFaviconBtn = document.getElementById('removeFaviconBtn');
+    if (removeFaviconBtn) removeFaviconBtn.addEventListener('click', removeFavicon);
+});
+
+function uploadLogo() {
+    var input = document.getElementById('logoUploadInput');
+    input.onchange = function() {
+        if (input.files.length > 0) {
+            uploadFile(input.files[0], 'logo');
+        }
+    };
+    input.click();
+}
+
+function uploadFavicon() {
+    var input = document.getElementById('faviconUploadInput');
+    input.onchange = function() {
+        if (input.files.length > 0) {
+            uploadFile(input.files[0], 'favicon');
+        }
+    };
+    input.click();
+}
+
+function uploadFile(file, target) {
+    var formData = new FormData();
+    formData.append('site_image', file);
+    formData.append('csrf_token', document.querySelector('input[name="csrf_token"]').value);
+
+    fetch('<?= base_url() ?>/admin/upload-site-image', {
+        method: 'POST',
+        body: formData,
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    })
+    .then(r => {
+        if (!r.ok) {
+            return r.text().then(text => { throw new Error('HTTP ' + r.status + ': ' + text.substring(0, 200)); });
+        }
+        return r.json().catch(e => { throw new Error('Invalid JSON response'); });
+    })
+    .then(data => {
+        if (data.ok) {
+            if (data.csrf_token) {
+                var csrfInput = document.querySelector('input[name="csrf_token"]');
+                if (csrfInput) csrfInput.value = data.csrf_token;
+            }
+            if (target === 'logo') {
+                setLogo(data.url);
+            } else {
+                setFavicon(data.url);
+            }
+        } else {
+            alert(data.error || 'Upload failed');
+        }
+    })
+    .catch(err => alert('Upload error: ' + err));
+}
+
+function setLogo(url) {
+    document.getElementById('siteLogoInput').value = url;
+    var preview = document.getElementById('logoPreview');
+    preview.querySelector('img').src = url;
+    preview.classList.remove('d-none');
+    document.getElementById('noLogoMsg').classList.add('d-none');
+    document.getElementById('removeLogoBtn').classList.remove('d-none');
+}
+
+function setFavicon(url) {
+    document.getElementById('siteFaviconInput').value = url;
+    var preview = document.getElementById('faviconPreview');
+    preview.querySelector('img').src = url;
+    preview.classList.remove('d-none');
+    document.getElementById('noFaviconMsg').classList.add('d-none');
+    document.getElementById('removeFaviconBtn').classList.remove('d-none');
+}
+
+function removeLogo() {
+    document.getElementById('siteLogoInput').value = '';
+    document.getElementById('logoPreview').classList.add('d-none');
+    document.getElementById('noLogoMsg').classList.remove('d-none');
+    document.getElementById('removeLogoBtn').classList.add('d-none');
+}
+
+function removeFavicon() {
+    document.getElementById('siteFaviconInput').value = '';
+    document.getElementById('faviconPreview').classList.add('d-none');
+    document.getElementById('noFaviconMsg').classList.remove('d-none');
+    document.getElementById('removeFaviconBtn').classList.add('d-none');
+}
+
+function openMediaLibrary(target) {
+    currentTarget = target;
+    mediaModal.show();
+    loadImages();
+}
+
+function loadImages() {
+    fetch('<?= base_url() ?>/admin/get-images')
+    .then(r => r.json())
+    .then(data => {
+        document.getElementById('mediaLibraryLoading').classList.add('d-none');
+        var grid = document.getElementById('mediaLibraryGrid');
+        var empty = document.getElementById('mediaLibraryEmpty');
+
+        if (!data.ok || !data.images || data.images.length === 0) {
+            empty.classList.remove('d-none');
+            grid.classList.add('d-none');
+            return;
+        }
+
+        empty.classList.add('d-none');
+        grid.classList.remove('d-none');
+        grid.innerHTML = '';
+
+        data.images.forEach(function(img) {
+            var col = document.createElement('div');
+            col.className = 'col-4 col-md-3 col-lg-2';
+            col.innerHTML = '<div class="media-library-item" data-url="' + img.url + '">' +
+                '<div class="media-library-thumb">' +
+                    '<img src="' + img.url + '" alt="' + img.filename + '" loading="lazy">' +
+                '</div>' +
+                '<div class="media-library-select">' +
+                    '<button type="button" class="btn btn-sm btn-primary w-100">' + '<?= t('select_image') ?>' + '</button>' +
+                '</div>' +
+            '</div>';
+            grid.appendChild(col);
+        });
+
+        grid.querySelectorAll('.media-library-item').forEach(function(item) {
+            item.style.cursor = 'pointer';
+            item.addEventListener('click', function() {
+                var url = this.dataset.url;
+                if (currentTarget === 'logo') {
+                    setLogo(url);
+                } else {
+                    setFavicon(url);
+                }
+                mediaModal.hide();
+            });
+        });
+    })
+    .catch(err => {
+        document.getElementById('mediaLibraryLoading').classList.add('d-none');
+        document.getElementById('mediaLibraryEmpty').classList.remove('d-none');
+    });
+}
+</script>
+
+<style>
+.media-library-item {
+    cursor: pointer;
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
+    overflow: hidden;
+    transition: border-color 0.2s;
+}
+.media-library-item:hover {
+    border-color: #550296;
+}
+.media-library-thumb {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #f8f9fc;
+    padding: 8px;
+}
+.media-library-thumb img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+.media-library-select {
+    padding: 4px;
+}
+</style>
+
+<?php include __DIR__.'/admin_footer.php'; ?>

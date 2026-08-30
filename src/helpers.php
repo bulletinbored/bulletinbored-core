@@ -233,6 +233,15 @@ function current_route_action(): string
 
 function escape($s) { return htmlspecialchars($s, ENT_QUOTES, 'UTF-8'); }
 
+/**
+ * Render site name allowing safe HTML (bold, colored spans).
+ * Only <b>, <strong>, <span> with style/class are allowed.
+ * Everything else is escaped.
+ */
+function render_site_name(string $name): string {
+    return strip_tags($name, '<b><strong><span><i><em>');
+}
+
 function is_banned() { return ($_SESSION['user_status'] ?? '') === 'banned'; }
 
 function is_suspended() {
@@ -304,6 +313,51 @@ function validate_upload(string $tmpPath, string $origName, array $allowed, int 
 
     return ['mime' => $mime, 'ext' => $ext, 'safe_name' => $safeName];
 }
+
+/**
+ * Alias for validate_upload() for backward compatibility.
+ */
+function validate_uploaded_file(string $tmpPath, string $origName, array $allowed, int $maxSize): ?array {
+    return validate_upload($tmpPath, $origName, $allowed, $maxSize);
+}
+
+/**
+ * Get a list of all uploaded images from the uploads directory.
+ * Returns array of ['url' => ..., 'filename' => ..., 'path' => ...].
+ */
+function get_uploaded_images(): array {
+    $uploadDir = __DIR__ . '/../uploads';
+    if (!is_dir($uploadDir)) {
+        return [];
+    }
+    $images = [];
+    $allowedExt = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'ico'];
+    $files = @scandir($uploadDir);
+    if (!$files) {
+        return [];
+    }
+    foreach ($files as $file) {
+        if ($file === '.' || $file === '..') {
+            continue;
+        }
+        $ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
+        if (!in_array($ext, $allowedExt, true)) {
+            continue;
+        }
+        $path = $uploadDir . '/' . $file;
+        if (!is_file($path)) {
+            continue;
+        }
+        $images[] = [
+            'url' => base_url() . '/uploads/' . $file,
+            'filename' => $file,
+            'path' => $path,
+        ];
+    }
+    usort($images, fn($a, $b) => filemtime($b['path']) - filemtime($a['path']));
+    return $images;
+}
+
 function is_logged_in() { return isset($_SESSION['user_id']); }
 function is_admin() { return ($_SESSION['user_role'] ?? '') === 'admin'; }
 function user_has_permission(string $permission): bool {
@@ -698,6 +752,10 @@ function send_email($to, $subject, $body) {
     $headers .= "From: {$config['mail_from_name']} <{$config['mail_from']}>\r\n";
     $headers .= "X-Mailer: bulletinbored/1.0\r\n";
 
+    $siteLogoHtml = '';
+    if (!empty($config['site_logo'])) {
+        $siteLogoHtml = '<img src="' . escape($config['site_logo']) . '" alt="" style="max-height:40px; margin-bottom:10px;"><br>';
+    }
     $htmlBody = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
         body { font-family: Arial, sans-serif; background: #f8f9fc; padding: 20px; }
         .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
@@ -707,9 +765,9 @@ function send_email($to, $subject, $body) {
         .btn { display: inline-block; padding: 10px 20px; background: #550296; color: white; text-decoration: none; border-radius: 5px; }
     </style></head><body>
     <div class="container">
-        <div class="header"><h2>'.escape($config['site_name'] ?? 'bulletinbored').'</h2></div>
-        <div class="content">'.$body.'</div>
-        <div class="footer">&copy; '.date('Y').' '.escape($config['site_name'] ?? 'bulletinbored').'</div>
+        <div class="header">' . $siteLogoHtml . '<h2 style="margin:0;">' . escape($config['site_name'] ?? 'bulletinbored') . '</h2></div>
+        <div class="content">' . $body . '</div>
+        <div class="footer">&copy; ' . date('Y') . ' ' . escape($config['site_name'] ?? 'bulletinbored') . '</div>
     </div></body></html>';
 
     $envelope = '-f' . ($config['mail_from'] ?? '');

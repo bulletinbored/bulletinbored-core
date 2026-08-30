@@ -9,6 +9,9 @@ function render_header($title = 'bulletinbored', $options = []) {
     global $config, $lang, $pdo;
 
     $siteName = $config['site_name'] ?? 'bulletinbored';
+    $siteTagline = $config['site_tagline'] ?? '';
+    $siteLogo = $config['site_logo'] ?? '';
+    $siteFavicon = $config['site_favicon'] ?? '';
     $options  = is_array($options) ? $options : [];
     $showSidebar = $options['sidebar'] ?? true;
 
@@ -25,7 +28,11 @@ function render_header($title = 'bulletinbored', $options = []) {
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <?php if ($siteFavicon): ?>
+    <link rel="icon" type="<?= str_ends_with(strtolower($siteFavicon), '.svg') ? 'image/svg+xml' : (str_ends_with(strtolower($siteFavicon), '.ico') ? 'image/x-icon' : 'image/png') ?>" href="<?= escape($siteFavicon) ?>">
+    <?php else: ?>
     <link rel="icon" type="image/svg+xml" href="<?= base_url() ?>/favicon.svg">
+    <?php endif; ?>
     <?php global $themeCssUrl, $themeManager;
     if (empty($themeCssUrl) && isset($themeManager) && method_exists($themeManager, 'getCssUrl')) {
         $themeCssUrl = $themeManager->getCssUrl();
@@ -51,8 +58,12 @@ function render_header($title = 'bulletinbored', $options = []) {
     <nav class="navbar navbar-expand-lg navbar-forum fixed-top">
         <div class="container">
             <a class="navbar-brand" href="<?= url('home') ?>">
-                <span class="brand-mark">▦</span>
-                <span class="brand-text">bulletin<b>bored</b></span>
+                <?php if ($siteLogo): ?>
+                    <img src="<?= escape($siteLogo) ?>" alt="<?= escape($siteName) ?>" class="brand-logo" style="max-height:32px; width:auto;">
+                <?php else: ?>
+                    <span class="brand-mark">▦</span>
+                <?php endif; ?>
+                <span class="brand-text"><?= render_site_name($siteName) ?></span>
             </a>
 
             <?php // User icons: desktop dropdown / mobile opens the full-screen stack ?>
@@ -209,6 +220,8 @@ function render_footer() {
         $GLOBALS['pluginManager']->runHook('footer_before_render');
     }
     $siteName = $GLOBALS['config']['site_name'] ?? 'bulletinbored';
+    $siteTagline = $GLOBALS['config']['site_tagline'] ?? '';
+    $siteLogo = $GLOBALS['config']['site_logo'] ?? '';
 ?>
                 </div><!-- /.content-col -->
             </div><!-- /.row -->
@@ -220,10 +233,18 @@ function render_footer() {
             <div class="row g-4">
                 <div class="col-md-5">
                     <div class="footer-brand">
-                        <span class="brand-mark">▦</span>
-                        <span class="brand-text">bulletin<b>bored</b></span>
+                        <?php if (!empty($GLOBALS['config']['site_logo'])): ?>
+                            <img src="<?= escape($GLOBALS['config']['site_logo']) ?>" alt="<?= escape($siteName) ?>" class="brand-logo me-2" style="max-height:28px; width:auto;">
+                        <?php else: ?>
+                            <span class="brand-mark">▦</span>
+                        <?php endif; ?>
+                <span class="brand-text"><?= render_site_name($siteName) ?></span>
                     </div>
-                    <p class="footer-text mb-0"><?= t('footer_tagline') ?></p>
+                    <?php if ($siteTagline): ?>
+                        <p class="footer-text mb-0"><?= escape($siteTagline) ?></p>
+                    <?php else: ?>
+                        <p class="footer-text mb-0"><?= t('footer_tagline') ?></p>
+                    <?php endif; ?>
                 </div>
                 <div class="col-6 col-md-3">
                     <h6 class="footer-title"><?= t('quick_links') ?></h6>

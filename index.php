@@ -127,6 +127,10 @@ $router->middleware('admin')->group(function($router) {
     $router->get('/admin', fn() => handle_admin_dashboard());
     $router->get('/admin/settings', fn() => handle_admin_settings_get());
     $router->post('/admin/settings', fn() => handle_admin_settings_post());
+    $router->get('/admin/smtp', fn() => handle_admin_smtp_get());
+    $router->post('/admin/smtp', fn() => handle_admin_smtp_post());
+    $router->post('/admin/upload-site-image', fn() => handle_admin_upload_site_image());
+    $router->get('/admin/get-images', fn() => handle_admin_get_images());
     $router->get('/admin/moderation', fn() => handle_admin_moderation_get());
     $router->post('/admin/moderate', fn() => handle_moderate_post());
     $router->post('/admin/front-moderate', fn() => handle_frontend_moderate_post());

@@ -189,6 +189,7 @@ class Router
         $matchPath = '/' . ltrim($reqPath, '/');
         $wantsJson = $this->wantsJson();
 
+        $matches = [];
         foreach ($this->routes as $route) {
             if ($route['method'] !== '*' && $route['method'] !== $method) {
                 continue;

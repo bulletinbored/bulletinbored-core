@@ -5,11 +5,11 @@ function handle_admin_action(string $action, string $method): bool
     // Only handle admin-prefixed actions and a few legacy moderation actions.
     // Return false for anything else so the router can try the next handler.
     $adminActions = [
-        'admin', 'admin_settings', 'admin_moderation', 'admin_roles', 'admin_roles_action',
+        'admin', 'admin_settings', 'admin_smtp', 'admin_moderation', 'admin_roles', 'admin_roles_action',
         'admin_users', 'admin_user_edit', 'admin_create_user',
         'admin_categories', 'delete_category', 'update_category_order',
         'admin_langs', 'admin_diagnostics', 'admin_plugins', 'admin_themes',
-        'admin_catalog', 'admin_updates',
+        'admin_catalog', 'admin_updates', 'admin_upload_site_image', 'admin_get_images',
         'moderate', 'frontend_moderate', 'split_thread', 'merge_thread',
         'delete_user', 'ban_user', 'unban_user', 'suspend_user',
     ];
@@ -26,6 +26,12 @@ function handle_admin_action(string $action, string $method): bool
             return handle_admin_dashboard();
         case 'admin_settings':
             return $method === 'POST' ? handle_admin_settings_post() : handle_admin_settings_get();
+        case 'admin_smtp':
+            return $method === 'POST' ? handle_admin_smtp_post() : handle_admin_smtp_get();
+        case 'admin_upload_site_image':
+            return handle_admin_upload_site_image();
+        case 'admin_get_images':
+            return handle_admin_get_images();
         case 'admin_moderation':
             return handle_admin_moderation_get();
         case 'moderate':
@@ -126,7 +132,10 @@ function handle_admin_settings_post(): ?string
     global $config;
 
     if (!csrf_validate_request()) {
-        return 'CSRF token invalid';
+        $_SESSION['settings_error'] = 'CSRF token invalid';
+        while (ob_get_level()) { ob_end_clean(); }
+        header('Location: ' . url('admin_settings'));
+        exit;
     }
 
     if (isset($_POST['send_test_email'])) {
@@ -151,6 +160,8 @@ function handle_admin_settings_post(): ?string
     $siteName = trim($_POST['site_name'] ?? $config['site_name']);
     $siteTagline = trim($_POST['site_tagline'] ?? $config['site_tagline']);
     $siteIcon = trim($_POST['site_icon'] ?? $config['site_icon']);
+    $siteLogo = trim($_POST['site_logo'] ?? ($config['site_logo'] ?? ''));
+    $siteFavicon = trim($_POST['site_favicon'] ?? ($config['site_favicon'] ?? ''));
     $timezone = trim($_POST['timezone'] ?? $config['timezone']);
     $dateFormat = trim($_POST['date_format'] ?? $config['date_format']);
     $timeFormat = trim($_POST['time_format'] ?? $config['time_format']);
@@ -164,6 +175,8 @@ function handle_admin_settings_post(): ?string
     $config['site_name'] = $siteName;
     $config['site_tagline'] = $siteTagline;
     $config['site_icon'] = $siteIcon;
+    $config['site_logo'] = $siteLogo;
+    $config['site_favicon'] = $siteFavicon;
     $config['timezone'] = $timezone;
     $config['date_format'] = $dateFormat;
     $config['time_format'] = $timeFormat;
@@ -174,17 +187,148 @@ function handle_admin_settings_post(): ?string
     $config['allow_catalog_only'] = $allowCatalogOnly;
     $config['plugin_verify_files'] = $pluginVerifyFiles;
 
-    file_put_contents(__DIR__ . '/../../config.json', json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-    $_SESSION['settings_saved'] = true;
-    redirect(url('admin_settings'));
+    if (isset($_POST['remove_logo'])) {
+        $config['site_logo'] = '';
+    }
+    if (isset($_POST['remove_favicon'])) {
+        $config['site_favicon'] = '';
+    }
 
+    file_put_contents(__DIR__ . '/../../config.json', json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE), LOCK_EX);
+    $_SESSION['settings_saved'] = true;
+    header('Cache-Control: no-store');
+    include __DIR__ . '/../../views/admin_settings.php';
     return null;
 }
 
 function handle_admin_settings_get(): bool
 {
+    global $config;
     include __DIR__ . '/../../views/admin_settings.php';
     return true;
+}
+
+function handle_admin_upload_site_image(): bool
+{
+    global $config;
+
+    if (!is_admin()) {
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => false, 'error' => 'Admin required']);
+        exit;
+    }
+    if (!csrf_validate_request()) {
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => false, 'error' => 'CSRF token invalid']);
+        exit;
+    }
+    if (empty($_FILES['site_image']['tmp_name'])) {
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => false, 'error' => 'No file uploaded']);
+        exit;
+    }
+
+    $allowed = [
+        'image/jpeg' => 'jpg',
+        'image/png'  => 'png',
+        'image/gif'  => 'gif',
+        'image/webp' => 'webp',
+        'image/svg+xml' => 'svg',
+        'image/x-icon' => 'ico',
+        'image/vnd.microsoft.icon' => 'ico',
+    ];
+    $maxSize = 2 * 1024 * 1024;
+    $info = validate_upload($_FILES['site_image']['tmp_name'], $_FILES['site_image']['name'] ?? '', $allowed, $maxSize);
+    if ($info === null) {
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => false, 'error' => 'Invalid image. Allowed: JPG, PNG, GIF, WebP, SVG, ICO. Max 2MB.']);
+        exit;
+    }
+
+    $uploadDir = __DIR__ . '/../../uploads';
+    if (!is_dir($uploadDir)) {
+        @mkdir($uploadDir, 0755, true);
+    }
+    $dest = $uploadDir . '/' . $info['safe_name'];
+    if (!move_uploaded_file($_FILES['site_image']['tmp_name'], $dest)) {
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => false, 'error' => 'Failed to save file']);
+        exit;
+    }
+
+    $url = base_url() . '/uploads/' . $info['safe_name'];
+    header('Content-Type: application/json');
+    echo json_encode(['ok' => true, 'url' => $url, 'filename' => $info['safe_name'], 'csrf_token' => generate_csrf_token()]);
+    exit;
+}
+
+function handle_admin_get_images(): bool
+{
+    global $pdo;
+
+    if (!is_admin()) {
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => false, 'error' => 'Admin required']);
+        exit;
+    }
+
+    $images = get_uploaded_images();
+    header('Content-Type: application/json');
+    echo json_encode(['ok' => true, 'images' => $images]);
+    exit;
+}
+
+function handle_admin_smtp_get(): bool
+{
+    include __DIR__ . '/../../views/admin_smtp.php';
+    return true;
+}
+
+function handle_admin_smtp_post(): ?string
+{
+    global $config;
+
+    if (!csrf_validate_request()) {
+        return 'CSRF token invalid';
+    }
+
+    if (isset($_POST['send_smtp_test'])) {
+        $testEmail = trim($_POST['smtp_test_to'] ?? '');
+        if (empty($testEmail) || !filter_var($testEmail, FILTER_VALIDATE_EMAIL)) {
+            $_SESSION['smtp_test_error'] = t('invalid_email_address');
+        } else {
+            $subject = 'Test email from ' . ($config['site_name'] ?? 'bulletinbored');
+            $body = '<p>This is a test email sent from your forum\'s SMTP configuration page.</p>'
+                  . '<p>If you received this, your SMTP settings are correct.</p>';
+            $sent = send_email($testEmail, $subject, $body);
+            if ($sent) {
+                $_SESSION['smtp_test_success'] = $testEmail;
+            } else {
+                $err = error_get_last();
+                $_SESSION['smtp_test_error'] = $err['message'] ?? 'Unknown error';
+            }
+        }
+        redirect(url('admin_smtp'));
+    }
+
+    $config['mail_method'] = ($_POST['mail_method'] ?? '') === 'smtp' ? 'smtp' : 'mail';
+    $config['mail_host'] = trim($_POST['mail_host'] ?? ($config['mail_host'] ?? ''));
+    $config['mail_port'] = (int)($_POST['mail_port'] ?? ($config['mail_port'] ?? 25));
+    $config['mail_username'] = trim($_POST['mail_username'] ?? ($config['mail_username'] ?? ''));
+    $newPassword = $_POST['mail_password'] ?? '';
+    if ($newPassword !== '') {
+        $config['mail_password'] = $newPassword;
+    }
+    $config['mail_secure'] = in_array($_POST['mail_secure'] ?? '', ['ssl', 'tls'], true) ? $_POST['mail_secure'] : '';
+    $config['mail_timeout'] = (int)($_POST['mail_timeout'] ?? ($config['mail_timeout'] ?? 10));
+    $config['mail_from'] = trim($_POST['mail_from'] ?? ($config['mail_from'] ?? ''));
+    $config['mail_from_name'] = trim($_POST['mail_from_name'] ?? ($config['mail_from_name'] ?? ''));
+
+    file_put_contents(__DIR__ . '/../../config.json', json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+    $_SESSION['smtp_saved'] = true;
+    redirect(url('admin_smtp'));
+
+    return null;
 }
 
 function handle_admin_moderation_get(): bool
