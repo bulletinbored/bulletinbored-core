@@ -25,9 +25,11 @@ data/logs/
 !/plugins/hellobored
 /plugins/*/
 
+# Themes - ignore everything inside themes/ except freshbored
 /themes/*
 !/themes/freshbored
 /themes/*/
+!/themes/freshbored/**
 
 RELEASE_NOTES.md
 
