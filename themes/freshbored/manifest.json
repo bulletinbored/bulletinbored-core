@@ -1,0 +1,12 @@
+{
+    "name": "freshbored",
+    "version": "1.0.6",
+    "author": "mlzog",
+    "description": "Default frontend theme for bulletinbored. Bootstrap 5 based, sidebar driven discussion layout.",
+    "files": [
+        "style.css",
+        "manifest.json",
+        "README.md",
+        "LICENSE"
+    ]
+}
