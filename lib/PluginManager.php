@@ -224,6 +224,46 @@ class PluginManager
         return $plugin ? !empty($plugin['enabled']) : false;
     }
 
+    /**
+     * Resolve plugin dependencies before enabling.
+     * Returns ['compatible' => true] or ['compatible' => false, 'reason' => '...'].
+     */
+    public function checkDependencies(string $name): array
+    {
+        $plugin = $this->getByName($name);
+        if ($plugin === null) {
+            return array('compatible' => false, 'reason' => 'Plugin not found');
+        }
+        if (empty($plugin['folder'])) {
+            return array('compatible' => true);
+        }
+        $dir = $this->pluginsDir . '/' . $plugin['folder'];
+        $manifest = $this->parseManifest($dir);
+        if (!$manifest || empty($manifest['dependencies'])) {
+            return array('compatible' => true);
+        }
+        $deps = $manifest['dependencies'];
+        foreach ($deps as $depName => $constraint) {
+            $dep = $this->getByName($depName);
+            if ($dep === null) {
+                return array('compatible' => false, 'reason' => "Missing dependency: {$depName}");
+            }
+            if (empty($dep['enabled'])) {
+                return array('compatible' => false, 'reason' => "Dependency not enabled: {$depName}");
+            }
+            if ($constraint && isset($dep['version'])) {
+                if (!version_compare($dep['version'], $constraint, '>=')) {
+                    return array('compatible' => false, 'reason' => "Dependency {$depName} version {$dep['version']} does not satisfy >= {$constraint}");
+                }
+            }
+        }
+        return array('compatible' => true);
+    }
+
+    /**
+     * Enable a plugin with dependency resolution.
+     * Returns true on success, false if dependencies are not met.
+     */
     public function enable(string $name): bool
     {
         $key = strtolower($name);
@@ -231,12 +271,23 @@ class PluginManager
         if (!isset($this->plugins[$key])) {
             return false;
         }
+
+        // Check dependencies
+        $deps = $this->checkDependencies($name);
+        if (!$deps['compatible']) {
+            error_log("Plugin '{$key}' enable failed: {$deps['reason']}");
+            return false;
+        }
+
         $this->plugins[$key]['enabled'] = true;
         $this->manifest[$key] = $this->plugins[$key];
         $this->saveManifest();
         return true;
     }
 
+    /**
+     * Disable a plugin and any plugins that depend on it.
+     */
     public function disable(string $name): bool
     {
         $key = strtolower($name);
@@ -245,6 +296,98 @@ class PluginManager
             return false;
         }
         $this->plugins[$key]['enabled'] = false;
+        $this->manifest[$key] = $this->plugins[$key];
+        $this->saveManifest();
+
+        // Cascade: disable plugins that depend on this one
+        foreach ($this->plugins as $pKey => $plugin) {
+            if ($pKey === $key || empty($plugin['enabled'])) {
+                continue;
+            }
+            $dir = $this->pluginsDir . '/' . $plugin['folder'];
+            $manifest = $this->parseManifest($dir);
+            if ($manifest && !empty($manifest['dependencies']) && isset($manifest['dependencies'][$key])) {
+                $this->plugins[$pKey]['enabled'] = false;
+                $this->manifest[$pKey] = $this->plugins[$pKey];
+                $this->saveManifest();
+                error_log("Plugin '{$pKey}' auto-disabled: depends on '{$key}'");
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Get a plugin setting value.
+     */
+    public function getSetting(string $pluginName, string $key, mixed $default = null): mixed
+    {
+        $settings = $this->manifest[strtolower($pluginName)]['settings'] ?? [];
+        return $settings[$key] ?? $default;
+    }
+
+    /**
+     * Set a plugin setting value.
+     */
+    public function setSetting(string $pluginName, string $key, mixed $value): void
+    {
+        $name = strtolower($pluginName);
+        $this->plugins = $this->getAll();
+        if (!isset($this->plugins[$name])) {
+            return;
+        }
+        $this->manifest[$name]['settings'][$key] = $value;
+        $this->plugins[$name]['settings'][$key] = $value;
+        $this->saveManifest();
+    }
+
+    /**
+     * Uninstall a plugin: disable, run cleanup, remove files.
+     */
+    public function uninstall(string $name): array
+    {
+        $key = strtolower($name);
+        $this->plugins = $this->getAll();
+        if (!isset($this->plugins[$key])) {
+            return array('success' => false, 'message' => 'Plugin not found');
+        }
+        $this->disable($name);
+        $dir = $this->pluginsDir . '/' . $key;
+        if (is_dir($dir)) {
+            $this->deleteRecursive($dir);
+        } else {
+            $file = $this->pluginsDir . '/' . $key . '.php';
+            if (file_exists($file)) {
+                @unlink($file);
+            }
+        }
+        unset($this->manifest[$key]);
+        unset($this->plugins[$key]);
+        $this->saveManifest();
+        return array('success' => true, 'message' => 'Plugin uninstalled: ' . $key);
+    }
+
+    /**
+     * List failed plugins for recovery mode.
+     */
+    public function getFailedPlugins(): array
+    {
+        return array_filter($this->getAll(), fn($p) => !empty($p['failed']));
+    }
+
+    /**
+     * Recover from a failed plugin by disabling it.
+     */
+    public function recoverPlugin(string $name): bool
+    {
+        $key = strtolower($name);
+        $this->plugins = $this->getAll();
+        if (!isset($this->plugins[$key])) {
+            return false;
+        }
+        $this->plugins[$key]['enabled'] = false;
+        $this->plugins[$key]['failed'] = false;
+        unset($this->plugins[$key]['fail_reason']);
         $this->manifest[$key] = $this->plugins[$key];
         $this->saveManifest();
         return true;

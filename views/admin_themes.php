@@ -82,28 +82,56 @@
         </div>
     </div>
 
-    <!-- Active Theme Selector -->
-    <div class="card shadow-sm mb-4">
-        <div class="card-header">
-            <h5 class="card-title mb-0"><i class="fas fa-palette me-2"></i><?= t('select_active_theme') ?></h5>
+    <div class="row mb-4">
+        <!-- Active Theme Selector -->
+        <div class="col-lg-7">
+            <div class="card shadow-sm h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0"><i class="fas fa-palette me-2"></i><?= t('select_active_theme') ?></h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" class="row g-3 align-items-end">
+                        <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                        <div class="col-md-8">
+                            <label class="form-label"><?= t('active_theme') ?></label>
+                            <select name="theme_name" class="form-select">
+                                <?php foreach ($allThemes as $theme): ?>
+                                    <option value="<?= escape($theme['name']) ?>" <?= $theme['active'] ? 'selected' : '' ?>><?= escape($theme['name']) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <button type="submit" name="activate_theme" value="1" class="btn btn-primary">
+                                <i class="fas fa-check me-1"></i> <?= t('activate') ?>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
         </div>
-        <div class="card-body">
-            <form method="POST" class="row g-3 align-items-end">
-                <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
-                <div class="col-md-8">
-                    <label class="form-label"><?= t('active_theme') ?></label>
-                    <select name="theme_name" class="form-select">
-                        <?php foreach ($allThemes as $theme): ?>
-                            <option value="<?= escape($theme['name']) ?>" <?= $theme['active'] ? 'selected' : '' ?>><?= escape($theme['name']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
+        <!-- Catalog Settings -->
+        <div class="col-lg-5">
+            <div class="card shadow-sm h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0"><i class="fas fa-shield-halved me-2"></i><?= t('catalog_settings') ?></h5>
                 </div>
-                <div class="col-md-4">
-                    <button type="submit" name="activate_theme" value="1" class="btn btn-primary">
-                        <i class="fas fa-check me-1"></i> <?= t('activate') ?>
-                    </button>
+                <div class="card-body">
+                    <form method="POST" id="themeSettingsForm">
+                        <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                        <input type="hidden" name="save_theme_settings" value="1">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <label class="form-label mb-0"><?= t('allow_catalog_only') ?></label>
+                                <div class="form-text mb-0"><?= t('allow_catalog_only_hint') ?></div>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input type="hidden" name="allow_catalog_only" value="0">
+                                <input class="form-check-input" type="checkbox" name="allow_catalog_only" value="1" id="catalogOnlySwitch" <?= (!empty($config['allow_catalog_only'])) ? 'checked' : '' ?>>
+                            </div>
+                        </div>
+                    </form>
                 </div>
-            </form>
+            </div>
         </div>
     </div>
 

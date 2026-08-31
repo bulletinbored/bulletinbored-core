@@ -124,6 +124,12 @@ function url($action, $params = [], $absolute = false) {
             return $base . '/admin/roles-action' . (!empty($query) ? '?' . http_build_query($query) : '');
         case 'moderate':
             return $base . '/admin/moderate' . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'frontend_moderate':
+            return $base . '/admin/front-moderate' . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'split_thread':
+            return $base . '/admin/split-thread' . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'merge_thread':
+            return $base . '/admin/merge-thread' . (!empty($query) ? '?' . http_build_query($query) : '');
         case 'create_category':
         case 'edit_category':
             return $base . '/admin/categories' . (!empty($query) ? '?' . http_build_query($query) : '');

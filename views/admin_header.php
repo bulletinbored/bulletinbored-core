@@ -1,11 +1,12 @@
 <?php
 // Admin header - completely separate from frontend theme
 function render_admin_header($title = 'Admin Panel') {
-    global $config, $lang, $action;
+    global $config, $lang;
     $siteName = $config['site_name'] ?? 'bulletinbored';
-    $active = function($checks) use ($action) {
+    $currentAction = current_route_action();
+    $active = function($checks) use ($currentAction) {
         foreach ((array)$checks as $c) {
-            if ($action === $c) return 'active';
+            if ($currentAction === $c) return 'active';
         }
         return '';
     };

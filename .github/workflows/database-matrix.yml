@@ -1,0 +1,102 @@
+name: Database Matrix Tests
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test-sqlite:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php-version: ['8.1', '8.2', '8.3']
+    name: SQLite (PHP ${{ matrix.php-version }})
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-version }}
+          extensions: pdo, pdo_sqlite
+      - name: Run tests
+        run: php tests/run.php
+
+  test-mysql:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php-version: ['8.1', '8.2', '8.3']
+        mysql-version: ['8.0', '8.4']
+    name: MySQL ${{ matrix.mysql-version }} (PHP ${{ matrix.php-version }})
+    services:
+      mysql:
+        image: mysql:${{ matrix.mysql-version }}
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: bulletinbored_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-version }}
+          extensions: pdo, pdo_mysql
+      - name: Run full test suite
+        run: php tests/run.php
+      - name: Run database matrix tests
+        env:
+          DB_DRIVER: mysql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_NAME: bulletinbored_test
+          DB_USER: root
+          DB_PASS: root
+        run: php tests/DatabaseMatrixTest.php
+
+  test-mariadb:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php-version: ['8.1', '8.2', '8.3']
+        mariadb-version: ['10.6', '10.11', '11.4']
+    name: MariaDB ${{ matrix.mariadb-version }} (PHP ${{ matrix.php-version }})
+    services:
+      mariadb:
+        image: mariadb:${{ matrix.mariadb-version }}
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: bulletinbored_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-version }}
+          extensions: pdo, pdo_mysql
+      - name: Run full test suite
+        run: php tests/run.php
+      - name: Run database matrix tests
+        env:
+          DB_DRIVER: mysql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_NAME: bulletinbored_test
+          DB_USER: root
+          DB_PASS: root
+        run: php tests/DatabaseMatrixTest.php
