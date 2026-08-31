@@ -46,7 +46,7 @@ function handle_category(): \Bulletin\Response|bool
     $category = $catStmt->fetch();
 
     if (!$category) {
-        die('Category not found');
+        throw new \Bulletin\NotFoundException('Category not found');
     }
 
     $page = max(1, (int)($_GET['page'] ?? 1));
@@ -75,14 +75,12 @@ function handle_download(): \Bulletin\Response|bool
     $upload = $stmt->fetch();
 
     if (!$upload) {
-        http_response_code(404);
-        die('File not found');
+        throw new \Bulletin\NotFoundException('File not found');
     }
 
     $filePath = __DIR__ . '/../../uploads/' . basename($upload['filename']);
     if (!is_file($filePath)) {
-        http_response_code(404);
-        die('File not found');
+        throw new \Bulletin\NotFoundException('File not found');
     }
 
     $mime = $upload['mime_type'] ?? (function_exists('mime_content_type') ? mime_content_type($filePath) : 'application/octet-stream');
@@ -100,5 +98,4 @@ function handle_download(): \Bulletin\Response|bool
     header('Cache-Control: private, max-age=3600');
     readfile($filePath);
     exit;
-    return true;
 }

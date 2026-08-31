@@ -96,6 +96,7 @@ class Migrator
      * Get all migration files from all registered directories.
      * Returns sorted array of ['name' => ..., 'path' => ..., 'source' => ...].
      * Source indicates origin: 'core' or plugin folder name.
+     * Migration IDs are namespaced: "core:filename" or "plugin:filename".
      */
     public function getAllMigrations(): array
     {
@@ -108,10 +109,13 @@ class Migrator
             }
 
             $files = glob($dir . '/*.php');
-            $source = ($dir === $this->migrationsDir) ? 'core' : basename(dirname($dir));
+            $isCore = ($dir === $this->migrationsDir);
+            $source = $isCore ? 'core' : basename(dirname($dir));
 
             foreach ($files as $file) {
-                $name = basename($file, '.php');
+                $baseName = basename($file, '.php');
+                // Namespaced ID: core:20260829_initial_schema or myplugin:2026001_create_table
+                $name = $isCore ? 'core:' . $baseName : $source . ':' . $baseName;
                 $migrations[] = [
                     'name' => $name,
                     'path' => $file,
@@ -238,11 +242,22 @@ class Migrator
 
     /**
      * Run a single migration's down() method.
+     * If the migration declares itself irreversible (via irreversible() returning true),
+     * the down() is skipped and only the tracking record is removed.
      */
     public function runDown(array $migration): void
     {
         $instance = $this->loadMigration($migration['path']);
-        $instance->down($this->pdo);
+
+        if (method_exists($instance, 'irreversible') && $instance->irreversible()) {
+            // Irreversible migration: cannot roll back schema, just remove tracking.
+            trigger_error(
+                "Migration '{$migration['name']}' is irreversible — skipping down().",
+                E_USER_WARNING
+            );
+        } else {
+            $instance->down($this->pdo);
+        }
 
         $stmt = $this->pdo->prepare("DELETE FROM migrations WHERE migration = ?");
         $stmt->execute([$migration['name']]);

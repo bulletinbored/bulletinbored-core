@@ -281,6 +281,63 @@ class UpdateManager
         return $version;
     }
 
+    /**
+     * Preflight checks before applying any update.
+     * Returns array of error messages (empty = all clear).
+     *
+     * @param string $type 'core', 'plugin', or 'theme'
+     * @param string $tag  Version tag being applied
+     * @param int    $requiredBytes  Estimated space needed (0 = auto-estimate)
+     */
+    public function preflight(string $type, string $tag, int $requiredBytes = 0): array
+    {
+        $errors = [];
+
+        // PHP version check — core requires 8.1+
+        if ($type === 'core') {
+            if (version_compare(PHP_VERSION, '8.1.0', '<')) {
+                $errors[] = 'PHP 8.1+ required, current: ' . PHP_VERSION;
+            }
+        }
+
+        // Disk space check — need at least 50MB free for core updates
+        $needed = $requiredBytes > 0 ? $requiredBytes : (50 * 1024 * 1024);
+        $root = rtrim(__DIR__ . '/../', '/');
+        $freeSpace = @disk_free_space($root);
+        if ($freeSpace !== false && $freeSpace < $needed) {
+            $errors[] = sprintf(
+                'Insufficient disk space: %s free, %s needed',
+                $this->formatBytes($freeSpace),
+                $this->formatBytes($needed)
+            );
+        }
+
+        // Writable check
+        if (!is_writable($root)) {
+            $errors[] = 'Root directory is not writable: ' . $root;
+        }
+
+        // Config writable check
+        $configPath = $root . '/config.json';
+        if (file_exists($configPath) && !is_writable($configPath)) {
+            $errors[] = 'config.json is not writable';
+        }
+
+        return $errors;
+    }
+
+    private function formatBytes(int $bytes): string
+    {
+        $units = ['B', 'KB', 'MB', 'GB'];
+        $i = 0;
+        $size = (float)$bytes;
+        while ($size >= 1024 && $i < count($units) - 1) {
+            $size /= 1024;
+            $i++;
+        }
+        return round($size, 2) . ' ' . $units[$i];
+    }
+
     public function applyUpdate(string $type, string $name, string $zipPath): bool
     {
         if (!file_exists($zipPath)) {
@@ -326,6 +383,13 @@ class UpdateManager
 
     public function applyCoreUpdate(string $tag): bool
     {
+        // Preflight checks
+        $errors = $this->preflight('core', $tag);
+        if (!empty($errors)) {
+            error_log('BB CORE PREFLIGHT FAIL: ' . implode('; ', $errors));
+            return false;
+        }
+
         $zipUrl = 'https://github.com/bulletinbored/bulletinbored-core/archive/refs/tags/' . rawurlencode($tag) . '.zip';
         $tmpZip = tempnam(sys_get_temp_dir(), 'bbcore') . '.zip';
         error_log('BB CORE START tag=' . $tag . ' zip=' . $zipUrl);

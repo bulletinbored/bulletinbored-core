@@ -238,9 +238,7 @@ function handle_profile(): \Bulletin\Response|bool
     $profileUser = $profileStmt->fetch();
 
     if (!$profileUser) {
-        http_response_code(404);
-        echo 'User not found';
-        return true;
+        throw new \Bulletin\NotFoundException('User not found');
     }
 
     $userThreadsStmt = $pdo->prepare("
@@ -491,12 +489,12 @@ function handle_reset_password(string $method): \Bulletin\Response|bool
         if ($password !== $confirm) {
             $error = 'Passwords do not match.';
             include __DIR__ . '/../../views/reset_password.php';
-            exit;
+            return true;
         }
         if (strlen($password) < 12) {
             $error = 'Password must be at least 12 characters.';
             include __DIR__ . '/../../views/reset_password.php';
-            exit;
+            return true;
         }
 
         $tokensStmt = $pdo->prepare("SELECT * FROM password_resets WHERE used = 0 AND expires_at > CURRENT_TIMESTAMP ORDER BY created_at DESC");
@@ -512,7 +510,7 @@ function handle_reset_password(string $method): \Bulletin\Response|bool
         if (!$validToken) {
             $error = 'Invalid or expired reset token.';
             include __DIR__ . '/../../views/reset_password.php';
-            exit;
+            return true;
         }
 
         $pdo->prepare("UPDATE users SET password = ? WHERE id = ?")
@@ -534,9 +532,7 @@ function handle_reset_password(string $method): \Bulletin\Response|bool
     }
 
     if (!isset($_GET['token'])) {
-        http_response_code(404);
-        echo 'Page not found';
-        return true;
+        throw new \Bulletin\NotFoundException('Page not found');
     }
 
     include __DIR__ . '/../../views/reset_password.php';

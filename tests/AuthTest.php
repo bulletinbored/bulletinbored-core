@@ -63,36 +63,36 @@ function test_user_has_permission(): Test
         @session_start();
     }
 
-    // Create in-memory DB with roles
+    // Create in-memory DB with roles using new permission notation
     $pdo = new PDO('sqlite::memory:');
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     $pdo->exec("CREATE TABLE roles (id INTEGER PRIMARY KEY, name TEXT UNIQUE, permissions TEXT)");
-    $pdo->exec("INSERT INTO roles (name, permissions) VALUES ('admin', '[\"can_ban_users\",\"can_delete_threads\"]')");
-    $pdo->exec("INSERT INTO roles (name, permissions) VALUES ('moderator', '[\"can_delete_threads\"]')");
-    $pdo->exec("INSERT INTO roles (name, permissions) VALUES ('user', '[\"can_create_threads\"]')");
+    $pdo->exec("INSERT INTO roles (name, permissions) VALUES ('admin', '[\"admin.access\",\"users.ban\",\"threads.delete\",\"posts.edit\",\"roles.manage\"]')");
+    $pdo->exec("INSERT INTO roles (name, permissions) VALUES ('moderator', '[\"threads.delete\",\"posts.edit\"]')");
+    $pdo->exec("INSERT INTO roles (name, permissions) VALUES ('user', '[\"threads.create\",\"posts.create\",\"posts.edit_own\"]')");
 
     // Make $pdo global for user_has_permission
     $GLOBALS['pdo'] = $pdo;
 
     // Test: admin has all permissions
     $_SESSION['user_role'] = 'admin';
-    $t->assertTrue('Admin has can_ban_users', user_has_permission('can_ban_users'));
-    $t->assertTrue('Admin has can_delete_threads', user_has_permission('can_delete_threads'));
+    $t->assertTrue('Admin has users.ban', user_has_permission('users.ban'));
+    $t->assertTrue('Admin has threads.delete', user_has_permission('threads.delete'));
     $t->assertTrue('Admin has any permission', user_has_permission('nonexistent_permission'));
 
     // Test: moderator has specific permissions
     $_SESSION['user_role'] = 'moderator';
-    $t->assertTrue('Moderator has can_delete_threads', user_has_permission('can_delete_threads'));
-    $t->assertFalse('Moderator does NOT have can_ban_users', user_has_permission('can_ban_users'));
+    $t->assertTrue('Moderator has threads.delete', user_has_permission('threads.delete'));
+    $t->assertFalse('Moderator does NOT have users.ban', user_has_permission('users.ban'));
 
     // Test: user has limited permissions
     $_SESSION['user_role'] = 'user';
-    $t->assertTrue('User has can_create_threads', user_has_permission('can_create_threads'));
-    $t->assertFalse('User does NOT have can_ban_users', user_has_permission('can_ban_users'));
+    $t->assertTrue('User has threads.create', user_has_permission('threads.create'));
+    $t->assertFalse('User does NOT have users.ban', user_has_permission('users.ban'));
 
     // Test: default role (no session)
     unset($_SESSION['user_role']);
-    $t->assertFalse('Default role has no admin permissions', user_has_permission('can_ban_users'));
+    $t->assertFalse('Default role has no admin permissions', user_has_permission('users.ban'));
 
     return $t;
 }
@@ -193,9 +193,10 @@ function test_authz_service(): Test
     $pdo->exec("INSERT INTO users (id, username, role) VALUES (1, 'admin1', 'admin')");
     $pdo->exec("INSERT INTO users (id, username, role) VALUES (2, 'mod1', 'moderator')");
     $pdo->exec("INSERT INTO users (id, username, role) VALUES (3, 'user1', 'user')");
-    $pdo->exec("INSERT INTO roles (name, permissions) VALUES ('admin', '[\"posts.edit\",\"posts.delete\",\"users.ban\"]')");
-    $pdo->exec("INSERT INTO roles (name, permissions) VALUES ('moderator', '[\"posts.edit\",\"posts.delete\"]')");
-    $pdo->exec("INSERT INTO roles (name, permissions) VALUES ('user', '[\"posts.create\",\"posts.edit_own\"]')");
+    $pdo->exec("INSERT INTO users (id, username, role) VALUES (4, 'user2', 'user')");
+    $pdo->exec("INSERT INTO roles (name, permissions) VALUES ('admin', '[\"admin.access\",\"posts.edit\",\"posts.delete\",\"users.ban\",\"threads.delete\",\"threads.lock\",\"threads.split\",\"threads.merge\"]')");
+    $pdo->exec("INSERT INTO roles (name, permissions) VALUES ('moderator', '[\"posts.edit\",\"posts.delete\",\"threads.delete\",\"threads.lock\",\"threads.split\",\"threads.merge\"]')");
+    $pdo->exec("INSERT INTO roles (name, permissions) VALUES ('user', '[\"posts.create\",\"posts.edit_own\",\"posts.delete_own\"]')");
 
     $authz = new AuthZ($pdo);
 
@@ -207,20 +208,36 @@ function test_authz_service(): Test
     // Moderator has specific permissions
     $t->assertTrue('Moderator can posts.edit', $authz->can(2, 'posts.edit'));
     $t->assertTrue('Moderator can posts.delete', $authz->can(2, 'posts.delete'));
+    $t->assertTrue('Moderator can threads.split', $authz->can(2, 'threads.split'));
     $t->assertFalse('Moderator cannot users.ban', $authz->can(2, 'users.ban'));
+    $t->assertFalse('Moderator cannot admin.access', $authz->can(2, 'admin.access'));
 
     // User has limited permissions
     $t->assertTrue('User can posts.create', $authz->can(3, 'posts.create'));
     $t->assertFalse('User cannot posts.delete', $authz->can(3, 'posts.delete'));
+    $t->assertFalse('User cannot admin.access', $authz->can(3, 'admin.access'));
 
-    // Ownership checks
+    // Ownership checks — user can edit/delete own, not others
     $t->assertTrue('User can edit own post', $authz->canOnOwned(3, 'posts.edit', 3));
-    $t->assertFalse('User cannot edit others post', $authz->canOnOwned(3, 'posts.edit', 2));
+    $t->assertFalse('User cannot edit others post', $authz->canOnOwned(3, 'posts.edit', 4));
+    $t->assertTrue('User can delete own post', $authz->canOnOwned(3, 'posts.delete', 3));
+    $t->assertFalse('User cannot delete others post', $authz->canOnOwned(3, 'posts.delete', 4));
+
+    // Moderator can edit/delete any post (has general permission)
     $t->assertTrue('Moderator can edit any post', $authz->canOnOwned(2, 'posts.edit', 3));
+    $t->assertTrue('Moderator can delete any post', $authz->canOnOwned(2, 'posts.delete', 3));
+
+    // Admin can do anything via canOnOwned
+    $t->assertTrue('Admin can edit any post via canOnOwned', $authz->canOnOwned(1, 'posts.edit', 3));
 
     // Role resolution
     $t->assertEquals('Get admin role', 'admin', $authz->getUserRole(1));
     $t->assertEquals('Get user role', 'user', $authz->getUserRole(3));
+
+    // hasRole checks
+    $t->assertTrue('hasRole admin for admin user', $authz->hasRole(1, 'admin'));
+    $t->assertFalse('hasRole admin for moderator', $authz->hasRole(2, 'admin'));
+    $t->assertTrue('hasRole user for regular user', $authz->hasRole(3, 'user'));
 
     return $t;
 }

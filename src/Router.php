@@ -60,7 +60,9 @@ class Router
             if (!is_logged_in()) {
                 return ['status' => 302, 'body' => '', 'headers' => ['Location: ' . \url('login')]];
             }
-            if (($_SESSION['user_role'] ?? '') !== 'admin') {
+            $authz = $GLOBALS['authz'] ?? null;
+            $userId = $_SESSION['user_id'] ?? 0;
+            if ($authz === null || !$authz->can($userId, 'admin.access')) {
                 return ['status' => 403, 'body' => 'Forbidden'];
             }
             return null;
@@ -217,6 +219,20 @@ class Router
         $matchPath = '/' . ltrim($reqPath, '/');
         $wantsJson = $this->wantsJson();
 
+        try {
+            $this->matchRoute($matchPath, $method, $wantsJson);
+        } catch (HttpException $e) {
+            $this->sendResponse(
+                $e->getStatusCode(),
+                $wantsJson ? json_encode(['error' => $e->getMessage()]) : $e->getMessage(),
+                [],
+                $wantsJson
+            );
+        }
+    }
+
+    private function matchRoute(string $matchPath, string $method, bool $wantsJson): void
+    {
         $matches = [];
         foreach ($this->routes as $route) {
             if ($route['method'] !== '*' && $route['method'] !== $method) {

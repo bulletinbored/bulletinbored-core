@@ -8,6 +8,8 @@ data/updates.json
 data/ratelimit/
 data/sessions/
 data/logs/
+data/.migration_lock
+data/backups/
 .user.ini
 
 /uploads/
@@ -32,6 +34,7 @@ data/logs/
 !/themes/freshbored/**
 
 roadmap-to-v1.md
+docs/phase1-audit-report.md
 RELEASE-NOTES.md
 
 EMAIL_INVIE.md

@@ -94,3 +94,11 @@ class TooManyRequestsException extends HttpException
         parent::__construct($message, 429);
     }
 }
+
+class MethodNotAllowedException extends HttpException
+{
+    public function __construct(string $message = 'Method not allowed')
+    {
+        parent::__construct($message, 405);
+    }
+}

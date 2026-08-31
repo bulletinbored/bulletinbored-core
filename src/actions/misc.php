@@ -20,14 +20,10 @@ function handle_misc_action(string $action, string $method): \Bulletin\Response|
 function handle_markdown_preview(): \Bulletin\Response|bool
 {
     if (!csrf_validate_request()) {
-        http_response_code(403);
-        echo '<p class="text-danger">CSRF token invalid</p>';
-        return true;
+        return \Bulletin\Response::html('<p class="text-danger">CSRF token invalid</p>', 403);
     }
     $content = $_POST['content'] ?? '';
-    header('Content-Type: text/html; charset=utf-8');
-    echo bb_render_content(validate_input($content));
-    return true;
+    return \Bulletin\Response::html(bb_render_content(validate_input($content)));
 }
 
 /**
@@ -44,7 +40,5 @@ function handle_mention_users(): \Bulletin\Response|bool
         $stmt->execute([$q . '%']);
         $users = array_map(fn($r) => ['username' => $r['username']], $stmt->fetchAll());
     }
-    header('Content-Type: application/json');
-    echo json_encode(['users' => $users]);
-    return true;
+    return \Bulletin\Response::json(['users' => $users]);
 }

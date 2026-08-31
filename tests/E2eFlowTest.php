@@ -264,7 +264,7 @@ function test_e2e_migration_plugin_paths(): Test
 
     $all = $migrator->getAllMigrations();
     $t->assertEquals('Plugin migration is discovered', 1, count($all));
-    $t->assertEquals('Plugin migration has correct name', '20260829_test_plugin', $all[0]['name'] ?? '');
+    $t->assertEquals('Plugin migration has correct name', 'testplugin:20260829_test_plugin', $all[0]['name'] ?? '');
     $t->assertEquals('Plugin migration source is plugin folder', 'testplugin', $all[0]['source'] ?? '');
 
     // Test: addPluginPaths scans plugin directories

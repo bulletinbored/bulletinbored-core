@@ -5,10 +5,21 @@
  *
  * Creates the initial bulletinbored database schema.
  * This migration is idempotent — all CREATE statements use IF NOT EXISTS.
+ *
+ * Migration contract:
+ *   - up(PDO $pdo): apply the schema change
+ *   - down(PDO $pdo): reverse the schema change (if reversible === false, down is skipped)
+ *   - irreversible(): return true to mark this as a one-way migration
  */
-
 class InitialSchema
 {
+    /**
+     * This migration is reversible — down() drops all tables.
+     */
+    public function irreversible(): bool
+    {
+        return false;
+    }
     public function up(PDO $pdo): void
     {
         $driver = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
@@ -311,11 +322,27 @@ class InitialSchema
 
     private function seedDefaults(PDO $pdo): void
     {
-        // Default roles
+        // Default roles — permissions use "resource.action" notation.
+        // Ownership is expressed via AuthZ::canOnOwned() which checks for
+        // "resource.action_own" when the user is the resource owner.
         $roles = [
-            ['admin', json_encode(['can_approve_threads', 'can_delete_threads', 'can_delete_posts', 'can_lock_threads', 'can_sticky_threads', 'can_edit_posts', 'can_edit_threads', 'can_ban_users', 'can_manage_roles', 'can_move_threads', 'can_split_threads', 'can_merge_threads', 'can_copy_threads'])],
-            ['moderator', json_encode(['can_approve_threads', 'can_delete_threads', 'can_delete_posts', 'can_lock_threads', 'can_sticky_threads', 'can_edit_posts', 'can_edit_threads', 'can_move_threads', 'can_split_threads', 'can_merge_threads', 'can_copy_threads'])],
-            ['user', json_encode(['can_create_threads', 'can_create_posts', 'can_edit_own_posts', 'can_delete_own_posts'])],
+            ['admin', json_encode([
+                'admin.access',
+                'threads.approve', 'threads.delete', 'threads.edit', 'threads.lock',
+                'threads.sticky', 'threads.move', 'threads.split', 'threads.merge', 'threads.copy',
+                'posts.delete', 'posts.edit',
+                'users.ban', 'users.create', 'users.delete', 'users.edit',
+                'roles.manage', 'categories.manage', 'settings.manage',
+                'plugins.manage', 'themes.manage', 'langs.manage',
+            ])],
+            ['moderator', json_encode([
+                'threads.approve', 'threads.delete', 'threads.edit', 'threads.lock',
+                'threads.sticky', 'threads.move', 'threads.split', 'threads.merge', 'threads.copy',
+                'posts.delete', 'posts.edit',
+            ])],
+            ['user', json_encode([
+                'threads.create', 'posts.create', 'posts.edit_own', 'posts.delete_own',
+            ])],
         ];
 
         $driver = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);

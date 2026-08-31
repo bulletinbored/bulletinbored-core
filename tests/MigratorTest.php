@@ -36,7 +36,7 @@ function test_migrator_discovers_files(): Test
 
     // Check that initial schema is found
     $names = array_column($files, 'name');
-    $t->assertContains('Initial schema migration found', '20260829_initial_schema', $names);
+    $t->assertContains('Initial schema migration found', 'core:20260829_initial_schema', $names);
 
     return $t;
 }

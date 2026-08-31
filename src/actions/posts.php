@@ -37,19 +37,13 @@ function handle_upload_image(): \Bulletin\Response|bool
 {
     global $pdo;
     if (!is_logged_in()) {
-        header('Content-Type: application/json');
-        echo json_encode(['ok' => false, 'error' => 'Login required']);
-        return true;
+        return \Bulletin\Response::json(['ok' => false, 'error' => 'Login required'], 401);
     }
     if (!csrf_validate_request()) {
-        header('Content-Type: application/json');
-        echo json_encode(['ok' => false, 'error' => 'CSRF token invalid']);
-        return true;
+        return \Bulletin\Response::json(['ok' => false, 'error' => 'CSRF token invalid'], 403);
     }
     if (empty($_FILES['image']['tmp_name'])) {
-        header('Content-Type: application/json');
-        echo json_encode(['ok' => false, 'error' => 'No file uploaded']);
-        return true;
+        return \Bulletin\Response::json(['ok' => false, 'error' => 'No file uploaded'], 400);
     }
 
     $allowed = [
@@ -61,9 +55,7 @@ function handle_upload_image(): \Bulletin\Response|bool
     $maxSize = $GLOBALS['config']['image_max_size'] ?? 5 * 1024 * 1024;
     $info = validate_uploaded_file($_FILES['image']['tmp_name'], $_FILES['image']['name'] ?? '', $allowed, $maxSize);
     if ($info === null) {
-        header('Content-Type: application/json');
-        echo json_encode(['ok' => false, 'error' => 'Invalid image']);
-        return true;
+        return \Bulletin\Response::json(['ok' => false, 'error' => 'Invalid image'], 400);
     }
 
     $uploadDir = __DIR__ . '/../../uploads';
@@ -72,9 +64,7 @@ function handle_upload_image(): \Bulletin\Response|bool
     }
     $dest = $uploadDir . '/' . $info['safe_name'];
     if (!move_uploaded_file($_FILES['image']['tmp_name'], $dest)) {
-        header('Content-Type: application/json');
-        echo json_encode(['ok' => false, 'error' => 'Move failed']);
-        return true;
+        return \Bulletin\Response::json(['ok' => false, 'error' => 'Move failed'], 500);
     }
 
     $stmt = $pdo->prepare("INSERT INTO uploads (user_id, filename, original_name, size, mime_type) VALUES (?, ?, ?, ?, ?)");
@@ -87,9 +77,7 @@ function handle_upload_image(): \Bulletin\Response|bool
     ]);
 
     $url = base_url() . '/uploads/' . $info['safe_name'];
-    header('Content-Type: application/json');
-    echo json_encode(['ok' => true, 'url' => $url, 'markdown' => '![](' . $url . ')']);
-    return true;
+    return \Bulletin\Response::json(['ok' => true, 'url' => $url, 'markdown' => '![](' . $url . ')']);
 }
 
 function handle_thread_view(): \Bulletin\Response|bool
@@ -124,7 +112,7 @@ function handle_thread_view(): \Bulletin\Response|bool
                 return true;
             }
         }
-        die('Thread not found');
+        throw new \Bulletin\NotFoundException('Thread not found');
     }
 
     if (isset($pluginManager)) {
@@ -188,7 +176,7 @@ function handle_thread_view(): \Bulletin\Response|bool
 
 function handle_new_thread(string $method): \Bulletin\Response|bool
 {
-    global $pdo, $config, $pluginManager;
+    global $pdo, $config, $pluginManager, $authz;
 
     if (!is_logged_in()) {
         return redirect(url('login')) ?? true;
@@ -214,21 +202,16 @@ function handle_new_thread(string $method): \Bulletin\Response|bool
         $catStmt = $pdo->prepare("SELECT allowed_roles FROM categories WHERE id = ?");
         $catStmt->execute([$categoryId]);
         $allowedRoles = $catStmt->fetchColumn();
-        if ($allowedRoles && $allowedRoles !== 'all' && !is_admin()) {
-            if ($allowedRoles === 'moderator' && !in_array($_SESSION['user_role'] ?? 'user', ['admin', 'moderator'], true)) {
-                $_SESSION['new_thread_error'] = t('not_authorized_category');
-                include __DIR__ . '/../../views/new_thread.php';
-                return true;
-            } elseif ($allowedRoles === 'admin' && ($_SESSION['user_role'] ?? 'user') !== 'admin') {
-                $_SESSION['new_thread_error'] = t('not_authorized_category');
-                include __DIR__ . '/../../views/new_thread.php';
-                return true;
+        $userId = (int)$_SESSION['user_id'];
+        if ($allowedRoles && $allowedRoles !== 'all' && !$authz->can($userId, 'admin.access')) {
+            if ($allowedRoles === 'moderator' && !$authz->can($userId, 'moderation.manage')) {
+                throw new \Bulletin\ForbiddenException(t('not_authorized_category'));
+            } elseif ($allowedRoles === 'admin' && !$authz->hasRole($userId, 'admin')) {
+                throw new \Bulletin\ForbiddenException(t('not_authorized_category'));
             } else {
                 $allowed = json_decode($allowedRoles, true);
                 if ($allowed && is_array($allowed) && !in_array($_SESSION['user_role'] ?? 'user', $allowed)) {
-                    $_SESSION['new_thread_error'] = t('not_authorized_category');
-                    include __DIR__ . '/../../views/new_thread.php';
-                    return true;
+                    throw new \Bulletin\ForbiddenException(t('not_authorized_category'));
                 }
             }
         }
@@ -283,7 +266,7 @@ function handle_new_thread(string $method): \Bulletin\Response|bool
 
 function handle_reply_post(): \Bulletin\Response|bool
 {
-    global $pdo, $pluginManager;
+    global $pdo, $pluginManager, $authz;
 
     if (!is_logged_in()) {
         return redirect(url('login')) ?? true;
@@ -313,12 +296,10 @@ function handle_reply_post(): \Bulletin\Response|bool
     $thread = $threadStmt->fetch();
 
     if (!$thread) {
-        http_response_code(404);
-        echo 'Thread not found';
-        return true;
+        throw new \Bulletin\NotFoundException('Thread not found');
     }
 
-    if ($thread['status'] === 'locked' && !is_admin()) {
+    if ($thread['status'] === 'locked' && !$authz->can((int)$_SESSION['user_id'], 'threads.lock')) {
         $_SESSION['reply_error'] = 'Thread is locked';
         return redirect(url('thread', ['id' => $threadId]));
     }
@@ -356,10 +337,10 @@ function handle_reply_post(): \Bulletin\Response|bool
 
 function handle_edit_post(string $method): \Bulletin\Response|bool
 {
-    global $pdo, $pluginManager;
+    global $pdo, $pluginManager, $authz;
 
     if (!is_logged_in()) {
-        die('Login required');
+        return redirect(url('login')) ?? true;
     }
 
     $postId = (int)($_POST['post_id'] ?? $_GET['id'] ?? 0);
@@ -375,15 +356,16 @@ function handle_edit_post(string $method): \Bulletin\Response|bool
         return redirect(url('home'));
     }
 
-    if ($post['user_id'] !== $_SESSION['user_id'] && !is_admin()) {
-        die('Not authorized');
+    $userId = (int)$_SESSION['user_id'];
+    if (!$authz->canOnOwned($userId, 'posts.edit', (int)$post['user_id'])) {
+        throw new \Bulletin\ForbiddenException('Not authorized');
     }
 
     $editThreadTitle = false;
 
     if ($method === 'POST') {
         if (!csrf_validate_request()) {
-            die('CSRF token invalid');
+            throw new \Bulletin\ForbiddenException('CSRF token invalid');
         }
 
         $content = validate_input($_POST['content'] ?? '');
@@ -421,10 +403,10 @@ function handle_edit_post(string $method): \Bulletin\Response|bool
 
 function handle_edit_thread(string $method): \Bulletin\Response|bool
 {
-    global $pdo, $pluginManager;
+    global $pdo, $pluginManager, $authz;
 
     if (!is_logged_in()) {
-        die('Login required');
+        return redirect(url('login')) ?? true;
     }
 
     $threadId = (int)($_GET['id'] ?? 0);
@@ -440,13 +422,14 @@ function handle_edit_thread(string $method): \Bulletin\Response|bool
         return redirect(url('home'));
     }
 
-    if ($thread['user_id'] !== $_SESSION['user_id'] && !is_admin()) {
-        die('Not authorized');
+    $userId = (int)$_SESSION['user_id'];
+    if (!$authz->canOnOwned($userId, 'threads.edit', (int)$thread['user_id'])) {
+        throw new \Bulletin\ForbiddenException('Not authorized');
     }
 
     if ($method === 'POST') {
         if (!csrf_validate_request()) {
-            die('CSRF token invalid');
+            throw new \Bulletin\ForbiddenException('CSRF token invalid');
         }
 
         $content = validate_input($_POST['content'] ?? '');
@@ -491,14 +474,14 @@ function handle_edit_thread(string $method): \Bulletin\Response|bool
 
 function handle_delete_post(): \Bulletin\Response|bool
 {
-    global $pdo, $pluginManager;
+    global $pdo, $pluginManager, $authz;
 
     if (!is_logged_in()) {
-        die('Login required');
+        return redirect(url('login')) ?? true;
     }
 
     if (!csrf_validate_request()) {
-        die('CSRF token invalid');
+        throw new \Bulletin\ForbiddenException('CSRF token invalid');
     }
 
     $postId = (int)($_GET['id'] ?? 0);
@@ -514,14 +497,15 @@ function handle_delete_post(): \Bulletin\Response|bool
         return redirect(url('home'));
     }
 
-    if ($post['user_id'] !== $_SESSION['user_id'] && !is_admin()) {
-        die('Not authorized');
+    $userId = (int)$_SESSION['user_id'];
+    if (!$authz->canOnOwned($userId, 'posts.delete', (int)$post['user_id'])) {
+        throw new \Bulletin\ForbiddenException('Not authorized');
     }
 
     $threadId = $post['thread_id'];
 
     if (isset($pluginManager) && $pluginManager->checkHook('post_delete_block', $post)) {
-        die(t('post_deletion_blocked'));
+        throw new \Bulletin\ForbiddenException(t('post_deletion_blocked'));
     }
 
     if (isset($pluginManager)) {
@@ -545,19 +529,18 @@ function handle_delete_post(): \Bulletin\Response|bool
     }
 
     return redirect(url('thread', ['id' => $threadId]));
-    return true;
 }
 
 function handle_delete_thread(): \Bulletin\Response|bool
 {
-    global $pdo, $pluginManager;
+    global $pdo, $pluginManager, $authz;
 
     if (!is_logged_in()) {
-        die('Login required');
+        return redirect(url('login')) ?? true;
     }
 
     if (!csrf_validate_request()) {
-        die('CSRF token invalid');
+        throw new \Bulletin\ForbiddenException('CSRF token invalid');
     }
 
     $threadId = (int)($_GET['id'] ?? 0);
@@ -573,12 +556,13 @@ function handle_delete_thread(): \Bulletin\Response|bool
         return redirect(url('home'));
     }
 
-    if ($thread['user_id'] !== $_SESSION['user_id'] && !is_admin()) {
-        die('Not authorized');
+    $userId = (int)$_SESSION['user_id'];
+    if (!$authz->canOnOwned($userId, 'threads.delete', (int)$thread['user_id'])) {
+        throw new \Bulletin\ForbiddenException('Not authorized');
     }
 
     if (isset($pluginManager) && $pluginManager->checkHook('thread_delete_block', $thread)) {
-        die(t('thread_deletion_blocked'));
+        throw new \Bulletin\ForbiddenException(t('thread_deletion_blocked'));
     }
 
     if (isset($pluginManager)) {

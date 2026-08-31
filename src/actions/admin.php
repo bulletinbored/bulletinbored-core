@@ -2,8 +2,6 @@
 
 function handle_admin_action(string $action, string $method): \Bulletin\Response|bool
 {
-    // Only handle admin-prefixed actions and a few legacy moderation actions.
-    // Return false for anything else so the router can try the next handler.
     $adminActions = [
         'admin', 'admin_settings', 'admin_smtp', 'admin_moderation', 'admin_roles', 'admin_roles_action',
         'admin_users', 'admin_user_edit', 'admin_create_user',
@@ -15,10 +13,6 @@ function handle_admin_action(string $action, string $method): \Bulletin\Response
     ];
     if (!in_array($action, $adminActions, true)) {
         return false;
-    }
-
-    if (!is_admin()) {
-        die('Admin required');
     }
 
     switch ($action) {
@@ -141,9 +135,7 @@ function handle_admin_settings_post(): ?string
 
     if (!csrf_validate_request()) {
         $_SESSION['settings_error'] = 'CSRF token invalid';
-        while (ob_get_level()) { ob_end_clean(); }
-        header('Location: ' . url('admin_settings'));
-        exit;
+        return redirect(url('admin_settings'));
     }
 
     $siteName = trim($_POST['site_name'] ?? $config['site_name']);
@@ -195,20 +187,11 @@ function handle_admin_upload_site_image(): \Bulletin\Response|bool
 {
     global $config;
 
-    if (!is_admin()) {
-        header('Content-Type: application/json');
-        echo json_encode(['ok' => false, 'error' => 'Admin required']);
-        exit;
-    }
     if (!csrf_validate_request()) {
-        header('Content-Type: application/json');
-        echo json_encode(['ok' => false, 'error' => 'CSRF token invalid']);
-        exit;
+        return \Bulletin\Response::json(['ok' => false, 'error' => 'CSRF token invalid'], 403);
     }
     if (empty($_FILES['site_image']['tmp_name'])) {
-        header('Content-Type: application/json');
-        echo json_encode(['ok' => false, 'error' => 'No file uploaded']);
-        exit;
+        return \Bulletin\Response::json(['ok' => false, 'error' => 'No file uploaded'], 400);
     }
 
     $allowed = [
@@ -223,9 +206,7 @@ function handle_admin_upload_site_image(): \Bulletin\Response|bool
     $maxSize = 2 * 1024 * 1024;
     $info = validate_upload($_FILES['site_image']['tmp_name'], $_FILES['site_image']['name'] ?? '', $allowed, $maxSize);
     if ($info === null) {
-        header('Content-Type: application/json');
-        echo json_encode(['ok' => false, 'error' => 'Invalid image. Allowed: JPG, PNG, GIF, WebP, SVG, ICO. Max 2MB.']);
-        exit;
+        return \Bulletin\Response::json(['ok' => false, 'error' => 'Invalid image. Allowed: JPG, PNG, GIF, WebP, SVG, ICO. Max 2MB.'], 400);
     }
 
     $uploadDir = __DIR__ . '/../../uploads';
@@ -234,31 +215,17 @@ function handle_admin_upload_site_image(): \Bulletin\Response|bool
     }
     $dest = $uploadDir . '/' . $info['safe_name'];
     if (!move_uploaded_file($_FILES['site_image']['tmp_name'], $dest)) {
-        header('Content-Type: application/json');
-        echo json_encode(['ok' => false, 'error' => 'Failed to save file']);
-        exit;
+        return \Bulletin\Response::json(['ok' => false, 'error' => 'Failed to save file'], 500);
     }
 
     $url = base_url() . '/uploads/' . $info['safe_name'];
-    header('Content-Type: application/json');
-    echo json_encode(['ok' => true, 'url' => $url, 'filename' => $info['safe_name'], 'csrf_token' => generate_csrf_token()]);
-    exit;
+    return \Bulletin\Response::json(['ok' => true, 'url' => $url, 'filename' => $info['safe_name'], 'csrf_token' => generate_csrf_token()]);
 }
 
 function handle_admin_get_images(): \Bulletin\Response|bool
 {
-    global $pdo;
-
-    if (!is_admin()) {
-        header('Content-Type: application/json');
-        echo json_encode(['ok' => false, 'error' => 'Admin required']);
-        exit;
-    }
-
     $images = get_uploaded_images();
-    header('Content-Type: application/json');
-    echo json_encode(['ok' => true, 'images' => $images]);
-    exit;
+    return \Bulletin\Response::json(['ok' => true, 'images' => $images]);
 }
 
 function handle_admin_smtp_get(): \Bulletin\Response|bool
@@ -330,14 +297,14 @@ function handle_moderate_post(): \Bulletin\Response|bool
     global $pdo;
 
     if (!csrf_validate_request()) {
-        die('CSRF token invalid');
+        throw new \Bulletin\ForbiddenException('CSRF token invalid');
     }
 
     $threadId = (int)($_POST['id'] ?? 0);
     $action = $_POST['do'] ?? '';
 
     if ($threadId <= 0) {
-        die('Invalid thread ID');
+        throw new \Bulletin\NotFoundException('Invalid thread ID');
     }
 
     if ($action === 'approve') {
@@ -360,19 +327,19 @@ function handle_moderate_post(): \Bulletin\Response|bool
 
 function handle_frontend_moderate_post(): \Bulletin\Response|bool
 {
-    global $pdo;
+    global $pdo, $authz;
 
     if (!csrf_validate_request()) {
-        die('CSRF token invalid');
+        throw new \Bulletin\ForbiddenException('CSRF token invalid');
     }
     $threadId = (int)($_POST['id'] ?? 0);
     $modAction = $_POST['do'] ?? '';
     if ($threadId <= 0) {
-        die('Invalid thread ID');
+        throw new \Bulletin\NotFoundException('Invalid thread ID');
     }
-    $userRole = $_SESSION['user_role'] ?? 'user';
-    if ($userRole !== 'admin' && $userRole !== 'moderator') {
-        die('Not authorized');
+    $userId = (int)$_SESSION['user_id'];
+    if (!$authz->can($userId, 'moderation.manage')) {
+        throw new \Bulletin\ForbiddenException('Not authorized');
     }
     if ($modAction === 'lock') {
         $pdo->prepare("UPDATE threads SET status = 'locked' WHERE id = ?")->execute([$threadId]);
@@ -434,10 +401,10 @@ function handle_frontend_moderate_post(): \Bulletin\Response|bool
 
 function handle_split_thread_post(): \Bulletin\Response|bool
 {
-    global $pdo;
+    global $pdo, $authz;
 
     if (!csrf_validate_request()) {
-        die('CSRF token invalid');
+        throw new \Bulletin\ForbiddenException('CSRF token invalid');
     }
     $threadId = (int)($_POST['thread_id'] ?? 0);
     $postIds = $_POST['post_ids'] ?? '';
@@ -446,17 +413,17 @@ function handle_split_thread_post(): \Bulletin\Response|bool
         $postIds = array_filter(array_map('trim', explode(',', (string)$postIds)));
     }
     if ($threadId <= 0 || empty($postIds) || $newTitle === '') {
-        die('Invalid input');
+        throw new \Bulletin\ValidationException(['input' => 'Invalid input']);
     }
-    $userRole = $_SESSION['user_role'] ?? 'user';
-    if ($userRole !== 'admin' && $userRole !== 'moderator') {
-        die('Not authorized');
+    $userId = (int)$_SESSION['user_id'];
+    if (!$authz->can($userId, 'threads.split')) {
+        throw new \Bulletin\ForbiddenException('Not authorized');
     }
     $srcThreadStmt = $pdo->prepare("SELECT * FROM threads WHERE id = ?");
     $srcThreadStmt->execute([$threadId]);
     $srcThread = $srcThreadStmt->fetch();
     if (!$srcThread) {
-        die('Thread not found');
+        throw new \Bulletin\NotFoundException('Thread not found');
     }
 
     $intIds = array_map('intval', $postIds);
@@ -467,7 +434,7 @@ function handle_split_thread_post(): \Bulletin\Response|bool
     $selStmt->execute(array_merge([$threadId], $intIds));
     $selPosts = $selStmt->fetchAll();
     if (empty($selPosts)) {
-        die('No valid posts selected');
+        throw new \Bulletin\ValidationException(['posts' => 'No valid posts selected']);
     }
 
     $firstPost = $selPosts[0];
@@ -500,29 +467,29 @@ function handle_split_thread_post(): \Bulletin\Response|bool
 
 function handle_merge_thread_post(): \Bulletin\Response|bool
 {
-    global $pdo;
+    global $pdo, $authz;
 
     if (!csrf_validate_request()) {
-        die('CSRF token invalid');
+        throw new \Bulletin\ForbiddenException('CSRF token invalid');
     }
     $threadId = (int)($_POST['thread_id'] ?? 0);
     $targetTitle = trim($_POST['target_title'] ?? '');
     if ($threadId <= 0 || $targetTitle === '') {
-        die('Invalid input');
+        throw new \Bulletin\ValidationException(['input' => 'Invalid input']);
     }
-    $userRole = $_SESSION['user_role'] ?? 'user';
-    if ($userRole !== 'admin' && $userRole !== 'moderator') {
-        die('Not authorized');
+    $userId = (int)$_SESSION['user_id'];
+    if (!$authz->can($userId, 'threads.merge')) {
+        throw new \Bulletin\ForbiddenException('Not authorized');
     }
     $targetThreadStmt = $pdo->prepare("SELECT * FROM threads WHERE title LIKE ? LIMIT 1");
     $targetThreadStmt->execute(["%$targetTitle%"]);
     $targetThread = $targetThreadStmt->fetch();
     if (!$targetThread) {
-        die('Target thread not found');
+        throw new \Bulletin\NotFoundException('Target thread not found');
     }
     $targetThreadId = (int)$targetThread['id'];
     if ($threadId === $targetThreadId) {
-        die('Cannot merge a thread into itself');
+        throw new \Bulletin\ConflictException('Cannot merge a thread into itself');
     }
     $pdo->prepare("UPDATE posts SET thread_id = ? WHERE thread_id = ?")->execute([$targetThreadId, $threadId]);
     $pdo->prepare("DELETE FROM threads WHERE id = ?")->execute([$threadId]);
@@ -544,7 +511,7 @@ function handle_admin_roles_action_post(): \Bulletin\Response|bool
     global $pdo;
 
     if (!csrf_validate_request()) {
-        die('CSRF token invalid');
+        throw new \Bulletin\ForbiddenException('CSRF token invalid');
     }
     $roleAction = $_POST['do'] ?? '';
     if ($roleAction === 'create') {
@@ -587,9 +554,6 @@ function handle_admin_user_edit(string $method): \Bulletin\Response|bool
 {
     global $pdo;
 
-    if (!is_admin()) {
-        die('Admin required');
-    }
     $editUserId = (int)($_GET['id'] ?? 0);
     if ($editUserId <= 0) {
         return redirect(url('admin_users'));
@@ -602,7 +566,7 @@ function handle_admin_user_edit(string $method): \Bulletin\Response|bool
     }
     if ($method === 'POST') {
         if (!csrf_validate_request()) {
-            die('CSRF token invalid');
+            throw new \Bulletin\ForbiddenException('CSRF token invalid');
         }
         $newUsername = trim($_POST['username'] ?? '');
         $newEmail = trim($_POST['email'] ?? '');
@@ -624,7 +588,7 @@ function handle_admin_create_user_post(): \Bulletin\Response|bool
     global $pdo;
 
     if (!csrf_validate_request()) {
-        die('CSRF token invalid');
+        throw new \Bulletin\ForbiddenException('CSRF token invalid');
     }
 
     $username = validate_input($_POST['username'] ?? '');
@@ -635,18 +599,18 @@ function handle_admin_create_user_post(): \Bulletin\Response|bool
     $emailVerified = isset($_POST['email_verified']) ? 1 : 0;
 
     if ($username === '' || $password === '') {
-        die('Username and password are required');
+        throw new \Bulletin\ValidationException(['input' => 'Username and password are required']);
     }
 
     if (strlen($password) < 12) {
-        die('Password must be at least 12 characters.');
+        throw new \Bulletin\ValidationException(['password' => 'Password must be at least 12 characters.']);
     }
 
     $existsStmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE username = ?");
     $existsStmt->execute([$username]);
     $exists = $existsStmt->fetchColumn();
     if ($exists > 0) {
-        die('Username already taken');
+        throw new \Bulletin\ConflictException('Username already taken');
     }
 
     if ($email === '') {
@@ -688,12 +652,9 @@ function handle_admin_categories(string $method): \Bulletin\Response|bool
 {
     global $pdo;
 
-    if (!is_admin()) {
-        die('Admin required');
-    }
     if ($method === 'POST') {
         if (!csrf_validate_request()) {
-            die('CSRF token invalid');
+            throw new \Bulletin\ForbiddenException('CSRF token invalid');
         }
         $allowedRoles = $_POST['allowed_roles'] ?? 'all';
         $allowedRoles = in_array($allowedRoles, ['all', 'admin', 'moderator'], true) ? $allowedRoles : 'all';
@@ -724,7 +685,7 @@ function handle_delete_category_post(): \Bulletin\Response|bool
     global $pdo;
 
     if (!csrf_validate_request()) {
-        die('CSRF token invalid');
+        throw new \Bulletin\ForbiddenException('CSRF token invalid');
     }
     $catId = (int)($_GET['id'] ?? 0);
     if ($catId > 0) {
@@ -739,16 +700,12 @@ function handle_update_category_order_post(): \Bulletin\Response|bool
     global $pdo;
 
     if (!csrf_validate_request()) {
-        http_response_code(403);
-        echo json_encode(['success' => false, 'message' => 'CSRF token invalid']);
-        exit;
+        return \Bulletin\Response::json(['success' => false, 'message' => 'CSRF token invalid'], 403);
     }
     $orderRaw = $_POST['order'] ?? '';
     $order = is_string($orderRaw) ? json_decode($orderRaw, true) : $orderRaw;
     if (!is_array($order)) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'message' => 'Invalid order data']);
-        exit;
+        return \Bulletin\Response::json(['success' => false, 'message' => 'Invalid order data'], 400);
     }
     $position = 1;
     $stmt = $pdo->prepare("UPDATE categories SET position = ? WHERE id = ?");
@@ -759,9 +716,7 @@ function handle_update_category_order_post(): \Bulletin\Response|bool
             $position++;
         }
     }
-    echo json_encode(['success' => true]);
-    exit;
-    return true;
+    return \Bulletin\Response::json(['success' => true]);
 }
 
 // ============================================================================
@@ -771,10 +726,6 @@ function handle_update_category_order_post(): \Bulletin\Response|bool
 function handle_admin_langs(string $method)
 {
     global $config, $pdo;
-
-    if (!is_admin()) {
-        die('Admin required');
-    }
 
     $langMetaPath = __DIR__ . '/../../data/lang-meta.json';
     $langMirrorBase = !empty($config['update_mirror']) ? rtrim($config['update_mirror'], '/') : 'https://extend.bulletinbored.net';
@@ -1261,10 +1212,6 @@ function handle_admin_catalog(string $method): \Bulletin\Response|bool
 {
     global $config, $updateManager;
 
-    if (!is_admin()) {
-        die('Admin required');
-    }
-
     $adminCatalogError = '';
     $adminCatalogSuccess = '';
     if ($method === 'POST' && isset($_POST['csrf_token'])) {
@@ -1504,7 +1451,7 @@ function handle_delete_user_post(): \Bulletin\Response|bool
     global $pdo;
 
     if (!csrf_validate_request()) {
-        die('CSRF token invalid');
+        throw new \Bulletin\ForbiddenException('CSRF token invalid');
     }
     $userId = (int)($_POST['id'] ?? $_GET['id'] ?? 0);
     if ($userId > 0) {
@@ -1526,7 +1473,7 @@ function handle_unban_user_post(): \Bulletin\Response|bool
     global $pdo;
 
     if (!csrf_validate_request()) {
-        die('CSRF token invalid');
+        throw new \Bulletin\ForbiddenException('CSRF token invalid');
     }
     $userId = (int)($_POST['id'] ?? $_GET['id'] ?? 0);
     if ($userId > 0) {
@@ -1541,7 +1488,7 @@ function handle_ban_user_post(): \Bulletin\Response|bool
     global $pdo;
 
     if (!csrf_validate_request()) {
-        die('CSRF token invalid');
+        throw new \Bulletin\ForbiddenException('CSRF token invalid');
     }
     $userId = (int)($_POST['id'] ?? $_GET['id'] ?? 0);
     if ($userId > 0) {
@@ -1556,7 +1503,7 @@ function handle_suspend_user_post(): \Bulletin\Response|bool
     global $pdo;
 
     if (!csrf_validate_request()) {
-        die('CSRF token invalid');
+        throw new \Bulletin\ForbiddenException('CSRF token invalid');
     }
     $userId = (int)($_POST['id'] ?? $_GET['id'] ?? 0);
     $days = max(1, (int)($_POST['days'] ?? 1));
