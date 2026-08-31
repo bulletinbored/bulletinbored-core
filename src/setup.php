@@ -190,7 +190,13 @@ if ($dbDriver === 'mysql') {
             error_log('bulletinbored: No admin_pass in config. Generated temporary password: ' . $adminPassword . ' — CHANGE THIS IMMEDIATELY.');
         }
         $pdo->exec("INSERT INTO users (username, password, role) VALUES ('admin', '" . password_hash($adminPassword, PASSWORD_DEFAULT) . "', 'admin')");
-        $pdo->exec("INSERT INTO categories (name, description, position) SELECT 'General', 'General discussion', 1 FROM dual WHERE NOT EXISTS (SELECT 1 FROM categories WHERE name = 'General')");
+
+        // INSERT ... SELECT ... FROM dual is MySQL-only. Use driver-aware syntax.
+        if ($dbDriver === 'mysql') {
+            $pdo->exec("INSERT INTO categories (name, description, position) SELECT 'General', 'General discussion', 1 FROM dual WHERE NOT EXISTS (SELECT 1 FROM categories WHERE name = 'General')");
+        } else {
+            $pdo->exec("INSERT OR IGNORE INTO categories (name, description, position) VALUES ('General', 'General discussion', 1)");
+        }
     } else {
         // Existing database - just connect
         $pdo = new PDO('sqlite:' . $dbPath);
