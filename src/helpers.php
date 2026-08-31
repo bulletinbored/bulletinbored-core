@@ -675,9 +675,9 @@ function send_email($to, $subject, $body) {
         .btn { display: inline-block; padding: 10px 20px; background: #550296; color: white; text-decoration: none; border-radius: 5px; }
     </style></head><body>
     <div class="container">
-        <div class="header">' . $siteLogoHtml . '<h2 style="margin:0;">' . escape($config['site_name'] ?? 'bulletinbored') . '</h2></div>
+        <div class="header">' . $siteLogoHtml . '<h2 style="margin:0;">' . render_site_name($config['site_name'] ?? 'bulletinbored') . '</h2></div>
         <div class="content">' . $body . '</div>
-        <div class="footer">&copy; ' . date('Y') . ' ' . escape($config['site_name'] ?? 'bulletinbored') . '</div>
+        <div class="footer">&copy; ' . date('Y') . ' ' . render_site_name($config['site_name'] ?? 'bulletinbored') . '</div>
     </div></body></html>';
 
     $envelope = '-f' . ($config['mail_from'] ?? '');
