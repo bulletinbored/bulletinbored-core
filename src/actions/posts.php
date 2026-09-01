@@ -115,6 +115,11 @@ function handle_thread_view(): \Bulletin\Response|bool
         throw new \Bulletin\NotFoundException('Thread not found');
     }
 
+    $threadStatus = $thread['status'] ?? 'visible';
+    if (!can_view_thread($threadStatus)) {
+        throw new \Bulletin\ForbiddenException('Thread not available');
+    }
+
     if (isset($pluginManager)) {
         $thread = $pluginManager->filter('thread_before_view', $thread);
     }
@@ -180,6 +185,11 @@ function handle_new_thread(string $method): \Bulletin\Response|bool
 
     if (!is_logged_in()) {
         return redirect(url('login')) ?? true;
+    }
+
+    $userId = (int)$_SESSION['user_id'];
+    if (!$authz->can($userId, 'threads.create')) {
+        throw new \Bulletin\ForbiddenException('Not authorized to create threads');
     }
 
     if ($method === 'POST') {
@@ -270,6 +280,11 @@ function handle_reply_post(): \Bulletin\Response|bool
 
     if (!is_logged_in()) {
         return redirect(url('login')) ?? true;
+    }
+
+    $userId = (int)$_SESSION['user_id'];
+    if (!$authz->can($userId, 'posts.create')) {
+        throw new \Bulletin\ForbiddenException('Not authorized to create replies');
     }
 
     if (!csrf_validate_request()) {
@@ -583,7 +598,15 @@ function handle_watch(): \Bulletin\Response|bool
 {
     global $pdo;
 
-    $threadId = (int)($_GET['thread_id'] ?? 0);
+    if (!is_logged_in()) {
+        return redirect(url('login')) ?? true;
+    }
+
+    if (!csrf_validate_request()) {
+        return redirect($_SERVER['HTTP_REFERER'] ?? url('home'));
+    }
+
+    $threadId = (int)($_POST['thread_id'] ?? 0);
     if ($threadId > 0 && is_logged_in()) {
         try {
             $pdo->prepare("INSERT OR IGNORE INTO thread_watchers (thread_id, user_id) VALUES (?, ?)")
@@ -604,7 +627,15 @@ function handle_unwatch(): \Bulletin\Response|bool
 {
     global $pdo;
 
-    $threadId = (int)($_GET['thread_id'] ?? 0);
+    if (!is_logged_in()) {
+        return redirect(url('login')) ?? true;
+    }
+
+    if (!csrf_validate_request()) {
+        return redirect($_SERVER['HTTP_REFERER'] ?? url('home'));
+    }
+
+    $threadId = (int)($_POST['thread_id'] ?? 0);
     if ($threadId > 0 && is_logged_in()) {
         try {
             $pdo->prepare("DELETE FROM thread_watchers WHERE thread_id = ? AND user_id = ?")

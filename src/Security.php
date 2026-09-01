@@ -69,6 +69,7 @@ function rate_limit_client_ip(): string
 
 /**
  * File-based rate limiter (no dependencies).
+ * Uses atomic file locking to prevent race conditions under concurrency.
  */
 function rate_limit(string $action, int $max = 10, int $window = 300, ?string $key = null): bool
 {
@@ -84,19 +85,36 @@ function rate_limit(string $action, int $max = 10, int $window = 300, ?string $k
 
     $now = time();
     $hits = [];
-    if (is_file($file)) {
-        $decoded = json_decode(@file_get_contents($file), true);
+
+    $fp = @fopen($file, 'c+');
+    if ($fp === false) {
+        return true;
+    }
+    if (flock($fp, LOCK_EX)) {
+        $content = '';
+        rewind($fp);
+        while (!feof($fp)) {
+            $content .= fread($fp, 8192);
+        }
+        $decoded = json_decode($content, true);
         if (is_array($decoded)) {
             $hits = array_values(array_filter($decoded, fn($ts) => is_int($ts) && ($now - $ts) < $window));
         }
-    }
 
-    if (count($hits) >= $max) {
-        return false;
-    }
+        if (count($hits) >= $max) {
+            flock($fp, LOCK_UN);
+            fclose($fp);
+            return false;
+        }
 
-    $hits[] = $now;
-    @file_put_contents($file, json_encode($hits), LOCK_EX);
+        $hits[] = $now;
+        rewind($fp);
+        ftruncate($fp, 0);
+        fwrite($fp, json_encode($hits));
+        fflush($fp);
+        flock($fp, LOCK_UN);
+    }
+    fclose($fp);
     return true;
 }
 

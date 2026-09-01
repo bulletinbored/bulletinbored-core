@@ -113,7 +113,10 @@ function render_admin_header($title = 'Admin Panel') {
                                 <i class="fas fa-user-circle fa-fw"></i>
                             </label>
                             <div class="dropdown-menu dropdown-menu-end shadow" aria-labelledby="userMenuToggle">
-                                <a class="dropdown-item" href="<?= url('logout') ?>"><i class="fas fa-sign-out-alt fa-sm fa-fw me-2 text-gray-400"></i><?= t('logout') ?></a>
+                                <form method="POST" action="<?= url('logout') ?>">
+                                    <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                                    <button type="submit" class="dropdown-item"><i class="fas fa-sign-out-alt fa-sm fa-fw me-2 text-gray-400"></i><?= t('logout') ?></button>
+                                </form>
                             </div>
                         </li>
                     </ul>

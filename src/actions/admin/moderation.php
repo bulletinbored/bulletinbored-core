@@ -150,24 +150,39 @@ function handle_split_thread_post(): \Bulletin\Response|bool
     }
 
     $firstPost = $selPosts[0];
-    $ins = $pdo->prepare("INSERT INTO threads (category_id, user_id, title, content, status, created_at) VALUES (?, ?, ?, ?, 'visible', ?)");
-    $ins->execute([$srcThread['category_id'], $firstPost['user_id'], $newTitle, $firstPost['content'], $firstPost['created_at']]);
-    $newThreadId = (int)$pdo->lastInsertId();
 
-    $replyIds = array_slice($intIds, 1);
-    if (!empty($replyIds)) {
-        $replyPlaceholders = implode(',', array_fill(0, count($replyIds), '?'));
-        $postIns = $pdo->prepare("INSERT INTO posts (thread_id, user_id, content, status, created_at) SELECT ?, user_id, content, status, created_at FROM posts WHERE thread_id = ? AND id IN ($replyPlaceholders)");
-        $postIns->execute(array_merge([$newThreadId, $threadId], $replyIds));
+    try {
+        $pdo->beginTransaction();
+
+        $ins = $pdo->prepare("INSERT INTO threads (category_id, user_id, title, content, status, created_at) VALUES (?, ?, ?, ?, 'visible', ?)");
+        $ins->execute([$srcThread['category_id'], $firstPost['user_id'], $newTitle, $firstPost['content'], $firstPost['created_at']]);
+        $newThreadId = (int)$pdo->lastInsertId();
+
+        $replyIds = array_slice($intIds, 1);
+        if (!empty($replyIds)) {
+            $replyPlaceholders = implode(',', array_fill(0, count($replyIds), '?'));
+            $postIns = $pdo->prepare("INSERT INTO posts (thread_id, user_id, content, status, created_at) SELECT ?, user_id, content, status, created_at FROM posts WHERE thread_id = ? AND id IN ($replyPlaceholders)");
+            $postIns->execute(array_merge([$newThreadId, $threadId], $replyIds));
+        }
+
+        $delSql = "DELETE FROM posts WHERE thread_id = ? AND id IN ($placeholders)";
+        $pdo->prepare($delSql)->execute(array_merge([$threadId], $intIds));
+
+        $countStmt = $pdo->prepare("SELECT COUNT(*) FROM posts WHERE thread_id = ? AND status = 'visible'");
+        $countStmt->execute([$threadId]);
+        if (empty($countStmt->fetchColumn())) {
+            $pdo->prepare("DELETE FROM threads WHERE id = ?")->execute([$threadId]);
+        }
+
+        $pdo->commit();
+    } catch (\Throwable $e) {
+        $pdo->rollBack();
+        throw $e;
     }
-
-    $delSql = "DELETE FROM posts WHERE thread_id = ? AND id IN ($placeholders)";
-    $pdo->prepare($delSql)->execute(array_merge([$threadId], $intIds));
 
     $countStmt = $pdo->prepare("SELECT COUNT(*) FROM posts WHERE thread_id = ? AND status = 'visible'");
     $countStmt->execute([$threadId]);
     if (empty($countStmt->fetchColumn())) {
-        $pdo->prepare("DELETE FROM threads WHERE id = ?")->execute([$threadId]);
         return redirect(url('home'));
     }
     return redirect(url('thread', ['id' => $newThreadId, 'slug' => slugify($newTitle)]));
@@ -199,7 +214,16 @@ function handle_merge_thread_post(): \Bulletin\Response|bool
     if ($threadId === $targetThreadId) {
         throw new \Bulletin\ConflictException('Cannot merge a thread into itself');
     }
-    $pdo->prepare("UPDATE posts SET thread_id = ? WHERE thread_id = ?")->execute([$targetThreadId, $threadId]);
-    $pdo->prepare("DELETE FROM threads WHERE id = ?")->execute([$threadId]);
+
+    try {
+        $pdo->beginTransaction();
+        $pdo->prepare("UPDATE posts SET thread_id = ? WHERE thread_id = ?")->execute([$targetThreadId, $threadId]);
+        $pdo->prepare("DELETE FROM threads WHERE id = ?")->execute([$threadId]);
+        $pdo->commit();
+    } catch (\Throwable $e) {
+        $pdo->rollBack();
+        throw $e;
+    }
+
     return redirect(url('thread', ['id' => $targetThreadId, 'slug' => slugify($targetThread['title'] ?? '')]));
 }

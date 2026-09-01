@@ -188,21 +188,28 @@ class ThemeManager
             return ['success' => false, 'message' => 'Invalid ZIP file'];
         }
 
-        $dest = rtrim($this->themesDir, '/') . '/';
-        $ok = extract_zip($zipPath, $dest);
+        $tmpDir = $this->themesDir . '/.install-tmp-' . bin2hex(random_bytes(8));
+        if (!@mkdir($tmpDir, 0755, true)) {
+            $zip->close();
+            @unlink($zipPath);
+            return ['success' => false, 'message' => 'Cannot create temporary directory'];
+        }
+
+        $ok = extract_zip($zipPath, $tmpDir);
         $zip->close();
         @unlink($zipPath);
 
         if (!$ok) {
+            $this->deleteDir($tmpDir);
             return ['success' => false, 'message' => 'Invalid ZIP entries (Zip Slip protection)'];
         }
 
         // Normalise the extracted layout: a theme ZIP may nest files under a
         // single <repo>-<ref>/ folder. Only "un-nest" when there is no
         // style.css (or manifest.json) directly at the target root.
-        if (!file_exists($dest . 'style.css') && !file_exists($dest . 'manifest.json')) {
+        if (!file_exists($tmpDir . '/style.css') && !file_exists($tmpDir . '/manifest.json')) {
             $nested = null;
-            foreach (glob($dest . '*', GLOB_ONLYDIR) as $dir) {
+            foreach (glob($tmpDir . '*', GLOB_ONLYDIR) as $dir) {
                 if (file_exists($dir . '/style.css') || file_exists($dir . '/manifest.json')) {
                     $nested = $dir;
                     break;
@@ -211,7 +218,7 @@ class ThemeManager
             if ($nested !== null && is_dir($nested)) {
                 foreach (glob($nested . '/*') as $item) {
                     $base = basename($item);
-                    $destItem = $dest . $base;
+                    $destItem = $tmpDir . '/' . $base;
                     if (file_exists($destItem)) {
                         continue;
                     }
@@ -224,19 +231,28 @@ class ThemeManager
         $this->themes = [];
         $this->discover();
 
-        // Optional integrity check: when the theme declares a "files" list in
-        // manifest.json, reject the install if any declared file is missing or
-        // if extra undeclared files are present (potential backdoor). This can
-        // be disabled by the admin via config: theme_verify_files = false.
         if ($this->verifyFilesEnabled()) {
-            $check = $this->verifyInstalledFiles();
+            $check = $this->verifyInstalledFiles($tmpDir);
             if (!$check['success']) {
-                $this->deleteDir(rtrim($this->themesDir, '/'));
-                $this->themes = [];
-                $this->discover();
+                $this->deleteDir($tmpDir);
                 return $check;
             }
         }
+
+        $themeName = $this->detectThemeName($tmpDir);
+        if ($themeName === null) {
+            $this->deleteDir($tmpDir);
+            return ['success' => false, 'message' => 'Cannot detect theme name'];
+        }
+
+        $finalDir = $this->themesDir . '/' . $themeName;
+        if (@rename($tmpDir, $finalDir) === false) {
+            $this->deleteDir($tmpDir);
+            return ['success' => false, 'message' => 'Failed to move theme to final location'];
+        }
+
+        $this->themes = [];
+        $this->discover();
 
         return ['success' => true, 'message' => 'Theme installed'];
     }
@@ -247,15 +263,35 @@ class ThemeManager
         return !isset($config['theme_verify_files']) || $config['theme_verify_files'] !== false;
     }
 
+    private function detectThemeName(string $dir): ?string
+    {
+        if (file_exists($dir . '/style.css')) {
+            return basename($dir);
+        }
+        foreach (glob($dir . '/*', GLOB_ONLYDIR) as $subdir) {
+            if (file_exists($subdir . '/style.css')) {
+                return basename($subdir);
+            }
+        }
+        if (file_exists($dir . '/manifest.json')) {
+            $manifest = json_decode(file_get_contents($dir . '/manifest.json'), true);
+            if (!empty($manifest['name'])) {
+                return strtolower(preg_replace('/[^a-z0-9_-]/', '', str_replace(' ', '-', $manifest['name'])));
+            }
+        }
+        return null;
+    }
+
     /**
      * Verify that every extracted theme folder honours the "files" list in its
      * manifest.json: no declared file missing, no undeclared file present.
      * Themes without a manifest.json or without a "files" key are skipped.
      */
-    private function verifyInstalledFiles(): array
+    private function verifyInstalledFiles(?string $targetDir = null): array
     {
+        $baseDir = $targetDir ?? $this->themesDir;
         $pending = [];
-        foreach (glob($this->themesDir . '/*', GLOB_ONLYDIR) as $dir) {
+        foreach (glob($baseDir . '/*', GLOB_ONLYDIR) as $dir) {
             $manifestFile = $dir . '/manifest.json';
             if (!file_exists($manifestFile)) {
                 continue;

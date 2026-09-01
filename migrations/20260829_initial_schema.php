@@ -67,6 +67,7 @@ class InitialSchema
                 role VARCHAR(50) DEFAULT 'user',
                 avatar VARCHAR(255),
                 status VARCHAR(50) DEFAULT 'active',
+                suspension_time INTEGER DEFAULT 0,
                 email_verified INTEGER DEFAULT 0,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             ) $charset
@@ -170,6 +171,7 @@ class InitialSchema
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 user_id INT NOT NULL,
                 token TEXT NOT NULL,
+                token_hash VARCHAR(64) DEFAULT NULL,
                 expires_at DATETIME NOT NULL,
                 used INTEGER DEFAULT 0,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -181,6 +183,7 @@ class InitialSchema
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 user_id INT NOT NULL,
                 token TEXT NOT NULL,
+                token_hash VARCHAR(64) DEFAULT NULL,
                 expires_at DATETIME NOT NULL,
                 used INTEGER DEFAULT 0,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -199,6 +202,7 @@ class InitialSchema
                 role TEXT DEFAULT 'user',
                 avatar TEXT,
                 status TEXT DEFAULT 'active',
+                suspension_time INTEGER DEFAULT 0,
                 email_verified INTEGER DEFAULT 0,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
@@ -302,6 +306,7 @@ class InitialSchema
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL,
                 token TEXT NOT NULL,
+                token_hash TEXT DEFAULT NULL,
                 expires_at DATETIME NOT NULL,
                 used INTEGER DEFAULT 0,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -313,6 +318,7 @@ class InitialSchema
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL,
                 token TEXT NOT NULL,
+                token_hash TEXT DEFAULT NULL,
                 expires_at DATETIME NOT NULL,
                 used INTEGER DEFAULT 0,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP

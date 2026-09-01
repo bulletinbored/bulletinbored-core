@@ -137,8 +137,9 @@ function handle_register(string $method): \Bulletin\Response|bool
             return true;
         }
 
-        if (strlen($password) < 12) {
-            $error = 'Password must be at least 12 characters.';
+        $pwErrors = validate_password_strength($password);
+        if (!empty($pwErrors)) {
+            $error = t($pwErrors[0]);
             include __DIR__ . '/../../views/register.php';
             return true;
         }
@@ -163,8 +164,8 @@ function handle_register(string $method): \Bulletin\Response|bool
         if (!empty($email)) {
             $token = bin2hex(random_bytes(32));
             $expires = date('Y-m-d H:i:s', strtotime('+24 hours'));
-            $pdo->prepare("INSERT INTO email_verifications (user_id, token, expires_at) VALUES (?, ?, ?)")
-                ->execute([$userId, password_hash($token, PASSWORD_DEFAULT), $expires]);
+            $pdo->prepare("INSERT INTO email_verifications (user_id, token, token_hash, expires_at) VALUES (?, ?, ?, ?)")
+                ->execute([$userId, password_hash($token, PASSWORD_DEFAULT), hash('sha256', $token), $expires]);
 
             $verifyLink = url('verify_email', ['token' => $token], true);
             $subject = 'Confirm your email';
@@ -187,6 +188,12 @@ function handle_register(string $method): \Bulletin\Response|bool
 
 function handle_logout(): \Bulletin\Response|bool
 {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        return redirect(url('home'));
+    }
+    if (!csrf_validate_request()) {
+        return redirect(url('home'));
+    }
     session_regenerate_id(true);
     session_destroy();
     return redirect(url('home'));
@@ -204,24 +211,26 @@ function handle_verify_email(): \Bulletin\Response|bool
         return true;
     }
 
-    $tokensStmt = $pdo->prepare("SELECT * FROM email_verifications WHERE used = 0 AND expires_at > CURRENT_TIMESTAMP ORDER BY created_at DESC");
-    $tokensStmt->execute();
-    $validToken = null;
-    foreach ($tokensStmt->fetchAll() as $row) {
-        if (password_verify($token, $row['token'])) {
-            $validToken = $row;
-            break;
-        }
+    $tokenHash = hash('sha256', $token);
+    $stmt = $pdo->prepare("SELECT * FROM email_verifications WHERE token_hash = ? AND used = 0 AND expires_at > CURRENT_TIMESTAMP");
+    $stmt->execute([$tokenHash]);
+    $validToken = $stmt->fetch();
+
+    if (!$validToken || !password_verify($token, $validToken['token'])) {
+        $error = 'verify_email_invalid';
+        include __DIR__ . '/../../views/verify_email.php';
+        return true;
     }
 
-    if (!$validToken) {
+    $consumeStmt = $pdo->prepare("UPDATE email_verifications SET used = 1 WHERE id = ? AND used = 0");
+    $consumeStmt->execute([$validToken['id']]);
+    if ($consumeStmt->rowCount() !== 1) {
         $error = 'verify_email_invalid';
         include __DIR__ . '/../../views/verify_email.php';
         return true;
     }
 
     $pdo->prepare("UPDATE users SET email_verified = 1 WHERE id = ?")->execute([$validToken['user_id']]);
-    $pdo->prepare("UPDATE email_verifications SET used = 1 WHERE id = ?")->execute([$validToken['id']]);
 
     $success = 'verify_email_success';
     include __DIR__ . '/../../views/verify_email.php';
@@ -361,8 +370,9 @@ function handle_edit_profile(string $method): \Bulletin\Response|bool
             }
 
             if (!empty($_POST['password'])) {
-                if (strlen($_POST['password']) < 12) {
-                    $_SESSION['profile_error'] = 'Password must be at least 12 characters.';
+                $pwErrors = validate_password_strength($_POST['password']);
+                if (!empty($pwErrors)) {
+                    $_SESSION['profile_error'] = t($pwErrors[0]);
                     return redirect(url('edit_profile'));
                 }
                 $updates[] = "password = ?";
@@ -444,8 +454,8 @@ function handle_forgot_password(string $method): \Bulletin\Response|bool
         if ($user) {
             $token = bin2hex(random_bytes(32));
             $expires = date('Y-m-d H:i:s', strtotime('+1 hour'));
-            $pdo->prepare("INSERT INTO password_resets (user_id, token, expires_at) VALUES (?, ?, ?)")
-                ->execute([$user['id'], password_hash($token, PASSWORD_DEFAULT), $expires]);
+            $pdo->prepare("INSERT INTO password_resets (user_id, token, token_hash, expires_at) VALUES (?, ?, ?, ?)")
+                ->execute([$user['id'], password_hash($token, PASSWORD_DEFAULT), hash('sha256', $token), $expires]);
 
             $resetLink = url('reset_password', ['token' => $token], true);
             $subject = 'Password Reset Request';
@@ -491,23 +501,27 @@ function handle_reset_password(string $method): \Bulletin\Response|bool
             include __DIR__ . '/../../views/reset_password.php';
             return true;
         }
-        if (strlen($password) < 12) {
-            $error = 'Password must be at least 12 characters.';
+        $pwErrors = validate_password_strength($password);
+        if (!empty($pwErrors)) {
+            $error = t($pwErrors[0]);
             include __DIR__ . '/../../views/reset_password.php';
             return true;
         }
 
-        $tokensStmt = $pdo->prepare("SELECT * FROM password_resets WHERE used = 0 AND expires_at > CURRENT_TIMESTAMP ORDER BY created_at DESC");
-        $tokensStmt->execute();
-        $validToken = null;
-        foreach ($tokensStmt->fetchAll() as $row) {
-            if (password_verify($token, $row['token'])) {
-                $validToken = $row;
-                break;
-            }
+        $tokenHash = hash('sha256', $token);
+        $stmt = $pdo->prepare("SELECT * FROM password_resets WHERE token_hash = ? AND used = 0 AND expires_at > CURRENT_TIMESTAMP");
+        $stmt->execute([$tokenHash]);
+        $validToken = $stmt->fetch();
+
+        if (!$validToken || !password_verify($token, $validToken['token'])) {
+            $error = 'Invalid or expired reset token.';
+            include __DIR__ . '/../../views/reset_password.php';
+            return true;
         }
 
-        if (!$validToken) {
+        $consumeStmt = $pdo->prepare("UPDATE password_resets SET used = 1 WHERE id = ? AND used = 0");
+        $consumeStmt->execute([$validToken['id']]);
+        if ($consumeStmt->rowCount() !== 1) {
             $error = 'Invalid or expired reset token.';
             include __DIR__ . '/../../views/reset_password.php';
             return true;
@@ -515,7 +529,6 @@ function handle_reset_password(string $method): \Bulletin\Response|bool
 
         $pdo->prepare("UPDATE users SET password = ? WHERE id = ?")
             ->execute([password_hash($password, PASSWORD_DEFAULT), $validToken['user_id']]);
-        $pdo->prepare("UPDATE password_resets SET used = 1 WHERE id = ?")->execute([$validToken['id']]);
 
         $userStmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
         $userStmt->execute([$validToken['user_id']]);

@@ -87,7 +87,12 @@ function render_header($title = 'bulletinbored', $options = []) {
                                 <li><a class="dropdown-item" href="<?= url('admin') ?>"><i class="fas fa-cog me-2"></i><?= t('admin_panel') ?></a></li>
                             <?php endif; ?>
                             <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="<?= url('logout') ?>"><i class="fas fa-sign-out-alt me-2"></i><?= t('logout') ?></a></li>
+                            <li>
+                                <form method="POST" action="<?= url('logout') ?>">
+                                    <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                                    <button type="submit" class="dropdown-item"><i class="fas fa-sign-out-alt me-2"></i><?= t('logout') ?></button>
+                                </form>
+                            </li>
                         </ul>
                     </li>
                 <?php else: ?>
@@ -178,10 +183,13 @@ function render_header($title = 'bulletinbored', $options = []) {
                     <div class="mobile-stack-row-main"><div class="mobile-stack-row-title"><?= t('admin_panel') ?></div></div>
                 </a>
                 <?php endif; ?>
-                <a class="mobile-stack-row" href="<?= url('logout') ?>">
-                    <i class="fas fa-sign-out-alt mobile-stack-row-icon"></i>
-                    <div class="mobile-stack-row-main"><div class="mobile-stack-row-title"><?= t('logout') ?></div></div>
-                </a>
+                <form method="POST" action="<?= url('logout') ?>">
+                    <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                    <button type="submit" class="mobile-stack-row" style="border:none;background:none;width:100%;text-align:left;">
+                        <i class="fas fa-sign-out-alt mobile-stack-row-icon"></i>
+                        <div class="mobile-stack-row-main"><div class="mobile-stack-row-title"><?= t('logout') ?></div></div>
+                    </button>
+                </form>
             </div>
             <?php else: ?>
             <div class="mobile-stack-pane" data-pane="login" id="paneLogin">

@@ -35,7 +35,7 @@ if ($dbDriver === 'mysql') {
     // and rejects such bytes with error 1366 on TEXT columns.
     $charset = "CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci";
     $tables = [
-        "users" => "id INT AUTO_INCREMENT PRIMARY KEY, username VARCHAR(255) UNIQUE NOT NULL, password VARCHAR(255) NOT NULL, email VARCHAR(255), role VARCHAR(50) DEFAULT 'user', avatar VARCHAR(255), status VARCHAR(50) DEFAULT 'active', email_verified INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
+        "users" => "id INT AUTO_INCREMENT PRIMARY KEY, username VARCHAR(255) UNIQUE NOT NULL, password VARCHAR(255) NOT NULL, email VARCHAR(255), role VARCHAR(50) DEFAULT 'user', avatar VARCHAR(255), status VARCHAR(50) DEFAULT 'active', suspension_time INTEGER DEFAULT 0, email_verified INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
         "categories" => "id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255) NOT NULL UNIQUE, description TEXT, position INT DEFAULT 0, allowed_roles TEXT DEFAULT NULL",
         "threads" => "id INT AUTO_INCREMENT PRIMARY KEY, category_id INT, user_id INT, title TEXT, content TEXT, status VARCHAR(50) DEFAULT 'visible', created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP",
         "posts" => "id INT AUTO_INCREMENT PRIMARY KEY, thread_id INT, user_id INT, content TEXT, status VARCHAR(50) DEFAULT 'visible', created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
@@ -82,9 +82,9 @@ if ($dbDriver === 'mysql') {
 
     // Create default roles if not exists
     $defaultRoles = [
-        ['admin', json_encode(['can_approve_threads', 'can_delete_threads', 'can_delete_posts', 'can_lock_threads', 'can_sticky_threads', 'can_edit_posts', 'can_edit_threads', 'can_ban_users', 'can_manage_roles', 'can_move_threads', 'can_split_threads', 'can_merge_threads', 'can_copy_threads'])],
-        ['moderator', json_encode(['can_approve_threads', 'can_delete_threads', 'can_delete_posts', 'can_lock_threads', 'can_sticky_threads', 'can_edit_posts', 'can_edit_threads', 'can_move_threads', 'can_split_threads', 'can_merge_threads', 'can_copy_threads'])],
-        ['user', json_encode(['can_create_threads', 'can_create_posts', 'can_edit_own_posts', 'can_delete_own_posts'])],
+        ['admin', json_encode(['admin.access', 'threads.approve', 'threads.delete', 'threads.edit', 'threads.lock', 'threads.sticky', 'threads.move', 'threads.split', 'threads.merge', 'threads.copy', 'posts.delete', 'posts.edit', 'users.ban', 'users.create', 'users.delete', 'users.edit', 'roles.manage', 'categories.manage', 'settings.manage', 'plugins.manage', 'themes.manage', 'langs.manage'])],
+        ['moderator', json_encode(['threads.approve', 'threads.delete', 'threads.edit', 'threads.lock', 'threads.sticky', 'threads.move', 'threads.split', 'threads.merge', 'threads.copy', 'posts.delete', 'posts.edit'])],
+        ['user', json_encode(['threads.create', 'posts.create', 'posts.edit_own', 'posts.delete_own'])],
     ];
     foreach ($defaultRoles as $role) {
         $db->table('roles')->insertIgnore(['name' => $role[0], 'permissions' => $role[1]]);
@@ -327,9 +327,9 @@ if ($dbDriver === 'mysql') {
         try {
             $db = new DbQuery($pdo);
             $defaultRoles = [
-                ['admin', json_encode(['can_approve_threads', 'can_delete_threads', 'can_delete_posts', 'can_lock_threads', 'can_sticky_threads', 'can_edit_posts', 'can_edit_threads', 'can_ban_users', 'can_manage_roles', 'can_move_threads', 'can_split_threads', 'can_merge_threads', 'can_copy_threads'])],
-                ['moderator', json_encode(['can_approve_threads', 'can_delete_threads', 'can_delete_posts', 'can_lock_threads', 'can_sticky_threads', 'can_edit_posts', 'can_edit_threads', 'can_move_threads', 'can_split_threads', 'can_merge_threads', 'can_copy_threads'])],
-                ['user', json_encode(['can_create_threads', 'can_create_posts', 'can_edit_own_posts', 'can_delete_own_posts'])],
+                ['admin', json_encode(['admin.access', 'threads.approve', 'threads.delete', 'threads.edit', 'threads.lock', 'threads.sticky', 'threads.move', 'threads.split', 'threads.merge', 'threads.copy', 'posts.delete', 'posts.edit', 'users.ban', 'users.create', 'users.delete', 'users.edit', 'roles.manage', 'categories.manage', 'settings.manage', 'plugins.manage', 'themes.manage', 'langs.manage'])],
+                ['moderator', json_encode(['threads.approve', 'threads.delete', 'threads.edit', 'threads.lock', 'threads.sticky', 'threads.move', 'threads.split', 'threads.merge', 'threads.copy', 'posts.delete', 'posts.edit'])],
+                ['user', json_encode(['threads.create', 'posts.create', 'posts.edit_own', 'posts.delete_own'])],
             ];
             foreach ($defaultRoles as $role) {
                 $db->table('roles')->insertIgnore(['name' => $role[0], 'permissions' => $role[1]]);
@@ -368,20 +368,62 @@ try {
     }
 } catch (PDOException $e) {}
 
-// Handle legacy database - add email + created_at if missing (SQLite migration for existing DB)
+// Handle legacy database - add missing columns if not present (works on both MySQL and SQLite)
 try {
-    $cols = $pdo->query("PRAGMA table_info(users)")->fetchAll(PDO::FETCH_COLUMN);
+    $driver = $config['db_driver'] ?? 'sqlite';
+    $cols = [];
+    if ($driver === 'mysql') {
+        foreach ($pdo->query("SHOW COLUMNS FROM users") as $c) {
+            $cols[] = $c['Field'];
+        }
+    } else {
+        $cols = $pdo->query("PRAGMA table_info(users)")->fetchAll(PDO::FETCH_COLUMN, 1);
+    }
     if (!in_array('email', $cols)) {
-        $pdo->exec("ALTER TABLE users ADD COLUMN email TEXT");
+        $pdo->exec("ALTER TABLE users ADD COLUMN email " . ($driver === 'mysql' ? "VARCHAR(255)" : "TEXT"));
     }
     if (!in_array('created_at', $cols)) {
         $pdo->exec("ALTER TABLE users ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP");
     }
     if (!in_array('avatar', $cols)) {
-        $pdo->exec("ALTER TABLE users ADD COLUMN avatar TEXT");
+        $pdo->exec("ALTER TABLE users ADD COLUMN avatar " . ($driver === 'mysql' ? "VARCHAR(255)" : "TEXT"));
     }
     if (!in_array('status', $cols)) {
-        $pdo->exec("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'");
+        $pdo->exec("ALTER TABLE users ADD COLUMN status " . ($driver === 'mysql' ? "VARCHAR(50) DEFAULT 'active'" : "TEXT DEFAULT 'active'"));
+    }
+    if (!in_array('suspension_time', $cols)) {
+        $pdo->exec("ALTER TABLE users ADD COLUMN suspension_time INTEGER DEFAULT 0");
+    }
+} catch (PDOException $e) {}
+
+// Add token_hash columns for O(1) token lookup
+try {
+    $driver = $config['db_driver'] ?? 'sqlite';
+    $cols = [];
+    if ($driver === 'mysql') {
+        foreach ($pdo->query("SHOW COLUMNS FROM email_verifications") as $c) {
+            $cols[] = $c['Field'];
+        }
+    } else {
+        $cols = $pdo->query("PRAGMA table_info(email_verifications)")->fetchAll(PDO::FETCH_COLUMN, 1);
+    }
+    if (!in_array('token_hash', $cols)) {
+        $pdo->exec("ALTER TABLE email_verifications ADD COLUMN token_hash VARCHAR(64) DEFAULT NULL");
+    }
+} catch (PDOException $e) {}
+
+try {
+    $driver = $config['db_driver'] ?? 'sqlite';
+    $cols = [];
+    if ($driver === 'mysql') {
+        foreach ($pdo->query("SHOW COLUMNS FROM password_resets") as $c) {
+            $cols[] = $c['Field'];
+        }
+    } else {
+        $cols = $pdo->query("PRAGMA table_info(password_resets)")->fetchAll(PDO::FETCH_COLUMN, 1);
+    }
+    if (!in_array('token_hash', $cols)) {
+        $pdo->exec("ALTER TABLE password_resets ADD COLUMN token_hash VARCHAR(64) DEFAULT NULL");
     }
 } catch (PDOException $e) {}
 

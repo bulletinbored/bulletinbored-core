@@ -13,7 +13,7 @@
                 <input type="hidden" name="token" value="<?= escape($_GET['token'] ?? '') ?>">
                 <div class="mb-3">
                     <label class="form-label"><?= t('new_password') ?></label>
-                    <input type="password" name="password" class="form-control" required minlength="6">
+                    <input type="password" name="password" class="form-control" required minlength="10">
                     <div class="form-text"><?= t('password_min') ?></div>
                 </div>
                 <div class="mb-3">

@@ -16,7 +16,8 @@
                 </div>
                 <div class="mb-3">
                     <label class="form-label"><?= t('password') ?></label>
-                    <input type="password" name="password" class="form-control" required>
+                    <input type="password" name="password" class="form-control" required minlength="10">
+                    <div class="form-text"><?= t('password_min') ?></div>
                 </div>
                 <button type="submit" class="btn btn-brand w-100"><?= t('register') ?></button>
             </form>

@@ -47,6 +47,11 @@ class Upgrade05x
             $pdo->exec("ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 0");
         }
 
+        // Add suspension_time column to users if missing
+        if (!$this->columnExists($pdo, 'users', 'suspension_time')) {
+            $pdo->exec("ALTER TABLE users ADD COLUMN suspension_time INTEGER DEFAULT 0");
+        }
+
         // Add views column to threads if missing
         if (!$this->columnExists($pdo, 'threads', 'views')) {
             $pdo->exec("ALTER TABLE threads ADD COLUMN views INTEGER DEFAULT 0");

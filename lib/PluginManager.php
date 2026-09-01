@@ -794,11 +794,12 @@ class PluginManager
 
     private function safeExtractZip(ZipArchive $zip, string $dest): bool
     {
-        $dest = rtrim($dest, '/');
+        $dest = rtrim(str_replace('\\', '/', $dest), '/');
         $realDest = realpath($dest);
         if ($realDest === false) {
             return false;
         }
+        $realDest = str_replace('\\', '/', $realDest);
 
         for ($i = 0; $i < $zip->numFiles; $i++) {
             $name = $zip->getNameIndex($i);
@@ -836,29 +837,42 @@ class PluginManager
             return ['success' => false, 'message' => 'Invalid ZIP file'];
         }
 
-        $dest = rtrim($this->pluginsDir, '/') . '/';
-        $ok = $this->safeExtractZip($zip, $dest);
+        $tmpDir = $this->pluginsDir . '/.install-tmp-' . bin2hex(random_bytes(8));
+        if (!@mkdir($tmpDir, 0755, true)) {
+            $zip->close();
+            @unlink($zipPath);
+            return ['success' => false, 'message' => 'Cannot create temporary directory'];
+        }
+
+        $ok = $this->safeExtractZip($zip, $tmpDir);
         $zip->close();
         @unlink($zipPath);
 
         if (!$ok) {
+            $this->deleteDir($tmpDir);
             return ['success' => false, 'message' => 'Invalid ZIP entries'];
         }
 
-        $this->flattenNestedDir($dest);
-
-        // Optional integrity checks. These can be disabled by the admin via
-        // config: plugin_verify_files = false.
         if ($this->verifyFilesEnabled()) {
-            // 1) File-list integrity: reject when declared files are missing or
-            //    extra undeclared files are present (potential backdoor).
-            $check = $this->verifyInstalledFiles();
+            $check = $this->verifyInstalledFiles($tmpDir);
             if (!$check['success']) {
-                $this->deleteDir(rtrim($dest, '/'));
-                $this->plugins = [];
-                $this->discover();
+                $this->deleteDir($tmpDir);
                 return $check;
             }
+        }
+
+        $this->flattenNestedDir($tmpDir);
+
+        $pluginName = $this->detectPluginName($tmpDir);
+        if ($pluginName === null) {
+            $this->deleteDir($tmpDir);
+            return ['success' => false, 'message' => 'Cannot detect plugin name from manifest'];
+        }
+
+        $finalDir = $this->pluginsDir . '/' . $pluginName;
+        if (@rename($tmpDir, $finalDir) === false) {
+            $this->deleteDir($tmpDir);
+            return ['success' => false, 'message' => 'Failed to move plugin to final location'];
         }
 
         $this->plugins = [];
@@ -873,15 +887,36 @@ class PluginManager
         return !isset($config['plugin_verify_files']) || $config['plugin_verify_files'] !== false;
     }
 
+    private function detectPluginName(string $dir): ?string
+    {
+        foreach (glob($dir . '/*', GLOB_ONLYDIR) as $subdir) {
+            if (file_exists($subdir . '/manifest.json')) {
+                return basename($subdir);
+            }
+        }
+        $entries = glob($dir . '/*', GLOB_ONLYDIR);
+        if (count($entries) === 1) {
+            return basename($entries[0]);
+        }
+        if (file_exists($dir . '/manifest.json')) {
+            $manifest = json_decode(file_get_contents($dir . '/manifest.json'), true);
+            if (!empty($manifest['name'])) {
+                return strtolower(preg_replace('/[^a-z0-9_-]/', '', str_replace(' ', '-', $manifest['name'])));
+            }
+        }
+        return null;
+    }
+
     /**
      * Verify that every extracted plugin folder honours the "files" list in its
      * manifest.json: no declared file missing, no undeclared file present.
      * Plugins without a manifest.json or without a "files" key are skipped.
      */
-    private function verifyInstalledFiles(): array
+    private function verifyInstalledFiles(?string $targetDir = null): array
     {
+        $baseDir = $targetDir ?? $this->pluginsDir;
         $pending = [];
-        foreach (glob($this->pluginsDir . '/*', GLOB_ONLYDIR) as $dir) {
+        foreach (glob($baseDir . '/*', GLOB_ONLYDIR) as $dir) {
             $manifestFile = $dir . '/manifest.json';
             if (!file_exists($manifestFile)) {
                 continue;

@@ -370,6 +370,39 @@ function get_uploaded_images(): array {
 
 function is_logged_in() { return isset($_SESSION['user_id']); }
 function is_admin() { return ($_SESSION['user_role'] ?? '') === 'admin'; }
+
+function validate_password_strength(string $password): array
+{
+    $errors = [];
+    if (strlen($password) < 10) {
+        $errors[] = 'password_too_short';
+    }
+    if (!preg_match('/[a-z]/', $password)) {
+        $errors[] = 'password_no_lowercase';
+    }
+    if (!preg_match('/[A-Z]/', $password)) {
+        $errors[] = 'password_no_uppercase';
+    }
+    if (!preg_match('/[0-9]/', $password)) {
+        $errors[] = 'password_no_number';
+    }
+    return $errors;
+}
+
+function can_view_thread(string $threadStatus): bool
+{
+    if (in_array($threadStatus, ['visible', 'sticky', 'locked'], true)) {
+        return true;
+    }
+    if (!is_logged_in()) {
+        return false;
+    }
+    global $authz;
+    if (isset($authz) && $authz->can((int)($_SESSION['user_id'] ?? 0), 'threads.approve')) {
+        return true;
+    }
+    return false;
+}
 function user_has_permission(string $permission): bool
 {
     if (is_admin()) return true;

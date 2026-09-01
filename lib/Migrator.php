@@ -336,15 +336,32 @@ class Migrator
             return [];
         }
 
-        $migrations = $this->getMigrationsByBatch($lastBatch);
-        $rolledBack = [];
+        $lockFile = $this->getLockFile();
+        $lockHandle = fopen($lockFile, 'c');
 
-        foreach ($migrations as $migration) {
-            $this->runDown($migration);
-            $rolledBack[] = $migration['name'];
+        if ($lockHandle === false) {
+            throw new RuntimeException("Cannot create migration lock file: {$lockFile}");
         }
 
-        return $rolledBack;
+        if (!flock($lockHandle, LOCK_EX | LOCK_NB)) {
+            fclose($lockHandle);
+            throw new RuntimeException("Another migration is already running. Lock file: {$lockFile}");
+        }
+
+        try {
+            $migrations = $this->getMigrationsByBatch($lastBatch);
+            $rolledBack = [];
+
+            foreach ($migrations as $migration) {
+                $this->runDown($migration);
+                $rolledBack[] = $migration['name'];
+            }
+
+            return $rolledBack;
+        } finally {
+            flock($lockHandle, LOCK_UN);
+            fclose($lockHandle);
+        }
     }
 
     /**

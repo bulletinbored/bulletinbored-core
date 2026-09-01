@@ -98,8 +98,9 @@ function handle_admin_create_user_post(): \Bulletin\Response|bool
         throw new \Bulletin\ValidationException(['input' => 'Username and password are required']);
     }
 
-    if (strlen($password) < 12) {
-        throw new \Bulletin\ValidationException(['password' => 'Password must be at least 12 characters.']);
+    $pwErrors = validate_password_strength($password);
+    if (!empty($pwErrors)) {
+        throw new \Bulletin\ValidationException(['password' => t($pwErrors[0])]);
     }
 
     $existsStmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE username = ?");

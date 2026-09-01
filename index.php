@@ -52,10 +52,44 @@ require __DIR__ . '/src/actions/content.php';
 require __DIR__ . '/src/actions/misc.php';
 require __DIR__ . '/src/actions/admin.php';
 
+// Ensure suspension_time column exists (runtime migration for existing databases)
+try {
+    $hasSuspensionCol = false;
+    $driver = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+    if ($driver === 'mysql') {
+        $check = $pdo->prepare("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'suspension_time'");
+        $check->execute();
+        $hasSuspensionCol = (int)$check->fetchColumn() > 0;
+    } else {
+        $cols = $pdo->query("PRAGMA table_info(users)")->fetchAll(PDO::FETCH_COLUMN, 1);
+        $hasSuspensionCol = in_array('suspension_time', $cols, true);
+    }
+    if (!$hasSuspensionCol) {
+        $pdo->exec($driver === 'mysql' ? "ALTER TABLE users ADD COLUMN suspension_time INTEGER DEFAULT 0" : "ALTER TABLE users ADD COLUMN suspension_time INTEGER DEFAULT 0");
+    }
+} catch (PDOException $e) {}
+
 // Redirect banned/suspended users
-if (is_logged_in() && (is_banned() || is_suspended())) {
-    session_destroy();
-    return redirect(url('home'));
+if (is_logged_in()) {
+    $userId = (int)($_SESSION['user_id'] ?? 0);
+    $stmt = $pdo->prepare("SELECT status, suspension_time FROM users WHERE id = ?");
+    $stmt->execute([$userId]);
+    $row = $stmt->fetch();
+    if (!$row) {
+        session_destroy();
+        return redirect(url('home'));
+    }
+    $_SESSION['user_status'] = $row['status'];
+    $_SESSION['user_suspension_time'] = (int)($row['suspension_time'] ?? 0);
+    if ($row['status'] === 'banned' || ($row['status'] === 'suspended' && (int)($row['suspension_time'] ?? 0) > 0 && time() < (int)$row['suspension_time'])) {
+        session_destroy();
+        return redirect(url('home'));
+    }
+    if ($row['status'] === 'suspended' && (int)($row['suspension_time'] ?? 0) > 0 && time() >= (int)$row['suspension_time']) {
+        $pdo->prepare("UPDATE users SET status = 'active', suspension_time = 0 WHERE id = ?")->execute([$userId]);
+        $_SESSION['user_status'] = 'active';
+        $_SESSION['user_suspension_time'] = 0;
+    }
 }
 
 // Create router and let plugins register their routes/middleware
@@ -117,10 +151,10 @@ $router->middleware('auth')->group(function($router) {
     $router->get('/edit-thread/{id:\d+}', fn($p) => handle_edit_thread('GET'));
     $router->post('/edit-thread/{id:\d+}', fn($p) => handle_edit_thread('POST'));
     $router->post('/delete-thread/{id:\d+}', fn($p) => handle_delete_thread());
-    $router->get('/watch', fn() => handle_watch());
-    $router->get('/unwatch', fn() => handle_unwatch());
+    $router->post('/watch', fn() => handle_watch());
+    $router->post('/unwatch', fn() => handle_unwatch());
     $router->post('/upload-image', fn() => handle_upload_image());
-    $router->get('/logout', fn() => handle_logout());
+    $router->post('/logout', fn() => handle_logout());
     $router->get('/edit-profile', fn() => handle_edit_profile('GET'));
     $router->post('/edit-profile', fn() => handle_edit_profile('POST'));
     $router->post('/remove-avatar', fn() => handle_remove_avatar('POST'));
