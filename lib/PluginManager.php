@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . '/PackageInstaller.php';
+
 class PluginManager
 {
     private const DISABLED_BY_DEFAULT = ['hellobored'];
@@ -15,12 +17,14 @@ class PluginManager
     private ?Bulletin\Router $router = null;
     private array $routeRegistrations = [];
     private array $middlewareRegistrations = [];
+    private PackageInstaller $installer;
 
     public function __construct(string $pluginsDir, string $manifestPath)
     {
         $this->pluginsDir = rtrim($pluginsDir, '/');
         $this->manifestPath = $manifestPath;
         $this->loadManifest();
+        $this->installer = new PackageInstaller($this->pluginsDir, 'plugin_verify_files');
     }
 
     public function setRouter(Bulletin\Router $router): void
@@ -261,14 +265,74 @@ class PluginManager
     }
 
     /**
-     * Enable a plugin with dependency resolution.
-     * Returns true on success, false if dependencies are not met.
+     * Detect circular dependencies using DFS.
+     * Returns the cycle path if found, null otherwise.
+     */
+    public function detectCycle(string $name, array $visited = [], array $path = []): ?array
+    {
+        $key = strtolower($name);
+        if (in_array($key, $path, true)) {
+            return [...$path, $key];
+        }
+        if (in_array($key, $visited, true)) {
+            return null;
+        }
+        $visited[] = $key;
+        $path[] = $key;
+
+        $plugin = $this->getByName($key);
+        if ($plugin && !empty($plugin['folder'])) {
+            $dir = $this->pluginsDir . '/' . $plugin['folder'];
+            $manifest = $this->parseManifest($dir);
+            if ($manifest && !empty($manifest['dependencies'])) {
+                foreach ($manifest['dependencies'] as $depName => $constraint) {
+                    $cycle = $this->detectCycle($depName, $visited, $path);
+                    if ($cycle !== null) {
+                        return $cycle;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Get all plugins that depend on the given plugin (recursive).
+     */
+    public function getDependents(string $name): array
+    {
+        $key = strtolower($name);
+        $dependents = [];
+        foreach ($this->plugins as $pKey => $plugin) {
+            if ($pKey === $key || empty($plugin['folder'])) {
+                continue;
+            }
+            $dir = $this->pluginsDir . '/' . $plugin['folder'];
+            $manifest = $this->parseManifest($dir);
+            if ($manifest && !empty($manifest['dependencies']) && isset($manifest['dependencies'][$key])) {
+                $dependents[] = $pKey;
+                $dependents = array_merge($dependents, $this->getDependents($pKey));
+            }
+        }
+        return array_values(array_unique($dependents));
+    }
+
+    /**
+     * Enable a plugin with recursive dependency resolution.
+     * Returns true on success, false if dependencies are not met or cycle detected.
      */
     public function enable(string $name): bool
     {
         $key = strtolower($name);
         $this->plugins = $this->getAll();
         if (!isset($this->plugins[$key])) {
+            return false;
+        }
+
+        // Check for cycles
+        $cycle = $this->detectCycle($key);
+        if ($cycle !== null) {
+            error_log("Plugin '{$key}' enable failed: circular dependency detected: " . implode(' -> ', $cycle));
             return false;
         }
 
@@ -286,7 +350,7 @@ class PluginManager
     }
 
     /**
-     * Disable a plugin and any plugins that depend on it.
+     * Disable a plugin and all plugins that depend on it (recursive).
      */
     public function disable(string $name): bool
     {
@@ -299,19 +363,13 @@ class PluginManager
         $this->manifest[$key] = $this->plugins[$key];
         $this->saveManifest();
 
-        // Cascade: disable plugins that depend on this one
-        foreach ($this->plugins as $pKey => $plugin) {
-            if ($pKey === $key || empty($plugin['enabled'])) {
-                continue;
-            }
-            $dir = $this->pluginsDir . '/' . $plugin['folder'];
-            $manifest = $this->parseManifest($dir);
-            if ($manifest && !empty($manifest['dependencies']) && isset($manifest['dependencies'][$key])) {
-                $this->plugins[$pKey]['enabled'] = false;
-                $this->manifest[$pKey] = $this->plugins[$pKey];
-                $this->saveManifest();
-                error_log("Plugin '{$pKey}' auto-disabled: depends on '{$key}'");
-            }
+        // Recursive cascade: disable all dependents
+        $dependents = $this->getDependents($key);
+        foreach ($dependents as $dependent) {
+            $this->plugins[$dependent]['enabled'] = false;
+            $this->manifest[$dependent] = $this->plugins[$dependent];
+            $this->saveManifest();
+            error_log("Plugin '{$dependent}' auto-disabled: depends on '{$key}'");
         }
 
         return true;
@@ -354,7 +412,7 @@ class PluginManager
         $this->disable($name);
         $dir = $this->pluginsDir . '/' . $key;
         if (is_dir($dir)) {
-            $this->deleteRecursive($dir);
+            $this->installer->deleteDir($dir);
         } else {
             $file = $this->pluginsDir . '/' . $key . '.php';
             if (file_exists($file)) {
@@ -757,212 +815,9 @@ class PluginManager
         return false;
     }
 
-    private function flattenNestedDir(string $targetDir): void
+    private function verifyInstalledFiles(string $targetDir): array
     {
-        if (!is_dir($targetDir)) {
-            return;
-        }
-
-        $nested = null;
-        foreach (glob($targetDir . '/*', GLOB_ONLYDIR) as $dir) {
-            if (file_exists($dir . '/manifest.json')) {
-                $nested = $dir;
-                break;
-            }
-        }
-        if ($nested === null || !is_dir($nested)) {
-            return;
-        }
-
-        foreach (glob($nested . '/*') as $item) {
-            $destItem = $targetDir . '/' . basename($item);
-            if (is_dir($item)) {
-                if (!is_dir($destItem)) {
-                    @mkdir($destItem, 0755, true);
-                }
-                foreach (glob($item . '/*') as $child) {
-                    $childDest = $destItem . '/' . basename($child);
-                    $this->moveWithRetry($child, $childDest);
-                }
-            } else {
-                $this->moveWithRetry($item, $destItem);
-            }
-        }
-
-        $this->deleteDir($nested);
-    }
-
-    private function safeExtractZip(ZipArchive $zip, string $dest): bool
-    {
-        $dest = rtrim(str_replace('\\', '/', $dest), '/');
-        $realDest = realpath($dest);
-        if ($realDest === false) {
-            return false;
-        }
-        $realDest = str_replace('\\', '/', $realDest);
-
-        for ($i = 0; $i < $zip->numFiles; $i++) {
-            $name = $zip->getNameIndex($i);
-            if ($name === false) {
-                continue;
-            }
-
-            $name = str_replace('\\', '/', $name);
-            if (str_starts_with($name, '/') || str_contains($name, '..')) {
-                return false;
-            }
-
-            $target = $dest . '/' . $name;
-            if (!str_starts_with($target, $realDest . '/')) {
-                return false;
-            }
-        }
-
-        return $zip->extractTo($dest);
-    }
-
-    public function installFromZip(string $zipPath): array
-    {
-        if (!file_exists($zipPath)) {
-            return ['success' => false, 'message' => 'File not found'];
-        }
-
-        if (!class_exists('ZipArchive')) {
-            return ['success' => false, 'message' => 'The PHP zip extension is not enabled on this server. Enable it or extract the plugin manually into the plugins/ directory.'];
-        }
-
-        $zip = new ZipArchive();
-        $res = $zip->open($zipPath);
-        if ($res !== true) {
-            return ['success' => false, 'message' => 'Invalid ZIP file'];
-        }
-
-        $tmpDir = $this->pluginsDir . '/.install-tmp-' . bin2hex(random_bytes(8));
-        if (!@mkdir($tmpDir, 0755, true)) {
-            $zip->close();
-            @unlink($zipPath);
-            return ['success' => false, 'message' => 'Cannot create temporary directory'];
-        }
-
-        $ok = $this->safeExtractZip($zip, $tmpDir);
-        $zip->close();
-        @unlink($zipPath);
-
-        if (!$ok) {
-            $this->deleteDir($tmpDir);
-            return ['success' => false, 'message' => 'Invalid ZIP entries'];
-        }
-
-        if ($this->verifyFilesEnabled()) {
-            $check = $this->verifyInstalledFiles($tmpDir);
-            if (!$check['success']) {
-                $this->deleteDir($tmpDir);
-                return $check;
-            }
-        }
-
-        $this->flattenNestedDir($tmpDir);
-
-        $pluginName = $this->detectPluginName($tmpDir);
-        if ($pluginName === null) {
-            $this->deleteDir($tmpDir);
-            return ['success' => false, 'message' => 'Cannot detect plugin name from manifest'];
-        }
-
-        $finalDir = $this->pluginsDir . '/' . $pluginName;
-        if (@rename($tmpDir, $finalDir) === false) {
-            $this->deleteDir($tmpDir);
-            return ['success' => false, 'message' => 'Failed to move plugin to final location'];
-        }
-
-        $this->plugins = [];
-        $this->discover();
-
-        return ['success' => true, 'message' => 'Plugin installed'];
-    }
-
-    private function verifyFilesEnabled(): bool
-    {
-        global $config;
-        return !isset($config['plugin_verify_files']) || $config['plugin_verify_files'] !== false;
-    }
-
-    private function detectPluginName(string $dir): ?string
-    {
-        foreach (glob($dir . '/*', GLOB_ONLYDIR) as $subdir) {
-            if (file_exists($subdir . '/manifest.json')) {
-                return basename($subdir);
-            }
-        }
-        $entries = glob($dir . '/*', GLOB_ONLYDIR);
-        if (count($entries) === 1) {
-            return basename($entries[0]);
-        }
-        if (file_exists($dir . '/manifest.json')) {
-            $manifest = json_decode(file_get_contents($dir . '/manifest.json'), true);
-            if (!empty($manifest['name'])) {
-                return strtolower(preg_replace('/[^a-z0-9_-]/', '', str_replace(' ', '-', $manifest['name'])));
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Verify that every extracted plugin folder honours the "files" list in its
-     * manifest.json: no declared file missing, no undeclared file present.
-     * Plugins without a manifest.json or without a "files" key are skipped.
-     */
-    private function verifyInstalledFiles(?string $targetDir = null): array
-    {
-        $baseDir = $targetDir ?? $this->pluginsDir;
-        $pending = [];
-        foreach (glob($baseDir . '/*', GLOB_ONLYDIR) as $dir) {
-            $manifestFile = $dir . '/manifest.json';
-            if (!file_exists($manifestFile)) {
-                continue;
-            }
-            $manifest = json_decode(file_get_contents($manifestFile), true);
-            if (!is_array($manifest) || empty($manifest['files']) || !is_array($manifest['files'])) {
-                continue;
-            }
-            $expected = array_map(function ($f) {
-                return ltrim(str_replace('\\', '/', (string)$f), '/');
-            }, $manifest['files']);
-
-            // Collect all actual files below the plugin folder.
-            $actual = [];
-            foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS)) as $item) {
-                if ($item->isFile()) {
-                    $actual[] = ltrim(str_replace('\\', '/', substr($item->getPathname(), strlen($dir) + 1)), '/');
-                }
-            }
-
-            $missing = array_diff($expected, $actual);
-            $extra = array_diff($actual, $expected);
-            if (!empty($missing) || !empty($extra)) {
-                $pending[] = [
-                    'plugin' => basename($dir),
-                    'missing' => array_values($missing),
-                    'extra' => array_values($extra),
-                ];
-            }
-        }
-
-        if (!empty($pending)) {
-            $detail = '';
-            foreach ($pending as $p) {
-                $detail .= "\n- " . $p['plugin'];
-                if (!empty($p['missing'])) {
-                    $detail .= "\n  missing: " . implode(', ', $p['missing']);
-                }
-                if (!empty($p['extra'])) {
-                    $detail .= "\n  undeclared: " . implode(', ', $p['extra']);
-                }
-            }
-            return ['success' => false, 'message' => 'Plugin integrity check failed. The archive contains files not declared in manifest.json (or is missing declared files). This may indicate a tampered package:' . $detail . "\n\nYou can disable this check by setting \$config['plugin_verify_files'] = false; in config.php."];
-        }
-
-        return ['success' => true, 'message' => 'ok'];
+        return $this->installer->verifyInstalledFiles($targetDir);
     }
 
     public function delete(string $name): array
@@ -978,7 +833,7 @@ class PluginManager
         if ($entry['folder']) {
             $dir = rtrim($this->pluginsDir, '/') . '/' . $entry['folder'];
             if (is_dir($dir)) {
-                $this->deleteDir($dir);
+                $this->installer->deleteDir($dir);
                 clearstatcache();
                 if (is_dir($dir)) {
                     return ['success' => false, 'message' => 'Plugin directory could not be deleted. It may be in use by another process.'];
@@ -1011,7 +866,7 @@ class PluginManager
                     unset($this->manifest[$key]);
                     $removed[] = $plugin['name'];
                     if (is_dir($dir)) {
-                        $this->deleteDir($dir);
+                        $this->installer->deleteDir($dir);
                     }
                 }
             } elseif (!empty($plugin['file']) && !file_exists($plugin['file'])) {
@@ -1024,32 +879,6 @@ class PluginManager
         return $removed;
     }
 
-    private function deleteDir(string $dir): bool
-    {
-        if (!is_dir($dir)) {
-            return true;
-        }
-
-        $iterator = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS),
-            RecursiveIteratorIterator::CHILD_FIRST
-        );
-
-        foreach ($iterator as $item) {
-            if ($item->isDir()) {
-                if (!@rmdir($item->getPathname())) {
-                    return false;
-                }
-            } else {
-                if (!@unlink($item->getPathname())) {
-                    return false;
-                }
-            }
-        }
-
-        return @rmdir($dir);
-    }
-
     public function installFromRepo(string $repoUrl, ?string $tag = null, ?string $expectedName = null): array
     {
         $dest = rtrim($this->pluginsDir, '/') . '/';
@@ -1060,7 +889,7 @@ class PluginManager
         // Remove any leftover/partial directory from a previous failed install
         // so we never merge a new download into a broken folder.
         if (is_dir($targetDir)) {
-            $this->deleteDir($targetDir);
+            $this->installer->deleteDir($targetDir);
         }
 
         require_once __DIR__ . '/repo_install.php';
@@ -1069,7 +898,7 @@ class PluginManager
             return $result;
         }
 
-        $this->flattenNestedDir($targetDir);
+        $this->installer->flattenNestedDir($targetDir);
 
         // Give the filesystem a moment and retry discovery: on Windows the
         // freshly written manifest.json can be briefly locked by another

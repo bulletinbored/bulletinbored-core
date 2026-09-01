@@ -21,6 +21,8 @@
 
 namespace Bulletin;
 
+use App;
+
 class Router
 {
     /** @var array<int,array{method:string, pattern:string, handler:callable, middleware:string[], group:string}> */
@@ -60,7 +62,7 @@ class Router
             if (!is_logged_in()) {
                 return ['status' => 302, 'body' => '', 'headers' => ['Location: ' . \url('login')]];
             }
-            $authz = $GLOBALS['authz'] ?? null;
+            $authz = App::getInstance()->authz;
             $userId = $_SESSION['user_id'] ?? 0;
             if ($authz === null || !$authz->can($userId, 'admin.access')) {
                 return ['status' => 403, 'body' => 'Forbidden'];

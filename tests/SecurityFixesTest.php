@@ -117,29 +117,33 @@ function test_bb001_can_view_thread_helper(): Test
 function test_bb001_moderator_can_view_hidden(): Test
 {
     $t = new Test('BB-001 - moderator can view hidden');
-    $GLOBALS['pdo'] = setupDB();
-    $authz = new AuthZ($GLOBALS['pdo']);
-    $GLOBALS['authz'] = $authz;
+    $pdo = setupDB();
+    $authz = new AuthZ($pdo);
+    App::getInstance()->authz = $authz;
+    App::getInstance()->pdo = $pdo;
     $_SESSION = ['user_id' => 99, 'user_role' => 'moderator'];
-    $stmt = $GLOBALS['pdo']->prepare("INSERT INTO users (id, username, password, role, status) VALUES (?, 'mod', 'hash', 'moderator', 'active')");
+    $stmt = $pdo->prepare("INSERT INTO users (id, username, password, role, status) VALUES (?, 'mod', 'hash', 'moderator', 'active')");
     $stmt->execute([99]);
     $t->assertTrue('moderator can view hidden', can_view_thread('hidden'));
     $t->assertTrue('moderator can view pending', can_view_thread('pending'));
+    App::reset();
     return $t;
 }
 
 function test_bb001_user_cannot_view_hidden(): Test
 {
     $t = new Test('BB-001 - ordinary user cannot view hidden');
-    $GLOBALS['pdo'] = setupDB();
-    $authz = new AuthZ($GLOBALS['pdo']);
-    $GLOBALS['authz'] = $authz;
+    $pdo = setupDB();
+    $authz = new AuthZ($pdo);
+    App::getInstance()->authz = $authz;
+    App::getInstance()->pdo = $pdo;
     $_SESSION = ['user_id' => 100, 'user_role' => 'user'];
-    $stmt = $GLOBALS['pdo']->prepare("INSERT INTO users (id, username, password, role, status) VALUES (?, 'user', 'hash', 'user', 'active')");
+    $stmt = $pdo->prepare("INSERT INTO users (id, username, password, role, status) VALUES (?, 'user', 'hash', 'user', 'active')");
     $stmt->execute([100]);
     $t->assertFalse('user cannot view hidden', can_view_thread('hidden'));
     $t->assertFalse('user cannot view pending', can_view_thread('pending'));
     $t->assertTrue('user can view visible', can_view_thread('visible'));
+    App::reset();
     return $t;
 }
 
@@ -204,7 +208,7 @@ function test_bb008_rate_limit(): Test
     $uniq = uniqid('rl_', true);
     $file = $dir . '/' . $uniq . '.json';
     @unlink($file);
-    $GLOBALS['config'] = ['trusted_proxies' => ['127.0.0.1']];
+    App::getInstance()->config = ['trusted_proxies' => ['127.0.0.1']];
     $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
     $allowed = 0; $blocked = 0;
     for ($i = 0; $i < 10; $i++) {
@@ -218,9 +222,9 @@ function test_bb008_rate_limit(): Test
 
 function test_nb001_version(): Test
 {
-    $t = new Test('NB-001 - VERSION is 0.8.1');
+    $t = new Test('NB-001 - VERSION is 0.8.2');
     $version = trim(file_get_contents(__DIR__ . '/../VERSION'));
-    $t->assertEquals('VERSION is 0.8.1', '0.8.1', $version);
+    $t->assertEquals('VERSION is 0.8.2', '0.8.2', $version);
     return $t;
 }
 
@@ -278,6 +282,172 @@ function test_token_hash_lookup(): Test
     return $t;
 }
 
+function test_no_eval_in_langs(): Test
+{
+    $t = new Test('No eval() in language installer');
+    $code = file_get_contents(__DIR__ . '/../src/actions/admin/langs.php');
+    $t->assert('No eval() found', !str_contains($code, 'eval('));
+    $t->assert('No PHP language file support', !str_contains($code, '?> . $content'));
+    $t->assert('Only JSON accepted', str_contains($code, "str_ends_with(\$tryUrl, '.json')"));
+    return $t;
+}
+
+function test_tls_verification_enabled(): Test
+{
+    $t = new Test('TLS verification enabled in UpdateManager');
+    $code = file_get_contents(__DIR__ . '/../lib/UpdateManager.php');
+    $t->assert('VERIFYPEER is true', str_contains($code, 'CURLOPT_SSL_VERIFYPEER => true'));
+    $t->assert('VERIFYHOST is 2', str_contains($code, 'CURLOPT_SSL_VERIFYHOST => 2'));
+    $t->assert('No VERIFYPEER false', !str_contains($code, 'CURLOPT_SSL_VERIFYPEER => false'));
+    $t->assert('No VERIFYHOST false', !str_contains($code, 'CURLOPT_SSL_VERIFYHOST => false'));
+    return $t;
+}
+
+function test_download_requires_thread_access(): Test
+{
+    $t = new Test('Download requires thread access');
+    $code = file_get_contents(__DIR__ . '/../src/actions/content.php');
+    $t->assert('can_view_thread in download', str_contains($code, 'can_view_thread'));
+    $t->assert('ForbiddenException for unauthorized', str_contains($code, 'ForbiddenException'));
+    return $t;
+}
+
+function test_integration_bootstrap_no_fatal(): Test
+{
+    $t = new Test('Integration: bootstrap does not fatal');
+
+    // Simulate the full bootstrap sequence that index.php runs
+    $_SERVER['REQUEST_URI'] = '/';
+    $_SERVER['SCRIPT_NAME'] = '/index.php';
+    $_SERVER['REQUEST_METHOD'] = 'GET';
+    $_SESSION = [];
+
+    $errors = [];
+    set_error_handler(function ($errno, $errstr) use (&$errors) {
+        $errors[] = $errstr;
+        return true;
+    });
+
+    try {
+        // These are the core files loaded by index.php
+        require_once __DIR__ . '/../src/App.php';
+        require_once __DIR__ . '/../src/csp.php';
+        require_once __DIR__ . '/../src/TrustedProxies.php';
+        require_once __DIR__ . '/../src/Security.php';
+
+        $t->assert('No fatal errors during bootstrap', empty($errors));
+        $t->assert('App class exists', class_exists('App'));
+        $t->assert('App singleton works', App::getInstance() !== null);
+    } catch (\Throwable $e) {
+        $t->assert('No exception: ' . $e->getMessage(), false);
+    }
+
+    restore_error_handler();
+    App::reset();
+
+    return $t;
+}
+
+function test_integration_csp_allows_fonts(): Test
+{
+    $t = new Test('Integration: CSP allows font sources');
+
+    $cspCode = file_get_contents(__DIR__ . '/../src/csp.php');
+
+    $t->assert('CSP includes cdn.jsdelivr.net in font-src', str_contains($cspCode, 'https://cdn.jsdelivr.net'));
+    $t->assert('CSP includes cdnjs.cloudflare.com in font-src', str_contains($cspCode, 'https://cdnjs.cloudflare.com'));
+    $t->assert('CSP includes data: in font-src', str_contains($cspCode, 'data:'));
+
+    return $t;
+}
+
+function test_trusted_proxies_ipv4(): Test
+{
+    $t = new Test('TrustedProxies IPv4 support');
+
+    $origServer = $_SERVER;
+    $origConfig = App::getInstance()->config;
+
+    $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
+    App::getInstance()->config = ['trusted_proxies' => ['127.0.0.1']];
+    $result = trusted_proxies_detect();
+    $t->assertTrue('127.0.0.1 is trusted', $result['is_trusted']);
+
+    $_SERVER['REMOTE_ADDR'] = '10.0.0.5';
+    App::getInstance()->config = ['trusted_proxies' => ['10.0.0.0/24']];
+    $result = trusted_proxies_detect();
+    $t->assertTrue('10.0.0.5 in 10.0.0.0/24 is trusted', $result['is_trusted']);
+
+    $_SERVER['REMOTE_ADDR'] = '192.168.1.1';
+    App::getInstance()->config = ['trusted_proxies' => ['10.0.0.0/24']];
+    $result = trusted_proxies_detect();
+    $t->assertFalse('192.168.1.1 not in 10.0.0.0/24', $result['is_trusted']);
+
+    $_SERVER = $origServer;
+    App::getInstance()->config = $origConfig;
+    return $t;
+}
+
+function test_trusted_proxies_ipv6(): Test
+{
+    $t = new Test('TrustedProxies IPv6 support');
+
+    $origServer = $_SERVER;
+    $origConfig = App::getInstance()->config;
+
+    $_SERVER['REMOTE_ADDR'] = '::1';
+    App::getInstance()->config = ['trusted_proxies' => ['::1']];
+    $result = trusted_proxies_detect();
+    $t->assertTrue('::1 is trusted', $result['is_trusted']);
+
+    $_SERVER['REMOTE_ADDR'] = '2001:db8::1';
+    App::getInstance()->config = ['trusted_proxies' => ['2001:db8::/32']];
+    $result = trusted_proxies_detect();
+    $t->assertTrue('2001:db8::1 in 2001:db8::/32 is trusted', $result['is_trusted']);
+
+    $_SERVER['REMOTE_ADDR'] = 'fe80::1';
+    App::getInstance()->config = ['trusted_proxies' => ['2001:db8::/32']];
+    $result = trusted_proxies_detect();
+    $t->assertFalse('fe80::1 not in 2001:db8::/32', $result['is_trusted']);
+
+    $_SERVER['REMOTE_ADDR'] = '::1';
+    $_SERVER['HTTP_X_FORWARDED_FOR'] = '203.0.113.50, 70.41.1.183';
+    App::getInstance()->config = ['trusted_proxies' => ['::1']];
+    $result = trusted_proxies_detect();
+    $t->assertEquals('X-Forwarded-For extracts first IP', '203.0.113.50', $result['forwarded_for']);
+
+    $_SERVER = $origServer;
+    App::getInstance()->config = $origConfig;
+    return $t;
+}
+
+function test_trusted_proxies_cidr(): Test
+{
+    $t = new Test('TrustedProxies CIDR edge cases');
+
+    $origServer = $_SERVER;
+    $origConfig = App::getInstance()->config;
+
+    $_SERVER['REMOTE_ADDR'] = '8.8.8.8';
+    App::getInstance()->config = ['trusted_proxies' => ['0.0.0.0/0']];
+    $result = trusted_proxies_detect();
+    $t->assertTrue('0.0.0.0/0 matches any IPv4', $result['is_trusted']);
+
+    $_SERVER['REMOTE_ADDR'] = '192.168.1.100';
+    App::getInstance()->config = ['trusted_proxies' => ['192.168.1.100/32']];
+    $result = trusted_proxies_detect();
+    $t->assertTrue('192.168.1.100/32 exact match', $result['is_trusted']);
+
+    $_SERVER['REMOTE_ADDR'] = '2001:db8::1';
+    App::getInstance()->config = ['trusted_proxies' => ['2001:db8::1/128']];
+    $result = trusted_proxies_detect();
+    $t->assertTrue('2001:db8::1/128 exact match', $result['is_trusted']);
+
+    $_SERVER = $origServer;
+    App::getInstance()->config = $origConfig;
+    return $t;
+}
+
 $tests = [
     test_bb001_can_view_thread_helper(),
     test_bb001_moderator_can_view_hidden(),
@@ -292,6 +462,14 @@ $tests = [
     test_password_policy(),
     test_logout_csrf(),
     test_token_hash_lookup(),
+    test_no_eval_in_langs(),
+    test_tls_verification_enabled(),
+    test_download_requires_thread_access(),
+    test_integration_bootstrap_no_fatal(),
+    test_integration_csp_allows_fonts(),
+    test_trusted_proxies_ipv4(),
+    test_trusted_proxies_ipv6(),
+    test_trusted_proxies_cidr(),
 ];
 
 $totalPassed = 0;

@@ -23,7 +23,7 @@
     "timezone": "UTC",
     "date_format": "Y-m-d",
     "time_format": "H:i",
-    "version": "1.0.0",
+    "version": "0.8.3",
     "plugin_manifest": "__DIR__/data/plugins.json",
     "theme_manifest": "__DIR__/data/themes.json",
     "update_manifest": "__DIR__/data/updates.json",

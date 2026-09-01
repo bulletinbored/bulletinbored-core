@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . '/PackageInstaller.php';
+
 class ThemeManager
 {
     private string $themesDir;
@@ -7,6 +9,7 @@ class ThemeManager
     private string $activeTheme;
     private array $themes = [];
     private array $manifest = [];
+    private PackageInstaller $installer;
 
     public function __construct(string $themesDir, string $manifestPath, string $defaultTheme)
     {
@@ -14,6 +17,7 @@ class ThemeManager
         $this->manifestPath = $manifestPath;
         $this->activeTheme = $defaultTheme;
         $this->loadManifest();
+        $this->installer = new PackageInstaller($this->themesDir, 'theme_verify_files');
     }
 
     public function loadTranslations(string $lang): void
@@ -172,89 +176,82 @@ class ThemeManager
 
     public function installFromZip(string $zipPath): array
     {
-        if (!file_exists($zipPath)) {
-            return ['success' => false, 'message' => 'File not found'];
+        $themeName = $this->detectThemeNameFromZip($zipPath);
+        if ($themeName === null) {
+            return ['success' => false, 'message' => 'Cannot detect theme name from ZIP'];
         }
 
+        $finalDir = $this->themesDir . '/' . $themeName;
+
+        if (is_dir($finalDir)) {
+            return ['success' => false, 'message' => "Theme already exists: {$themeName}"];
+        }
+
+        $result = $this->installer->install($zipPath, $finalDir, function ($tmpDir) {
+            return $this->verifyInstalledFiles($tmpDir);
+        });
+
+        if ($result['success']) {
+            $this->themes = [];
+            $this->discover();
+        }
+
+        return $result;
+    }
+
+    /**
+     * Detect theme name from a ZIP file without extracting.
+     */
+    private function detectThemeNameFromZip(string $zipPath): ?string
+    {
         if (!class_exists('ZipArchive')) {
-            return ['success' => false, 'message' => 'The PHP zip extension is not enabled on this server. Enable it or extract the theme manually into the themes/ directory.'];
+            return null;
         }
-
-        require_once __DIR__ . '/repo_install.php';
 
         $zip = new ZipArchive();
         $res = $zip->open($zipPath);
         if ($res !== true) {
-            return ['success' => false, 'message' => 'Invalid ZIP file'];
+            return null;
         }
 
-        $tmpDir = $this->themesDir . '/.install-tmp-' . bin2hex(random_bytes(8));
-        if (!@mkdir($tmpDir, 0755, true)) {
-            $zip->close();
-            @unlink($zipPath);
-            return ['success' => false, 'message' => 'Cannot create temporary directory'];
+        $name = null;
+        for ($i = 0; $i < $zip->numFiles; $i++) {
+            $entry = $zip->getNameIndex($i);
+            if ($entry === false) {
+                continue;
+            }
+            if (preg_match('#^([a-z0-9_-]+)/style\.css$#i', $entry, $m)) {
+                $name = $m[1];
+                break;
+            }
         }
-
-        $ok = extract_zip($zipPath, $tmpDir);
         $zip->close();
-        @unlink($zipPath);
 
-        if (!$ok) {
-            $this->deleteDir($tmpDir);
-            return ['success' => false, 'message' => 'Invalid ZIP entries (Zip Slip protection)'];
+        if ($name === null) {
+            $name = $this->detectNameFromZipContents($zipPath);
         }
 
-        // Normalise the extracted layout: a theme ZIP may nest files under a
-        // single <repo>-<ref>/ folder. Only "un-nest" when there is no
-        // style.css (or manifest.json) directly at the target root.
-        if (!file_exists($tmpDir . '/style.css') && !file_exists($tmpDir . '/manifest.json')) {
-            $nested = null;
-            foreach (glob($tmpDir . '*', GLOB_ONLYDIR) as $dir) {
-                if (file_exists($dir . '/style.css') || file_exists($dir . '/manifest.json')) {
-                    $nested = $dir;
-                    break;
-                }
-            }
-            if ($nested !== null && is_dir($nested)) {
-                foreach (glob($nested . '/*') as $item) {
-                    $base = basename($item);
-                    $destItem = $tmpDir . '/' . $base;
-                    if (file_exists($destItem)) {
-                        continue;
-                    }
-                    rename($item, $destItem);
-                }
-                @rmdir($nested);
-            }
+        return $name;
+    }
+
+    /**
+     * Fallback: extract to temp to detect name.
+     */
+    private function detectNameFromZipContents(string $zipPath): ?string
+    {
+        $tmpDir = $this->themesDir . '/.name-detect-' . bin2hex(random_bytes(4));
+        if (!@mkdir($tmpDir, 0755, true)) {
+            return null;
         }
 
-        $this->themes = [];
-        $this->discover();
+        $zip = new ZipArchive();
+        $zip->open($zipPath);
+        $zip->extractTo($tmpDir);
+        $zip->close();
 
-        if ($this->verifyFilesEnabled()) {
-            $check = $this->verifyInstalledFiles($tmpDir);
-            if (!$check['success']) {
-                $this->deleteDir($tmpDir);
-                return $check;
-            }
-        }
-
-        $themeName = $this->detectThemeName($tmpDir);
-        if ($themeName === null) {
-            $this->deleteDir($tmpDir);
-            return ['success' => false, 'message' => 'Cannot detect theme name'];
-        }
-
-        $finalDir = $this->themesDir . '/' . $themeName;
-        if (@rename($tmpDir, $finalDir) === false) {
-            $this->deleteDir($tmpDir);
-            return ['success' => false, 'message' => 'Failed to move theme to final location'];
-        }
-
-        $this->themes = [];
-        $this->discover();
-
-        return ['success' => true, 'message' => 'Theme installed'];
+        $name = $this->installer->detectName($tmpDir);
+        $this->installer->deleteDir($tmpDir);
+        return $name;
     }
 
     private function verifyFilesEnabled(): bool
@@ -287,57 +284,9 @@ class ThemeManager
      * manifest.json: no declared file missing, no undeclared file present.
      * Themes without a manifest.json or without a "files" key are skipped.
      */
-    private function verifyInstalledFiles(?string $targetDir = null): array
+    private function verifyInstalledFiles(string $targetDir): array
     {
-        $baseDir = $targetDir ?? $this->themesDir;
-        $pending = [];
-        foreach (glob($baseDir . '/*', GLOB_ONLYDIR) as $dir) {
-            $manifestFile = $dir . '/manifest.json';
-            if (!file_exists($manifestFile)) {
-                continue;
-            }
-            $manifest = json_decode(file_get_contents($manifestFile), true);
-            if (!is_array($manifest) || empty($manifest['files']) || !is_array($manifest['files'])) {
-                continue;
-            }
-            $expected = array_map(function ($f) {
-                return ltrim(str_replace('\\', '/', (string)$f), '/');
-            }, $manifest['files']);
-
-            // Collect all actual files below the theme folder.
-            $actual = [];
-            foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS)) as $item) {
-                if ($item->isFile()) {
-                    $actual[] = ltrim(str_replace('\\', '/', substr($item->getPathname(), strlen($dir) + 1)), '/');
-                }
-            }
-
-            $missing = array_diff($expected, $actual);
-            $extra = array_diff($actual, $expected);
-            if (!empty($missing) || !empty($extra)) {
-                $pending[] = [
-                    'theme' => basename($dir),
-                    'missing' => array_values($missing),
-                    'extra' => array_values($extra),
-                ];
-            }
-        }
-
-        if (!empty($pending)) {
-            $detail = '';
-            foreach ($pending as $p) {
-                $detail .= "\n- " . $p['theme'];
-                if (!empty($p['missing'])) {
-                    $detail .= "\n  missing: " . implode(', ', $p['missing']);
-                }
-                if (!empty($p['extra'])) {
-                    $detail .= "\n  undeclared: " . implode(', ', $p['extra']);
-                }
-            }
-            return ['success' => false, 'message' => 'Theme integrity check failed. The archive contains files not declared in manifest.json (or is missing declared files). This may indicate a tampered package:' . $detail . "\n\nYou can disable this check by setting \$config['theme_verify_files'] = false; in config.json."];
-        }
-
-        return ['success' => true, 'message' => 'ok'];
+        return $this->installer->verifyInstalledFiles($targetDir);
     }
 
     public function delete(string $name): array
@@ -353,7 +302,7 @@ class ThemeManager
 
         $dir = $this->themes[$name]['dir'];
         if (is_dir($dir)) {
-            $this->deleteDir($dir);
+            $this->installer->deleteDir($dir);
             clearstatcache();
             if (is_dir($dir)) {
                 return ['success' => false, 'message' => 'Theme directory could not be deleted. It may be in use by another process.'];
@@ -391,33 +340,12 @@ class ThemeManager
                 unset($this->themes[$name]);
                 $removed[] = $name;
                 if (is_dir($theme['dir'])) {
-                    $this->deleteDir($theme['dir']);
+                    $this->installer->deleteDir($theme['dir']);
                 }
             }
         }
         $this->saveManifest();
         return $removed;
-    }
-
-    private function deleteDir(string $dir): void
-    {
-        if (!is_dir($dir)) {
-            return;
-        }
-        foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS), RecursiveIteratorIterator::CHILD_FIRST) as $item) {
-            $item->isDir() ? @rmdir($item->getPathname()) : @unlink($item->getPathname());
-        }
-        @rmdir($dir);
-        if (is_dir($dir)) {
-            if (stripos(PHP_OS, 'WIN') === 0 && function_exists('exec')) {
-                exec('takeown /f ' . escapeshellarg($dir) . ' /r /d y 2>nul');
-                exec('icacls ' . escapeshellarg($dir) . ' /grant administrators:F /t 2>nul');
-                exec('cmd /c rmdir /s /q ' . escapeshellarg($dir) . ' 2>nul');
-            } else {
-                exec('cmd /c rmdir /s /q ' . escapeshellarg($dir) . ' 2>&1', $out, $code);
-            }
-            clearstatcache();
-        }
     }
 
     public function installFromRepo(string $repoUrl, ?string $tag = null, ?string $expectedName = null): array

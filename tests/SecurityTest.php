@@ -171,35 +171,35 @@ function test_trusted_proxies(): Test
     $origForwardedProto = $_SERVER['HTTP_X_FORWARDED_PROTO'] ?? null;
 
     // Test 1: Without trusted proxies config, X-Forwarded-* is ignored
-    $GLOBALS['config'] = ['trusted_proxies' => []];
+    App::getInstance()->config = ['trusted_proxies' => []];
     $_SERVER['REMOTE_ADDR'] = '192.168.1.100';
     $_SERVER['HTTP_X_FORWARDED_FOR'] = '10.0.0.1';
     $ip = rate_limit_client_ip();
     $t->assertEquals('Untrusted proxy IP is not used', '192.168.1.100', $ip);
 
     // Test 2: Trusted proxy returns X-Forwarded-For
-    $GLOBALS['config'] = ['trusted_proxies' => ['192.168.1.100']];
+    App::getInstance()->config = ['trusted_proxies' => ['192.168.1.100']];
     $_SERVER['REMOTE_ADDR'] = '192.168.1.100';
     $_SERVER['HTTP_X_FORWARDED_FOR'] = '10.0.0.1';
     $ip = rate_limit_client_ip();
     $t->assertEquals('Trusted proxy returns forwarded IP', '10.0.0.1', $ip);
 
     // Test 3: CIDR notation works
-    $GLOBALS['config'] = ['trusted_proxies' => ['192.168.1.0/24']];
+    App::getInstance()->config = ['trusted_proxies' => ['192.168.1.0/24']];
     $_SERVER['REMOTE_ADDR'] = '192.168.1.50';
     $_SERVER['HTTP_X_FORWARDED_FOR'] = '10.0.0.2';
     $ip = rate_limit_client_ip();
     $t->assertEquals('CIDR notation matches subnet', '10.0.0.2', $ip);
 
     // Test 4: IP outside CIDR does not match
-    $GLOBALS['config'] = ['trusted_proxies' => ['192.168.1.0/24']];
+    App::getInstance()->config = ['trusted_proxies' => ['192.168.1.0/24']];
     $_SERVER['REMOTE_ADDR'] = '192.168.2.50';
     $_SERVER['HTTP_X_FORWARDED_FOR'] = '10.0.0.3';
     $ip = rate_limit_client_ip();
     $t->assertEquals('IP outside CIDR not matched', '192.168.2.50', $ip);
 
     // Test 5: Multiple X-Forwarded-For IPs — first one is client
-    $GLOBALS['config'] = ['trusted_proxies' => ['192.168.1.100']];
+    App::getInstance()->config = ['trusted_proxies' => ['192.168.1.100']];
     $_SERVER['REMOTE_ADDR'] = '192.168.1.100';
     $_SERVER['HTTP_X_FORWARDED_FOR'] = '10.0.0.1, 10.0.0.2, 10.0.0.3';
     $ip = rate_limit_client_ip();

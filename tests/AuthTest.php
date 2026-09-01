@@ -71,8 +71,8 @@ function test_user_has_permission(): Test
     $pdo->exec("INSERT INTO roles (name, permissions) VALUES ('moderator', '[\"threads.delete\",\"posts.edit\"]')");
     $pdo->exec("INSERT INTO roles (name, permissions) VALUES ('user', '[\"threads.create\",\"posts.create\",\"posts.edit_own\"]')");
 
-    // Make $pdo global for user_has_permission
-    $GLOBALS['pdo'] = $pdo;
+    // Make $pdo available for user_has_permission
+    App::getInstance()->pdo = $pdo;
 
     // Test: admin has all permissions
     $_SESSION['user_role'] = 'admin';
@@ -155,14 +155,14 @@ function test_input_validation(): Test
 {
     $t = new Test('Auth - Input Validation');
 
-    // Test: clean_text trims and stripslashes (does NOT remove HTML — that's escape()'s job)
+    // Test: clean_text trims and escapes HTML
     $t->assertEquals('clean_text trims whitespace', 'Hello', clean_text('  Hello  '));
-    $t->assertEquals('clean_text strips slashes', "It's", clean_text("It\\'s"));
+    $t->assertEquals('clean_text escapes HTML', 'It&#039;s', clean_text("It's"));
 
-    // Test: validate_input sanitizes
-    $input = 'Hello <b>World</b>';
+    // Test: validate_input trims and stripslashes
+    $input = '  Hello <b>World</b>  ';
     $sanitized = validate_input($input);
-    $t->assert('validate_input removes HTML tags', !str_contains($sanitized, '<b>'));
+    $t->assertEquals('validate_input trims', 'Hello <b>World</b>', $sanitized);
 
     // Test: escape function
     $t->assertEquals('escape encodes special chars', '&lt;script&gt;', escape('<script>'));

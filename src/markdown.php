@@ -208,8 +208,9 @@ function bb_render_content(string $text): string {
         return '';
     }
 
-    if (!empty($GLOBALS['pluginManager']) && method_exists($GLOBALS['pluginManager'], 'applyHook')) {
-        $override = $GLOBALS['pluginManager']->applyHook('render_content', $text);
+    $pluginManager = App::getInstance()->pluginManager;
+    if (!empty($pluginManager) && method_exists($pluginManager, 'applyHook')) {
+        $override = $pluginManager->applyHook('render_content', $text);
         if (is_string($override) && $override !== '') {
             return $override;
         }

@@ -46,11 +46,11 @@ function handle_admin_users_get(): \Bulletin\Response|bool
     return true;
 }
 
-function handle_admin_user_edit(string $method): \Bulletin\Response|bool
+function handle_admin_user_edit(string $method, array $params = []): \Bulletin\Response|bool
 {
     global $pdo;
 
-    $editUserId = (int)($_GET['id'] ?? 0);
+    $editUserId = (int)($params['id'] ?? $_GET['id'] ?? 0);
     if ($editUserId <= 0) {
         return redirect(url('admin_users'));
     }

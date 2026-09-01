@@ -30,7 +30,7 @@ function test_moderate_post_approve(): Test
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )");
 
-    $GLOBALS['pdo'] = $pdo;
+    App::getInstance()->pdo = $pdo;
 
     // Create pending thread
     $pdo->prepare("INSERT INTO threads (category_id, user_id, title, content, status) VALUES (1, 1, 'Test', 'Content', 'pending')")->execute();
@@ -81,7 +81,7 @@ function test_moderate_post_delete(): Test
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )");
 
-    $GLOBALS['pdo'] = $pdo;
+    App::getInstance()->pdo = $pdo;
 
     // Create thread with posts
     $pdo->prepare("INSERT INTO threads (category_id, user_id, title, content, status) VALUES (1, 1, 'Test', 'Content', 'visible')")->execute();
@@ -105,10 +105,10 @@ function test_moderate_post_delete(): Test
     $count->execute([$threadId]);
     $t->assertEquals('Thread deleted via handler', 0, (int)$count->fetchColumn());
 
-    // NOTE: Posts are NOT deleted — this is a known limitation
+    // Posts are also deleted (cascade)
     $postCount = $pdo->prepare("SELECT COUNT(*) FROM posts WHERE thread_id = ?");
     $postCount->execute([$threadId]);
-    $t->assertEquals('Posts remain (known limitation)', 2, (int)$postCount->fetchColumn());
+    $t->assertEquals('Posts cascade-deleted', 0, (int)$postCount->fetchColumn());
 
     return $t;
 }
@@ -131,7 +131,7 @@ function test_moderate_post_invalid_csrf(): Test
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )");
 
-    $GLOBALS['pdo'] = $pdo;
+    App::getInstance()->pdo = $pdo;
 
     // Setup invalid CSRF
     if (session_status() === PHP_SESSION_NONE) @session_start();
@@ -170,7 +170,7 @@ function test_moderate_post_invalid_thread(): Test
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )");
 
-    $GLOBALS['pdo'] = $pdo;
+    App::getInstance()->pdo = $pdo;
 
     // Setup CSRF
     if (session_status() === PHP_SESSION_NONE) @session_start();
@@ -214,7 +214,7 @@ function test_frontend_moderate_lock(): Test
     $pdo->exec("INSERT INTO users (id, username, role) VALUES (1, 'mod1', 'moderator')");
     $pdo->exec("INSERT INTO roles (name, permissions) VALUES ('moderator', '[\"moderation.manage\"]')");
 
-    $GLOBALS['pdo'] = $pdo;
+    App::getInstance()->pdo = $pdo;
 
     $pdo->prepare("INSERT INTO threads (category_id, user_id, title, content, status) VALUES (1, 1, 'Test', 'Content', 'visible')")->execute();
     $threadId = (int)$pdo->lastInsertId();
@@ -225,7 +225,7 @@ function test_frontend_moderate_lock(): Test
     $token = generate_csrf_token();
 
     $authz = new AuthZ($pdo);
-    $GLOBALS['authz'] = $authz;
+    App::getInstance()->authz = $authz;
 
     // Call handler
     $_POST = ['id' => $threadId, 'do' => 'lock', 'csrf_token' => $token];
@@ -263,7 +263,7 @@ function test_frontend_moderate_unauthorized(): Test
     $pdo->exec("INSERT INTO users (id, username, role) VALUES (1, 'user1', 'user')");
     $pdo->exec("INSERT INTO roles (name, permissions) VALUES ('user', '[]')");
 
-    $GLOBALS['pdo'] = $pdo;
+    App::getInstance()->pdo = $pdo;
 
     $pdo->prepare("INSERT INTO threads (category_id, user_id, title, content, status) VALUES (1, 1, 'Test', 'Content', 'visible')")->execute();
     $threadId = (int)$pdo->lastInsertId();
@@ -274,7 +274,7 @@ function test_frontend_moderate_unauthorized(): Test
     $token = generate_csrf_token();
 
     $authz = new AuthZ($pdo);
-    $GLOBALS['authz'] = $authz;
+    App::getInstance()->authz = $authz;
 
     // Call handler — should throw ForbiddenException
     $_POST = ['id' => $threadId, 'do' => 'lock', 'csrf_token' => $token];

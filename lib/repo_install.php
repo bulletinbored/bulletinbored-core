@@ -15,7 +15,8 @@ function install_repo_package(string $repoUrl, string $targetDir, ?string $tag =
     $dest = rtrim(dirname($targetDir), '/') . '/';
     $finalName = $expectedName ?: $repoName;
     $targetDir = $dest . $finalName;
-    $haveGit = function_exists('exec') && !empty(shell_exec('git --version 2>/dev/null'));
+    $haveGit = function_exists('exec') && !ini_get('disable_functions') && !str_contains(ini_get('disable_functions') ?? '', 'exec')
+        && (@exec('git --version 2>/dev/null', $gitOut, $gitRet) || true) && $gitRet === 0;
 
     if (is_dir($targetDir)) {
         if ($haveGit) {

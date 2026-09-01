@@ -19,9 +19,10 @@ function session_setup(): void
 
     session_name('BBSESSID');
 
-    $config = $GLOBALS['config'] ?? [];
-    $forwardedProto = $GLOBALS['forwarded_proto'] ?? null;
-    $forwardedSsl = $GLOBALS['forwarded_ssl'] ?? null;
+    $app = App::getInstance();
+    $config = $app->config;
+    $forwardedProto = $app->forwardedProto;
+    $forwardedSsl = $app->forwardedSsl;
     $forceHttps = $config['force_https'] ?? true;
 
     $configIsHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')

@@ -6,6 +6,8 @@
  * CSRF protection, rate limiting, input validation, security logging.
  */
 
+require_once __DIR__ . '/App.php';
+
 function generate_csrf_token(): string
 {
     if (empty($_SESSION['csrf_token'])) {
@@ -44,14 +46,11 @@ function csrf_field(): string
 function rate_limit_client_ip(): string
 {
     $remoteAddr = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
-    $trustedProxies = $GLOBALS['config']['trusted_proxies'] ?? ['127.0.0.1', '::1'];
+    $config = App::getInstance()->config;
+    $trustedProxies = $config['trusted_proxies'] ?? ['127.0.0.1', '::1'];
     foreach ((array)$trustedProxies as $proxy) {
         if (str_contains($proxy, '/')) {
-            [$subnet, $mask] = explode('/', $proxy, 2);
-            $ipLong = ip2long($remoteAddr);
-            $subnetLong = ip2long($subnet);
-            $maskLong = -1 << (32 - (int)$mask);
-            if ($ipLong !== false && $subnetLong !== false && ($ipLong & $maskLong) === ($subnetLong & $maskLong)) {
+            if (trusted_proxies_ip_in_cidr($remoteAddr, $proxy)) {
                 if (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
                     return trim(explode(',', $_SERVER['HTTP_X_FORWARDED_FOR'])[0]);
                 }

@@ -35,12 +35,12 @@ function handle_search(): \Bulletin\Response|bool
     return true;
 }
 
-function handle_category(): \Bulletin\Response|bool
+function handle_category(array $params = []): \Bulletin\Response|bool
 {
     global $pdo;
     global $pdo;
 
-    $categoryId = (int)($_GET['id'] ?? 0);
+    $categoryId = (int)($params['id'] ?? $_GET['id'] ?? 0);
     $catStmt = $pdo->prepare("SELECT * FROM categories WHERE id = ?");
     $catStmt->execute([$categoryId]);
     $category = $catStmt->fetch();
@@ -64,18 +64,26 @@ function handle_category(): \Bulletin\Response|bool
     return true;
 }
 
-function handle_download(): \Bulletin\Response|bool
+function handle_download(array $params = []): \Bulletin\Response|bool
 {
     global $pdo;
-    global $pdo;
 
-    $uploadId = (int)($_GET['id'] ?? 0);
-    $stmt = $pdo->prepare("SELECT * FROM uploads WHERE id = ?");
+    $uploadId = (int)($params['id'] ?? $_GET['id'] ?? 0);
+    $stmt = $pdo->prepare("
+        SELECT u.*, t.status AS thread_status
+        FROM uploads u
+        LEFT JOIN threads t ON u.thread_id = t.id
+        WHERE u.id = ?
+    ");
     $stmt->execute([$uploadId]);
     $upload = $stmt->fetch();
 
     if (!$upload) {
         throw new \Bulletin\NotFoundException('File not found');
+    }
+
+    if (!can_view_thread($upload['thread_status'] ?? 'visible')) {
+        throw new \Bulletin\ForbiddenException('Not authorized');
     }
 
     $filePath = __DIR__ . '/../../uploads/' . basename($upload['filename']);

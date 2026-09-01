@@ -237,11 +237,11 @@ function handle_verify_email(): \Bulletin\Response|bool
     return true;
 }
 
-function handle_profile(): \Bulletin\Response|bool
+function handle_profile(array $params = []): \Bulletin\Response|bool
 {
     global $pdo;
 
-    $username = $_GET['user'] ?? '';
+    $username = $params['user'] ?? $_GET['user'] ?? '';
     $profileStmt = $pdo->prepare("SELECT * FROM users WHERE username = ?");
     $profileStmt->execute([$username]);
     $profileUser = $profileStmt->fetch();

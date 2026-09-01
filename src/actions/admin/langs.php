@@ -133,22 +133,17 @@ function handle_admin_langs(string $method)
 
                             $data = null;
                             foreach ($candidateUrls as $tryUrl) {
+                                if (!str_ends_with($tryUrl, '.json')) {
+                                    continue;
+                                }
                                 $content = @file_get_contents($tryUrl);
                                 if ($content === false) {
                                     continue;
                                 }
-                                if (str_ends_with($tryUrl, '.json')) {
-                                    $decoded = json_decode($content, true);
-                                    if (is_array($decoded)) {
-                                        $data = $decoded;
-                                        break;
-                                    }
-                                } else {
-                                    $decoded = @eval('?>' . $content);
-                                    if (is_array($decoded)) {
-                                        $data = $decoded;
-                                        break;
-                                    }
+                                $decoded = json_decode($content, true);
+                                if (is_array($decoded)) {
+                                    $data = $decoded;
+                                    break;
                                 }
                             }
 

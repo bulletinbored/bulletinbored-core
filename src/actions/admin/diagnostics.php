@@ -13,9 +13,9 @@ function handle_admin_diagnostics_get(): \Bulletin\Response|bool
     $diag['allow_url_fopen'] = (bool) ini_get('allow_url_fopen');
     $diag['exec'] = function_exists('exec');
     $diag['git'] = false;
-    if (function_exists('exec')) {
-        $out = @shell_exec('git --version 2>/dev/null');
-        $diag['git'] = !empty($out);
+    if (function_exists('exec') && !ini_get('disable_functions') && !str_contains(ini_get('disable_functions') ?? '', 'exec')) {
+        $out = @exec('git --version 2>/dev/null', $output, $ret);
+        $diag['git'] = ($ret === 0) && !empty($out);
     }
 
     $githubOk = false;

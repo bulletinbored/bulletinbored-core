@@ -6,15 +6,16 @@ function handle_admin_moderation_get(): \Bulletin\Response|bool
     return true;
 }
 
-function handle_moderate_post(): \Bulletin\Response|bool
+function handle_moderate_post(array $params = []): \Bulletin\Response|bool
 {
-    global $pdo;
+    $pdo = App::getInstance()->pdo;
+    $authz = App::getInstance()->authz;
 
     if (!csrf_validate_request()) {
         throw new \Bulletin\ForbiddenException('CSRF token invalid');
     }
 
-    $threadId = (int)($_POST['id'] ?? 0);
+    $threadId = (int)($params['id'] ?? $_POST['id'] ?? 0);
     $action = $_POST['do'] ?? '';
 
     if ($threadId <= 0) {
@@ -24,10 +25,14 @@ function handle_moderate_post(): \Bulletin\Response|bool
     if ($action === 'approve') {
         $pdo->prepare("UPDATE threads SET status = 'visible' WHERE id = ?")->execute([$threadId]);
         log_admin_action('thread_approve', ['thread_id' => $threadId]);
+    } elseif ($action === 'hide') {
+        $pdo->prepare("UPDATE threads SET status = 'hidden' WHERE id = ?")->execute([$threadId]);
+        log_admin_action('thread_hide', ['thread_id' => $threadId]);
     } elseif ($action === 'delete') {
         $catIdStmt = $pdo->prepare("SELECT category_id FROM threads WHERE id = ?");
         $catIdStmt->execute([$threadId]);
         $catId = (int)($catIdStmt->fetchColumn() ?: 0);
+        $pdo->prepare("DELETE FROM posts WHERE thread_id = ?")->execute([$threadId]);
         $pdo->prepare("DELETE FROM threads WHERE id = ?")->execute([$threadId]);
         log_admin_action('thread_delete', ['thread_id' => $threadId, 'category_id' => $catId]);
         if ($catId > 0) {
@@ -41,7 +46,8 @@ function handle_moderate_post(): \Bulletin\Response|bool
 
 function handle_frontend_moderate_post(): \Bulletin\Response|bool
 {
-    global $pdo, $authz;
+    $pdo = App::getInstance()->pdo;
+    $authz = App::getInstance()->authz;
 
     if (!csrf_validate_request()) {
         throw new \Bulletin\ForbiddenException('CSRF token invalid');
@@ -115,7 +121,8 @@ function handle_frontend_moderate_post(): \Bulletin\Response|bool
 
 function handle_split_thread_post(): \Bulletin\Response|bool
 {
-    global $pdo, $authz;
+    $pdo = App::getInstance()->pdo;
+    $authz = App::getInstance()->authz;
 
     if (!csrf_validate_request()) {
         throw new \Bulletin\ForbiddenException('CSRF token invalid');
@@ -190,7 +197,8 @@ function handle_split_thread_post(): \Bulletin\Response|bool
 
 function handle_merge_thread_post(): \Bulletin\Response|bool
 {
-    global $pdo, $authz;
+    $pdo = App::getInstance()->pdo;
+    $authz = App::getInstance()->authz;
 
     if (!csrf_validate_request()) {
         throw new \Bulletin\ForbiddenException('CSRF token invalid');

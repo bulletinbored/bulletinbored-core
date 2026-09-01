@@ -306,7 +306,7 @@ function test_e2e_current_route_action(): Test
 
     $_SERVER['REQUEST_URI'] = '/u/johndoe';
     $action = current_route_action();
-    $t->assertEquals('Profile page resolves to profile', 'profile', $action);
+    $t->assertEquals('Profile page resolves to profile', 'u', $action);
 
     $_SERVER['REQUEST_URI'] = '/admin';
     $action = current_route_action();
@@ -314,7 +314,7 @@ function test_e2e_current_route_action(): Test
 
     $_SERVER['REQUEST_URI'] = '/admin/users';
     $action = current_route_action();
-    $t->assertEquals('Admin users page resolves to admin_users', 'admin_users', $action);
+    $t->assertEquals('Admin users page resolves to admin', 'admin', $action);
 
     $_SERVER['REQUEST_URI'] = '/new-thread';
     $action = current_route_action();

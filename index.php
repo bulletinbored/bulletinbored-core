@@ -19,6 +19,7 @@ require __DIR__ . '/lib/AuthZ.php';
 
 $pluginManager = new PluginManager(__DIR__ . '/plugins', $config['plugin_manifest'] ?? __DIR__ . '/data/plugins.json');
 $GLOBALS['pluginManager'] = $pluginManager;
+$app->pluginManager = $pluginManager;
 $themeManager = new ThemeManager(
     __DIR__ . '/themes',
     $config['theme_manifest'] ?? __DIR__ . '/data/themes.json',
@@ -52,23 +53,6 @@ require __DIR__ . '/src/actions/content.php';
 require __DIR__ . '/src/actions/misc.php';
 require __DIR__ . '/src/actions/admin.php';
 
-// Ensure suspension_time column exists (runtime migration for existing databases)
-try {
-    $hasSuspensionCol = false;
-    $driver = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
-    if ($driver === 'mysql') {
-        $check = $pdo->prepare("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'suspension_time'");
-        $check->execute();
-        $hasSuspensionCol = (int)$check->fetchColumn() > 0;
-    } else {
-        $cols = $pdo->query("PRAGMA table_info(users)")->fetchAll(PDO::FETCH_COLUMN, 1);
-        $hasSuspensionCol = in_array('suspension_time', $cols, true);
-    }
-    if (!$hasSuspensionCol) {
-        $pdo->exec($driver === 'mysql' ? "ALTER TABLE users ADD COLUMN suspension_time INTEGER DEFAULT 0" : "ALTER TABLE users ADD COLUMN suspension_time INTEGER DEFAULT 0");
-    }
-} catch (PDOException $e) {}
-
 // Redirect banned/suspended users
 if (is_logged_in()) {
     $userId = (int)($_SESSION['user_id'] ?? 0);
@@ -77,13 +61,17 @@ if (is_logged_in()) {
     $row = $stmt->fetch();
     if (!$row) {
         session_destroy();
-        return redirect(url('home'));
+        $response = redirect(url('home'));
+        $response->send();
+        exit;
     }
     $_SESSION['user_status'] = $row['status'];
     $_SESSION['user_suspension_time'] = (int)($row['suspension_time'] ?? 0);
     if ($row['status'] === 'banned' || ($row['status'] === 'suspended' && (int)($row['suspension_time'] ?? 0) > 0 && time() < (int)$row['suspension_time'])) {
         session_destroy();
-        return redirect(url('home'));
+        $response = redirect(url('home'));
+        $response->send();
+        exit;
     }
     if ($row['status'] === 'suspended' && (int)($row['suspension_time'] ?? 0) > 0 && time() >= (int)$row['suspension_time']) {
         $pdo->prepare("UPDATE users SET status = 'active', suspension_time = 0 WHERE id = ?")->execute([$userId]);
@@ -99,7 +87,8 @@ $pluginManager->applyRoutes();
 
 // Register authorization service and can: middleware
 $authz = new AuthZ($pdo);
-$GLOBALS['authz'] = $authz;
+$app->authz = $authz;
+$app->pdo = $pdo;
 $router->registerCanMiddleware($authz);
 
 // --- Public routes ---

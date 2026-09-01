@@ -203,8 +203,8 @@ class UpdateManager
                 CURLOPT_TIMEOUT => $timeout,
                 CURLOPT_CONNECTTIMEOUT => $timeout,
                 CURLOPT_USERAGENT => 'bulletinbored-update-checker/1.0',
-                CURLOPT_SSL_VERIFYPEER => false,
-                CURLOPT_SSL_VERIFYHOST => false,
+                CURLOPT_SSL_VERIFYPEER => true,
+                CURLOPT_SSL_VERIFYHOST => 2,
             ]);
             if ($token) {
                 curl_setopt($ch, CURLOPT_HTTPHEADER, ['Authorization: token ' . $token]);
@@ -434,7 +434,9 @@ class UpdateManager
         // Create backup before applying
         $backupPath = $this->backupCore();
         if ($backupPath === null) {
-            error_log('BB CORE WARN: backup failed, proceeding without backup');
+            error_log('BB CORE FAIL: backup failed, aborting update');
+            $this->deleteRecursive($tmpExtract);
+            return false;
         }
 
         $root = rtrim(__DIR__ . '/../', '/');

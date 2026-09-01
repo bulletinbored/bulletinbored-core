@@ -1,12 +1,15 @@
 <?php
 /**
- * setup.php — ensures required directories exist and initialises the database.
+ * setup.php — ensures required directories exist and initializes the database.
  *
- * Returns the active BbPdo/PDO connection in $pdo (global). Mirrors the
- * bootstrap behaviour that used to live inline at the top of index.php.
+ * Schema is managed exclusively by the Migrator. This file only:
+ * 1. Ensures required directories exist
+ * 2. Creates the PDO connection
+ * 3. Runs pending migrations (which create schema + seed defaults)
+ *
+ * Returns the active PDO connection in $pdo (global).
  */
 
-// Ensure directories exist
 foreach (['data', 'plugins', 'uploads', 'uploads/avatars'] as $d) {
     $dir = __DIR__ . '/../' . $d;
     if (!is_dir($dir)) {
@@ -17,427 +20,49 @@ foreach (['data', 'plugins', 'uploads', 'uploads/avatars'] as $d) {
 $dbPath = $config['db_path'];
 $dbDriver = $config['db_driver'] ?? 'sqlite';
 
-// INSERT IGNORE is MySQL-only; SQLite uses INSERT OR IGNORE.
-$insertIgnoreSql = $dbDriver === 'mysql' ? 'INSERT IGNORE' : 'INSERT OR IGNORE';
-
-// Database initialization
 require_once __DIR__ . '/../lib/BbPdo.php';
-require_once __DIR__ . '/../lib/DbQuery.php';
+
 if ($dbDriver === 'mysql') {
     $dsn = "mysql:host={$config['db_host']};dbname={$config['db_name']};charset=utf8mb4";
     $pdo = new BbPdo($dsn, $config['db_user'], $config['db_pass']);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     $pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
 
-    // MySQL tables. Every table is explicitly created with utf8mb4 so that
-    // special characters (em dash, curly quotes, emoji, etc.) are stored
-    // correctly. Without this, MySQL falls back to the server default charset
-    // and rejects such bytes with error 1366 on TEXT columns.
-    $charset = "CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci";
-    $tables = [
-        "users" => "id INT AUTO_INCREMENT PRIMARY KEY, username VARCHAR(255) UNIQUE NOT NULL, password VARCHAR(255) NOT NULL, email VARCHAR(255), role VARCHAR(50) DEFAULT 'user', avatar VARCHAR(255), status VARCHAR(50) DEFAULT 'active', suspension_time INTEGER DEFAULT 0, email_verified INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
-        "categories" => "id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255) NOT NULL UNIQUE, description TEXT, position INT DEFAULT 0, allowed_roles TEXT DEFAULT NULL",
-        "threads" => "id INT AUTO_INCREMENT PRIMARY KEY, category_id INT, user_id INT, title TEXT, content TEXT, status VARCHAR(50) DEFAULT 'visible', created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP",
-        "posts" => "id INT AUTO_INCREMENT PRIMARY KEY, thread_id INT, user_id INT, content TEXT, status VARCHAR(50) DEFAULT 'visible', created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
-        "uploads" => "id INT AUTO_INCREMENT PRIMARY KEY, thread_id INT, post_id INT, user_id INT, filename VARCHAR(255), original_name VARCHAR(255), size INT, mime_type VARCHAR(100), created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
-        "thread_watchers" => "id INT AUTO_INCREMENT PRIMARY KEY, thread_id INT NOT NULL, user_id INT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE KEY unique_watch (thread_id, user_id)",
-        "notifications" => "id INT AUTO_INCREMENT PRIMARY KEY, user_id INT NOT NULL, type VARCHAR(50) DEFAULT 'info', title TEXT NOT NULL, message TEXT, link TEXT, is_read INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
-                "private_messages" => "id INT AUTO_INCREMENT PRIMARY KEY, sender_id INT NOT NULL, recipient_id INT NOT NULL, subject TEXT, content TEXT NOT NULL, is_read INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
-                "roles" => "id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(50) NOT NULL UNIQUE, permissions TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
-        "email_verifications" => "id INT AUTO_INCREMENT PRIMARY KEY, user_id INT NOT NULL, token TEXT NOT NULL, expires_at DATETIME NOT NULL, used INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
-    ];
-
-    foreach ($tables as $name => $schema) {
-        $pdo->exec("CREATE TABLE IF NOT EXISTS $name ($schema) $charset");
-    }
-
-    // Force the database default to utf8mb4 as well, so any future table
-    // created without an explicit charset still inherits the correct one.
     try {
         $pdo->exec("ALTER DATABASE `{$config['db_name']}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
     } catch (PDOException $e) {}
 
-    // Relax ONLY_FULL_GROUP_BY so GROUP BY queries written for SQLite
-    // (dependent subqueries in the SELECT list) also run on MySQL 5.7+.
     try {
         $pdo->exec("SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode, 'ONLY_FULL_GROUP_BY', ''))");
     } catch (PDOException $e) {}
-
-    // Create admin user if not exists
-    $db = new DbQuery($pdo);
-    if (!$db->table('users')->where('role', 'admin')->exists()) {
-        $adminPassword = $config['admin_pass'] ?? null;
-        if (empty($adminPassword)) {
-            // No admin password in config — generate a random one and log it.
-            // This should only happen on legacy/manual setups.
-            $adminPassword = bin2hex(random_bytes(12));
-            error_log('bulletinbored: No admin user exists and no admin_pass in config. Generated temporary password: ' . $adminPassword . ' — CHANGE THIS IMMEDIATELY.');
-        }
-        $db->table('users')->insert([
-            'username' => $config['admin_user'],
-            'password' => password_hash($adminPassword, PASSWORD_DEFAULT),
-            'role' => 'admin',
-        ]);
-    }
-
-    // Create default roles if not exists
-    $defaultRoles = [
-        ['admin', json_encode(['admin.access', 'threads.approve', 'threads.delete', 'threads.edit', 'threads.lock', 'threads.sticky', 'threads.move', 'threads.split', 'threads.merge', 'threads.copy', 'posts.delete', 'posts.edit', 'users.ban', 'users.create', 'users.delete', 'users.edit', 'roles.manage', 'categories.manage', 'settings.manage', 'plugins.manage', 'themes.manage', 'langs.manage'])],
-        ['moderator', json_encode(['threads.approve', 'threads.delete', 'threads.edit', 'threads.lock', 'threads.sticky', 'threads.move', 'threads.split', 'threads.merge', 'threads.copy', 'posts.delete', 'posts.edit'])],
-        ['user', json_encode(['threads.create', 'posts.create', 'posts.edit_own', 'posts.delete_own'])],
-    ];
-    foreach ($defaultRoles as $role) {
-        $db->table('roles')->insertIgnore(['name' => $role[0], 'permissions' => $role[1]]);
-    }
-
-    // Create default category (idempotent: only if it does not already exist)
-    if (!$db->table('categories')->where('name', 'General')->exists()) {
-        $db->table('categories')->insert(['name' => 'General', 'description' => 'General discussion', 'position' => 1]);
-    }
 } else {
-    // SQLite handling
-    if (!file_exists($dbPath)) {
-        // New database - create all tables
-        $pdo = new PDO('sqlite:' . $dbPath);
-        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-
-        $pdo->exec("
- CREATE TABLE users (
-                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                 username TEXT UNIQUE NOT NULL,
-                 password TEXT NOT NULL,
-                 email TEXT,
-                 role TEXT DEFAULT 'user',
-                 avatar TEXT,
-                 status TEXT DEFAULT 'active',
-                 email_verified INTEGER DEFAULT 0,
-                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-             );
-            CREATE TABLE categories (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                description TEXT,
-                position INTEGER DEFAULT 0,
-                allowed_roles TEXT DEFAULT NULL
-            );
-            CREATE TABLE threads (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                category_id INTEGER,
-                user_id INTEGER,
-                title TEXT NOT NULL,
-                content TEXT,
-                status TEXT DEFAULT 'visible',
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE TABLE posts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                thread_id INTEGER,
-                user_id INTEGER,
-                content TEXT NOT NULL,
-                status TEXT DEFAULT 'visible',
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE TABLE uploads (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                thread_id INTEGER,
-                post_id INTEGER,
-                user_id INTEGER,
-                filename TEXT,
-                original_name TEXT,
-                size INTEGER,
-                mime_type TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE TABLE thread_watchers (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                thread_id INTEGER NOT NULL,
-                user_id INTEGER NOT NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(thread_id, user_id)
-            );
-            CREATE TABLE notifications (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                type VARCHAR(50) DEFAULT 'info',
-                title TEXT NOT NULL,
-                message TEXT,
-                link TEXT,
-                is_read INTEGER DEFAULT 0,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE TABLE private_messages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                sender_id INTEGER NOT NULL,
-                recipient_id INTEGER NOT NULL,
-                subject TEXT DEFAULT '',
-                content TEXT NOT NULL,
-                is_read INTEGER DEFAULT 0,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE TABLE roles (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL UNIQUE,
-                permissions TEXT DEFAULT '[]',
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            );
-        ");
-
-        // Insert default data
-        $adminPassword = $config['admin_pass'] ?? null;
-        if (empty($adminPassword)) {
-            $adminPassword = bin2hex(random_bytes(12));
-            error_log('bulletinbored: No admin_pass in config. Generated temporary password: ' . $adminPassword . ' — CHANGE THIS IMMEDIATELY.');
-        }
-        $pdo->exec("INSERT INTO users (username, password, role) VALUES ('admin', '" . password_hash($adminPassword, PASSWORD_DEFAULT) . "', 'admin')");
-
-        // INSERT ... SELECT ... FROM dual is MySQL-only. Use driver-aware syntax.
-        if ($dbDriver === 'mysql') {
-            $pdo->exec("INSERT INTO categories (name, description, position) SELECT 'General', 'General discussion', 1 FROM dual WHERE NOT EXISTS (SELECT 1 FROM categories WHERE name = 'General')");
-        } else {
-            $pdo->exec("INSERT OR IGNORE INTO categories (name, description, position) VALUES ('General', 'General discussion', 1)");
-        }
-    } else {
-        // Existing database - just connect
-        $pdo = new PDO('sqlite:' . $dbPath);
-        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-
-        // Safe column addition for threads table
-        try {
-            $cols = $pdo->query("PRAGMA table_info(threads)")->fetchAll(PDO::FETCH_COLUMN);
-            if (!in_array('category_id', $cols)) {
-                $pdo->exec("ALTER TABLE threads ADD COLUMN category_id INTEGER");
-            }
-            if (!in_array('updated_at', $cols)) {
-                $pdo->exec("ALTER TABLE threads ADD COLUMN updated_at DATETIME");
-            }
-        } catch (PDOException $e) {
-            // Ignore errors if columns already exist
-        }
-
-        // Safe column addition for users table (email, created_at, avatar)
-        try {
-            $cols = $pdo->query("PRAGMA table_info(users)")->fetchAll(PDO::FETCH_COLUMN);
-            if (!in_array('email', $cols)) {
-                $pdo->exec("ALTER TABLE users ADD COLUMN email TEXT");
-            }
-            if (!in_array('created_at', $cols)) {
-                $pdo->exec("ALTER TABLE users ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP");
-            }
-            if (!in_array('avatar', $cols)) {
-                $pdo->exec("ALTER TABLE users ADD COLUMN avatar TEXT");
-            }
-            if (!in_array('email_verified', $cols)) {
-                $pdo->exec("ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 0");
-            }
-            $pdo->exec("UPDATE users SET email_verified = 1");
-        } catch (PDOException $e) {}
-
-        // Safe column addition for posts table
-        try {
-            $cols = $pdo->query("PRAGMA table_info(posts)")->fetchAll(PDO::FETCH_COLUMN);
-            // Add any missing columns for posts if needed
-        } catch (PDOException $e) {}
-
-        // Create password_resets table if not exists
-        try {
-            $pdo->exec("
-                CREATE TABLE IF NOT EXISTS password_resets (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER NOT NULL,
-                    token TEXT NOT NULL,
-                    expires_at DATETIME NOT NULL,
-                    used INTEGER DEFAULT 0,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )
-            ");
-        } catch (PDOException $e) {}
-
-        // Create email_verifications table if not exists
-        try {
-            $pdo->exec("
-                CREATE TABLE IF NOT EXISTS email_verifications (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER NOT NULL,
-                    token TEXT NOT NULL,
-                    expires_at DATETIME NOT NULL,
-                    used INTEGER DEFAULT 0,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )
-            ");
-        } catch (PDOException $e) {}
-
-        // Create thread_watchers table if not exists
-        try {
-            $pdo->exec("
-                CREATE TABLE IF NOT EXISTS thread_watchers (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    thread_id INTEGER NOT NULL,
-                    user_id INTEGER NOT NULL,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(thread_id, user_id)
-                )
-            ");
-        } catch (PDOException $e) {}
-
-        // Create notifications table if not exists
-        try {
-            $pdo->exec("
-                CREATE TABLE IF NOT EXISTS notifications (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER NOT NULL,
-                    type VARCHAR(50) DEFAULT 'info',
-                    title TEXT NOT NULL,
-                    message TEXT,
-                    link TEXT,
-                    is_read INTEGER DEFAULT 0,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )
-            ");
-        } catch (PDOException $e) {}
-
-        // Create private_messages table if not exists
-        try {
-            $pdo->exec("
-                CREATE TABLE IF NOT EXISTS private_messages (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    sender_id INTEGER NOT NULL,
-                    recipient_id INTEGER NOT NULL,
-                    subject TEXT DEFAULT '',
-                    content TEXT NOT NULL,
-                    is_read INTEGER DEFAULT 0,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )
-            ");
-        } catch (PDOException $e) {}
-
-        // Create roles table if not exists
-        try {
-            $pdo->exec("
-                CREATE TABLE IF NOT EXISTS roles (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT NOT NULL UNIQUE,
-                    permissions TEXT DEFAULT '[]',
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )
-            ");
-        } catch (PDOException $e) {}
-
-        // Insert default roles if not exists
-        try {
-            $db = new DbQuery($pdo);
-            $defaultRoles = [
-                ['admin', json_encode(['admin.access', 'threads.approve', 'threads.delete', 'threads.edit', 'threads.lock', 'threads.sticky', 'threads.move', 'threads.split', 'threads.merge', 'threads.copy', 'posts.delete', 'posts.edit', 'users.ban', 'users.create', 'users.delete', 'users.edit', 'roles.manage', 'categories.manage', 'settings.manage', 'plugins.manage', 'themes.manage', 'langs.manage'])],
-                ['moderator', json_encode(['threads.approve', 'threads.delete', 'threads.edit', 'threads.lock', 'threads.sticky', 'threads.move', 'threads.split', 'threads.merge', 'threads.copy', 'posts.delete', 'posts.edit'])],
-                ['user', json_encode(['threads.create', 'posts.create', 'posts.edit_own', 'posts.delete_own'])],
-            ];
-            foreach ($defaultRoles as $role) {
-                $db->table('roles')->insertIgnore(['name' => $role[0], 'permissions' => $role[1]]);
-            }
-        } catch (PDOException $e) {}
-    }
+    $isNewDb = !file_exists($dbPath);
+    $pdo = new PDO('sqlite:' . $dbPath);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 }
 
-// Safe column addition for uploads table (mime_type) — works on both drivers
-try {
-    $uploadCols = [];
-    if (($config['db_driver'] ?? 'sqlite') === 'mysql') {
-        foreach ($pdo->query("SHOW COLUMNS FROM uploads") as $c) {
-            $uploadCols[] = $c['Field'];
-        }
-    } else {
-        $uploadCols = $pdo->query("PRAGMA table_info(uploads)")->fetchAll(PDO::FETCH_COLUMN);
-    }
-    if (!in_array('mime_type', $uploadCols, true)) {
-        $pdo->exec("ALTER TABLE uploads ADD COLUMN mime_type VARCHAR(100)");
-    }
-} catch (PDOException $e) {}
+$pdo->exec("PRAGMA foreign_keys = ON");
 
-        // Safe column addition for categories table
-        try {
-    $cols = [];
-    if (($config['db_driver'] ?? 'sqlite') === 'mysql') {
-        foreach ($pdo->query("SHOW COLUMNS FROM categories") as $c) {
-            $cols[] = $c['Field'];
-        }
-    } else {
-        $cols = $pdo->query("PRAGMA table_info(categories)")->fetchAll(PDO::FETCH_COLUMN);
-    }
-    if (!in_array('allowed_roles', $cols)) {
-        $pdo->exec("ALTER TABLE categories ADD COLUMN allowed_roles TEXT DEFAULT NULL");
-    }
-} catch (PDOException $e) {}
+$GLOBALS['pdo'] = $pdo;
+App::getInstance()->pdo = $pdo;
 
-// Handle legacy database - add missing columns if not present (works on both MySQL and SQLite)
-try {
-    $driver = $config['db_driver'] ?? 'sqlite';
-    $cols = [];
-    if ($driver === 'mysql') {
-        foreach ($pdo->query("SHOW COLUMNS FROM users") as $c) {
-            $cols[] = $c['Field'];
-        }
-    } else {
-        $cols = $pdo->query("PRAGMA table_info(users)")->fetchAll(PDO::FETCH_COLUMN, 1);
-    }
-    if (!in_array('email', $cols)) {
-        $pdo->exec("ALTER TABLE users ADD COLUMN email " . ($driver === 'mysql' ? "VARCHAR(255)" : "TEXT"));
-    }
-    if (!in_array('created_at', $cols)) {
-        $pdo->exec("ALTER TABLE users ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP");
-    }
-    if (!in_array('avatar', $cols)) {
-        $pdo->exec("ALTER TABLE users ADD COLUMN avatar " . ($driver === 'mysql' ? "VARCHAR(255)" : "TEXT"));
-    }
-    if (!in_array('status', $cols)) {
-        $pdo->exec("ALTER TABLE users ADD COLUMN status " . ($driver === 'mysql' ? "VARCHAR(50) DEFAULT 'active'" : "TEXT DEFAULT 'active'"));
-    }
-    if (!in_array('suspension_time', $cols)) {
-        $pdo->exec("ALTER TABLE users ADD COLUMN suspension_time INTEGER DEFAULT 0");
-    }
-} catch (PDOException $e) {}
+require_once __DIR__ . '/../lib/Migrator.php';
 
-// Add token_hash columns for O(1) token lookup
-try {
-    $driver = $config['db_driver'] ?? 'sqlite';
-    $cols = [];
-    if ($driver === 'mysql') {
-        foreach ($pdo->query("SHOW COLUMNS FROM email_verifications") as $c) {
-            $cols[] = $c['Field'];
-        }
-    } else {
-        $cols = $pdo->query("PRAGMA table_info(email_verifications)")->fetchAll(PDO::FETCH_COLUMN, 1);
-    }
-    if (!in_array('token_hash', $cols)) {
-        $pdo->exec("ALTER TABLE email_verifications ADD COLUMN token_hash VARCHAR(64) DEFAULT NULL");
-    }
-} catch (PDOException $e) {}
+$migrator = new Migrator($pdo, $config);
+$migrator->migrate();
 
-try {
-    $driver = $config['db_driver'] ?? 'sqlite';
-    $cols = [];
-    if ($driver === 'mysql') {
-        foreach ($pdo->query("SHOW COLUMNS FROM password_resets") as $c) {
-            $cols[] = $c['Field'];
-        }
-    } else {
-        $cols = $pdo->query("PRAGMA table_info(password_resets)")->fetchAll(PDO::FETCH_COLUMN, 1);
+// Create admin user if not exists (after migrations ensure schema is ready)
+require_once __DIR__ . '/../lib/DbQuery.php';
+$db = new DbQuery($pdo);
+if (!$db->table('users')->where('role', 'admin')->exists()) {
+    $adminPassword = $config['admin_pass'] ?? null;
+    if (empty($adminPassword)) {
+        $adminPassword = bin2hex(random_bytes(12));
+        error_log('bulletinbored: No admin user exists and no admin_pass in config. Generated temporary password: ' . $adminPassword . ' — CHANGE THIS IMMEDIATELY.');
     }
-    if (!in_array('token_hash', $cols)) {
-        $pdo->exec("ALTER TABLE password_resets ADD COLUMN token_hash VARCHAR(64) DEFAULT NULL");
-    }
-} catch (PDOException $e) {}
-
-// Thread view counter (works on both drivers, ignored when already present)
-try {
-    $threadCols = [];
-    if (($config['db_driver'] ?? 'sqlite') === 'mysql') {
-        foreach ($pdo->query("SHOW COLUMNS FROM threads") as $c) {
-            $threadCols[] = $c['Field'];
-        }
-    } else {
-        $threadCols = $pdo->query("PRAGMA table_info(threads)")->fetchAll(PDO::FETCH_COLUMN, 1);
-    }
-    if (!in_array('views', $threadCols, true)) {
-        $pdo->exec("ALTER TABLE threads ADD COLUMN views INTEGER DEFAULT 0");
-    }
-} catch (PDOException $e) {}
+    $db->table('users')->insert([
+        'username' => $config['admin_user'],
+        'password' => password_hash($adminPassword, PASSWORD_DEFAULT),
+        'role' => 'admin',
+    ]);
+}

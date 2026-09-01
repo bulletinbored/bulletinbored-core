@@ -41,9 +41,12 @@ if (!isset($config) || !is_array($config)) {
 // --- Trusted proxies --------------------------------------------------------
 require_once __DIR__ . '/TrustedProxies.php';
 $proxyInfo = trusted_proxies_detect();
-$GLOBALS['forwarded_proto'] = $forwardedProto = $proxyInfo['forwarded_proto'];
-$GLOBALS['forwarded_ssl'] = $forwardedSsl = $proxyInfo['forwarded_ssl'];
-$GLOBALS['forwarded_for'] = $forwardedFor = $proxyInfo['forwarded_for'];
+
+$app = App::getInstance();
+$app->config = $config;
+$app->forwardedProto = $forwardedProto = $proxyInfo['forwarded_proto'];
+$app->forwardedSsl = $forwardedSsl = $proxyInfo['forwarded_ssl'];
+$app->forwardedFor = $forwardedFor = $proxyInfo['forwarded_for'];
 
 $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
     || (isset($_SERVER['SERVER_PORT']) && (int) $_SERVER['SERVER_PORT'] === 443)
@@ -124,11 +127,7 @@ if (!in_array($lang, $config['available_langs'] ?? ['en'])) {
 setcookie('lang', $lang, time() + 365 * 24 * 60 * 60, '/');
 
 // Translation registry: scope => [key => text].
-// The core uses the 'core' scope; each plugin/theme uses its own namespaced
-// scope so their strings stay fully separated from the core and from each
-// other (no key collisions). A translation that is missing simply returns the
-// key itself, so a plugin/theme that ships no lang file still works unchanged.
-$GLOBALS['i18n'] = [];
+$app->i18n = [];
 
 /**
  * Load a translation file as a plain array. Translation files are JSON only
@@ -160,12 +159,12 @@ function load_lang_file(string $path): array
 }
 
 $coreLangFile = __DIR__ . '/../lang/' . $lang . '.json';
-$GLOBALS['i18n']['core'] = load_lang_file($coreLangFile);
+$app->i18n['core'] = load_lang_file($coreLangFile);
 // Back-compat alias: code that still does `global $translations` keeps working.
-$translations = &$GLOBALS['i18n']['core'];
+$translations = &$app->i18n['core'];
 
 function t($key, $params = [], $scope = 'core') {
-    $registry = $GLOBALS['i18n'] ?? [];
+    $registry = App::getInstance()->i18n;
     $text = $registry[$scope][$key] ?? $key;
     foreach ($params as $k => $v) {
         $text = str_replace('{' . $k . '}', $v, $text);
