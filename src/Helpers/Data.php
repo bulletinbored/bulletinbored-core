@@ -27,7 +27,14 @@ function thread_sort_options() {
 
 function fetch_threads(array $opts = []) {
     $pdo = App::getInstance()->pdo;
+    $allowedStatuses = ['visible', 'sticky', 'locked', 'hidden', 'pending'];
     $statusFilter = $opts['status'] ?? ['visible', 'sticky', 'locked'];
+    // Whitelist: only allow known status values
+    $statusFilter = array_values(array_intersect($statusFilter, $allowedStatuses));
+    if (empty($statusFilter)) {
+        $statusFilter = ['visible'];
+    }
+
     $categoryId = $opts['category_id'] ?? null;
     $search = $opts['search'] ?? '';
     $sort = $opts['sort'] ?? 'latest';
@@ -35,8 +42,14 @@ function fetch_threads(array $opts = []) {
     $perPage = $opts['per_page'] ?? 20;
     $offset = ($page - 1) * $perPage;
 
-    $where = ["t.status IN ('" . implode("','", $statusFilter) . "')"];
+    $where = [];
     $params = [];
+
+    // Build IN clause with placeholders
+    $statusPlaceholders = implode(',', array_fill(0, count($statusFilter), '?'));
+    $where[] = "t.status IN ($statusPlaceholders)";
+    $params = array_merge($params, $statusFilter);
+
     if ($categoryId) {
         $where[] = "t.category_id = ?";
         $params[] = $categoryId;

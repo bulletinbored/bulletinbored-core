@@ -22,12 +22,13 @@ class ThemeManager
 
     public function loadTranslations(string $lang): void
     {
+        $app = App::getInstance();
         foreach ($this->getAll() as $name => $theme) {
             $scope = 'theme:' . strtolower($name);
-            $GLOBALS['i18n'][$scope] = [];
+            $app->i18n[$scope] = [];
             $langFile = $this->themesDir . '/' . $name . '/lang/' . $lang . '.json';
             if (file_exists($langFile)) {
-                $GLOBALS['i18n'][$scope] = load_lang_file($langFile);
+                $app->i18n[$scope] = load_lang_file($langFile);
             }
         }
     }

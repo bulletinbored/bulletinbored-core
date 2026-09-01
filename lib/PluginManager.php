@@ -453,15 +453,16 @@ class PluginManager
 
     public function loadTranslations(string $lang): void
     {
+        $app = App::getInstance();
         foreach ($this->getAll() as $key => $plugin) {
             $scope = 'plugin:' . $key;
-            $GLOBALS['i18n'][$scope] = [];
+            $app->i18n[$scope] = [];
             if (empty($plugin['folder'])) {
                 continue;
             }
             $langFile = $this->pluginsDir . '/' . $plugin['folder'] . '/lang/' . $lang . '.json';
             if (file_exists($langFile)) {
-                $GLOBALS['i18n'][$scope] = load_lang_file($langFile);
+                $app->i18n[$scope] = load_lang_file($langFile);
             }
         }
     }

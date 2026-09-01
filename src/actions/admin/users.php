@@ -8,7 +8,7 @@ function handle_admin_roles_get(): \Bulletin\Response|bool
 
 function handle_admin_roles_action_post(): \Bulletin\Response|bool
 {
-    global $pdo;
+    $pdo = App::getInstance()->pdo;
 
     if (!csrf_validate_request()) {
         throw new \Bulletin\ForbiddenException('CSRF token invalid');
@@ -48,7 +48,7 @@ function handle_admin_users_get(): \Bulletin\Response|bool
 
 function handle_admin_user_edit(string $method, array $params = []): \Bulletin\Response|bool
 {
-    global $pdo;
+    $pdo = App::getInstance()->pdo;
 
     $editUserId = (int)($params['id'] ?? $_GET['id'] ?? 0);
     if ($editUserId <= 0) {
@@ -81,7 +81,7 @@ function handle_admin_user_edit(string $method, array $params = []): \Bulletin\R
 
 function handle_admin_create_user_post(): \Bulletin\Response|bool
 {
-    global $pdo;
+    $pdo = App::getInstance()->pdo;
 
     if (!csrf_validate_request()) {
         throw new \Bulletin\ForbiddenException('CSRF token invalid');
@@ -143,7 +143,7 @@ function handle_admin_create_user_post(): \Bulletin\Response|bool
 
 function handle_delete_user_post(): \Bulletin\Response|bool
 {
-    global $pdo;
+    $pdo = App::getInstance()->pdo;
 
     if (!csrf_validate_request()) {
         throw new \Bulletin\ForbiddenException('CSRF token invalid');
@@ -165,7 +165,7 @@ function handle_delete_user_post(): \Bulletin\Response|bool
 
 function handle_unban_user_post(): \Bulletin\Response|bool
 {
-    global $pdo;
+    $pdo = App::getInstance()->pdo;
 
     if (!csrf_validate_request()) {
         throw new \Bulletin\ForbiddenException('CSRF token invalid');
@@ -180,7 +180,7 @@ function handle_unban_user_post(): \Bulletin\Response|bool
 
 function handle_ban_user_post(): \Bulletin\Response|bool
 {
-    global $pdo;
+    $pdo = App::getInstance()->pdo;
 
     if (!csrf_validate_request()) {
         throw new \Bulletin\ForbiddenException('CSRF token invalid');
@@ -195,7 +195,7 @@ function handle_ban_user_post(): \Bulletin\Response|bool
 
 function handle_suspend_user_post(): \Bulletin\Response|bool
 {
-    global $pdo;
+    $pdo = App::getInstance()->pdo;
 
     if (!csrf_validate_request()) {
         throw new \Bulletin\ForbiddenException('CSRF token invalid');

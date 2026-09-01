@@ -18,7 +18,6 @@ require __DIR__ . '/lib/UpdateManager.php';
 require __DIR__ . '/lib/AuthZ.php';
 
 $pluginManager = new PluginManager(__DIR__ . '/plugins', $config['plugin_manifest'] ?? __DIR__ . '/data/plugins.json');
-$GLOBALS['pluginManager'] = $pluginManager;
 $app->pluginManager = $pluginManager;
 $themeManager = new ThemeManager(
     __DIR__ . '/themes',

@@ -2,7 +2,7 @@
 
 function handle_admin_categories(string $method): \Bulletin\Response|bool
 {
-    global $pdo;
+    $pdo = App::getInstance()->pdo;
 
     if ($method === 'POST') {
         if (!csrf_validate_request()) {
@@ -34,7 +34,7 @@ function handle_admin_categories(string $method): \Bulletin\Response|bool
 
 function handle_delete_category_post(): \Bulletin\Response|bool
 {
-    global $pdo;
+    $pdo = App::getInstance()->pdo;
 
     if (!csrf_validate_request()) {
         throw new \Bulletin\ForbiddenException('CSRF token invalid');
@@ -49,7 +49,7 @@ function handle_delete_category_post(): \Bulletin\Response|bool
 
 function handle_update_category_order_post(): \Bulletin\Response|bool
 {
-    global $pdo;
+    $pdo = App::getInstance()->pdo;
 
     if (!csrf_validate_request()) {
         return \Bulletin\Response::json(['success' => false, 'message' => 'CSRF token invalid'], 403);

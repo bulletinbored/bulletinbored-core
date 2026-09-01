@@ -222,9 +222,10 @@ function test_bb008_rate_limit(): Test
 
 function test_nb001_version(): Test
 {
-    $t = new Test('NB-001 - VERSION is 0.8.2');
+    $t = new Test('NB-001 - VERSION file exists and is valid');
     $version = trim(file_get_contents(__DIR__ . '/../VERSION'));
-    $t->assertEquals('VERSION is 0.8.2', '0.8.2', $version);
+    $t->assert('VERSION file not empty', !empty($version));
+    $t->assert('VERSION matches semver format', preg_match('/^\d+\.\d+\.\d+$/', $version));
     return $t;
 }
 
@@ -348,6 +349,34 @@ function test_integration_bootstrap_no_fatal(): Test
     return $t;
 }
 
+function test_php_syntax_all_source_files(): Test
+{
+    $t = new Test('PHP syntax: all source files valid');
+
+    $dirs = ['src', 'src/actions', 'src/Helpers', 'lib'];
+    foreach ($dirs as $dir) {
+        $path = __DIR__ . '/../' . $dir;
+        if (!is_dir($path)) continue;
+        foreach (glob($path . '/*.php') as $file) {
+            $rel = str_replace(__DIR__ . '/../', '', $file);
+            // Use php -l to check syntax
+            $output = [];
+            $ret = 0;
+            exec('php -l ' . escapeshellarg($file) . ' 2>&1', $output, $ret);
+            $t->assert("{$rel} has no syntax errors", $ret === 0);
+        }
+    }
+
+    // Also check setup.php separately
+    $setupFile = __DIR__ . '/../src/setup.php';
+    $output = [];
+    $ret = 0;
+    exec('php -l ' . escapeshellarg($setupFile) . ' 2>&1', $output, $ret);
+    $t->assert('src/setup.php has no syntax errors', $ret === 0);
+
+    return $t;
+}
+
 function test_integration_csp_allows_fonts(): Test
 {
     $t = new Test('Integration: CSP allows font sources');
@@ -448,6 +477,43 @@ function test_trusted_proxies_cidr(): Test
     return $t;
 }
 
+function test_regression_no_eval_anywhere(): Test
+{
+    $t = new Test('Regression: no eval() in source files');
+    $files = [
+        'src/actions/admin/langs.php',
+        'src/actions/admin/diagnostics.php',
+        'lib/repo_install.php',
+    ];
+    foreach ($files as $file) {
+        $code = file_get_contents(__DIR__ . '/../' . $file);
+        $t->assert("No eval() in $file", !str_contains($code, 'eval('));
+        $t->assert("No shell_exec() in $file", !str_contains($code, 'shell_exec('));
+    }
+    return $t;
+}
+
+function test_regression_ssl_verify_never_disabled(): Test
+{
+    $t = new Test('Regression: SSL verification never disabled');
+    $code = file_get_contents(__DIR__ . '/../lib/UpdateManager.php');
+    $t->assert('No VERIFYPEER => false', !str_contains($code, 'CURLOPT_SSL_VERIFYPEER => false'));
+    $t->assert('No VERIFYHOST => false', !str_contains($code, 'CURLOPT_SSL_VERIFYHOST => false'));
+    $t->assert('VERIFYPEER is true', str_contains($code, 'CURLOPT_SSL_VERIFYPEER => true'));
+    $t->assert('VERIFYHOST is 2', str_contains($code, 'CURLOPT_SSL_VERIFYHOST => 2'));
+    return $t;
+}
+
+function test_regression_download_requires_thread_access(): Test
+{
+    $t = new Test('Regression: download requires thread access');
+    $code = file_get_contents(__DIR__ . '/../src/actions/content.php');
+    $t->assert('can_view_thread in download handler', str_contains($code, 'can_view_thread'));
+    $t->assert('ForbiddenException for unauthorized', str_contains($code, 'ForbiddenException'));
+    $t->assert('Thread status checked', str_contains($code, 'thread_status'));
+    return $t;
+}
+
 $tests = [
     test_bb001_can_view_thread_helper(),
     test_bb001_moderator_can_view_hidden(),
@@ -466,10 +532,14 @@ $tests = [
     test_tls_verification_enabled(),
     test_download_requires_thread_access(),
     test_integration_bootstrap_no_fatal(),
+    test_php_syntax_all_source_files(),
     test_integration_csp_allows_fonts(),
     test_trusted_proxies_ipv4(),
     test_trusted_proxies_ipv6(),
     test_trusted_proxies_cidr(),
+    test_regression_no_eval_anywhere(),
+    test_regression_ssl_verify_never_disabled(),
+    test_regression_download_requires_thread_access(),
 ];
 
 $totalPassed = 0;

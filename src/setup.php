@@ -35,6 +35,8 @@ if ($dbDriver === 'mysql') {
     try {
         $pdo->exec("SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode, 'ONLY_FULL_GROUP_BY', ''))");
     } catch (PDOException $e) {}
+
+    $pdo->exec("SET FOREIGN_KEY_CHECKS = ON");
 } else {
     $isNewDb = !file_exists($dbPath);
     $pdo = new PDO('sqlite:' . $dbPath);
@@ -43,7 +45,6 @@ if ($dbDriver === 'mysql') {
 
 $pdo->exec("PRAGMA foreign_keys = ON");
 
-$GLOBALS['pdo'] = $pdo;
 App::getInstance()->pdo = $pdo;
 
 require_once __DIR__ . '/../lib/Migrator.php';

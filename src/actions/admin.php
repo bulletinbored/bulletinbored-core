@@ -90,7 +90,7 @@ function handle_admin_action(string $action, string $method): \Bulletin\Response
 
 function handle_admin_dashboard(): \Bulletin\Response|bool
 {
-    global $pdo, $config;
+    $pdo = App::getInstance()->pdo; $config = App::getInstance()->config;
 
     $pendingStmt = $pdo->prepare("
         SELECT t.*, u.username as author

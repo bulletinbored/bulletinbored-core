@@ -28,7 +28,7 @@ function handle_users_action(string $action, string $method): \Bulletin\Response
 
 function handle_login(string $method): \Bulletin\Response|bool
 {
-    global $pdo, $pluginManager;
+    $pdo = App::getInstance()->pdo; $pluginManager = App::getInstance()->pluginManager;
     if (is_logged_in()) {
         return redirect(url('home'));
     }
@@ -112,7 +112,7 @@ function handle_login(string $method): \Bulletin\Response|bool
 
 function handle_register(string $method): \Bulletin\Response|bool
 {
-    global $pdo, $config, $pluginManager;
+    $pdo = App::getInstance()->pdo; $config = App::getInstance()->config; $pluginManager = App::getInstance()->pluginManager;
     $error = '';
 
     if ($method === 'POST') {
@@ -201,7 +201,7 @@ function handle_logout(): \Bulletin\Response|bool
 
 function handle_verify_email(): \Bulletin\Response|bool
 {
-    global $pdo;
+    $pdo = App::getInstance()->pdo;
 
     $token = $_GET['token'] ?? '';
 
@@ -239,7 +239,7 @@ function handle_verify_email(): \Bulletin\Response|bool
 
 function handle_profile(array $params = []): \Bulletin\Response|bool
 {
-    global $pdo;
+    $pdo = App::getInstance()->pdo;
 
     $username = $params['user'] ?? $_GET['user'] ?? '';
     $profileStmt = $pdo->prepare("SELECT * FROM users WHERE username = ?");
@@ -277,7 +277,7 @@ function handle_profile(array $params = []): \Bulletin\Response|bool
 
 function handle_edit_profile(string $method): \Bulletin\Response|bool
 {
-    global $pdo, $config;
+    $pdo = App::getInstance()->pdo; $config = App::getInstance()->config;
 
     if (!is_logged_in()) {
         return redirect(url('login')) ?? true;
@@ -399,7 +399,7 @@ function handle_edit_profile(string $method): \Bulletin\Response|bool
 
 function handle_remove_avatar(string $method): \Bulletin\Response|bool
 {
-    global $pdo;
+    $pdo = App::getInstance()->pdo;
 
     if (!is_logged_in()) {
         return redirect(url('login')) ?? true;
@@ -431,7 +431,7 @@ function handle_remove_avatar(string $method): \Bulletin\Response|bool
 
 function handle_forgot_password(string $method): \Bulletin\Response|bool
 {
-    global $pdo, $config;
+    $pdo = App::getInstance()->pdo; $config = App::getInstance()->config;
 
     if ($method === 'POST') {
         if (!csrf_validate_request()) {
@@ -477,7 +477,7 @@ function handle_forgot_password(string $method): \Bulletin\Response|bool
 
 function handle_reset_password(string $method): \Bulletin\Response|bool
 {
-    global $pdo;
+    $pdo = App::getInstance()->pdo;
 
     if ($method === 'POST') {
         if (!csrf_validate_request()) {

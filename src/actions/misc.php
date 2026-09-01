@@ -32,7 +32,7 @@ function handle_markdown_preview(): \Bulletin\Response|bool
  */
 function handle_mention_users(): \Bulletin\Response|bool
 {
-    global $pdo;
+    $pdo = App::getInstance()->pdo;
     $q = preg_replace('/[^\w]/', '', (string)($_GET['q'] ?? ''));
     $users = [];
     if ($q !== '' && strlen($q) <= 20) {

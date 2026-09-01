@@ -213,7 +213,7 @@ class Migrator
         $instance = $this->loadMigration($migration['path']);
 
         $driver = $this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
-        $supportsTransactionalDdl = ($driver === 'mysql');
+        $supportsTransactionalDdl = ($driver === 'sqlite');
 
         try {
             if ($supportsTransactionalDdl) {

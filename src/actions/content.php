@@ -16,7 +16,7 @@ function handle_content_action(string $action, string $method): \Bulletin\Respon
 
 function handle_search(): \Bulletin\Response|bool
 {
-    global $pdo;
+    $pdo = App::getInstance()->pdo;
 
     $query = $_GET['q'] ?? '';
     $page  = max(1, (int)($_GET['page'] ?? 1));
@@ -37,8 +37,7 @@ function handle_search(): \Bulletin\Response|bool
 
 function handle_category(array $params = []): \Bulletin\Response|bool
 {
-    global $pdo;
-    global $pdo;
+    $pdo = App::getInstance()->pdo;
 
     $categoryId = (int)($params['id'] ?? $_GET['id'] ?? 0);
     $catStmt = $pdo->prepare("SELECT * FROM categories WHERE id = ?");
@@ -66,7 +65,7 @@ function handle_category(array $params = []): \Bulletin\Response|bool
 
 function handle_download(array $params = []): \Bulletin\Response|bool
 {
-    global $pdo;
+    $pdo = App::getInstance()->pdo;
 
     $uploadId = (int)($params['id'] ?? $_GET['id'] ?? 0);
     $stmt = $pdo->prepare("
