@@ -33,7 +33,8 @@ data/backups/
 /themes/*/
 !/themes/freshbored/**
 
-roadmap-to-v1.md
+TODO.md
+
 docs/phase1-audit-report.md
 RELEASE-NOTES.md
 

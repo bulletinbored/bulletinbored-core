@@ -95,19 +95,25 @@ function handle_admin_create_user_post(): \Bulletin\Response|bool
     $emailVerified = isset($_POST['email_verified']) ? 1 : 0;
 
     if ($username === '' || $password === '') {
-        throw new \Bulletin\ValidationException(['input' => 'Username and password are required']);
+        $_SESSION['admin_user_error'] = 'Username and password are required';
+        $_SESSION['admin_user_old'] = compact('username', 'email', 'role', 'status', 'emailVerified');
+        return redirect(url('admin_users'));
     }
 
     $pwErrors = validate_password_strength($password);
     if (!empty($pwErrors)) {
-        throw new \Bulletin\ValidationException(['password' => t($pwErrors[0])]);
+        $_SESSION['admin_user_error'] = t($pwErrors[0]);
+        $_SESSION['admin_user_old'] = compact('username', 'email', 'role', 'status', 'emailVerified');
+        return redirect(url('admin_users'));
     }
 
     $existsStmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE username = ?");
     $existsStmt->execute([$username]);
     $exists = $existsStmt->fetchColumn();
     if ($exists > 0) {
-        throw new \Bulletin\ConflictException('Username already taken');
+        $_SESSION['admin_user_error'] = 'Username already taken';
+        $_SESSION['admin_user_old'] = compact('username', 'email', 'role', 'status', 'emailVerified');
+        return redirect(url('admin_users'));
     }
 
     if ($email === '') {

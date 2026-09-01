@@ -224,9 +224,13 @@ class Router
         try {
             $this->matchRoute($matchPath, $method, $wantsJson);
         } catch (HttpException $e) {
+            $message = $e->getMessage();
+            if ($e instanceof \Bulletin\ValidationException && !empty($e->getDetails())) {
+                $message = implode('; ', $e->getDetails());
+            }
             $this->sendResponse(
                 $e->getStatusCode(),
-                $wantsJson ? json_encode(['error' => $e->getMessage()]) : $e->getMessage(),
+                $wantsJson ? json_encode(['error' => $message, 'fields' => $e->getDetails()]) : $message,
                 [],
                 $wantsJson
             );

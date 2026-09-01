@@ -17,6 +17,8 @@
 // of 'unsafe-inline' so inline scripts are still allowed but bound to this
 // request only.
 require_once __DIR__ . '/csp.php';
+require_once __DIR__ . '/Errors.php';
+require_once __DIR__ . '/Response.php';
 $cspNonce = generate_csp_nonce();
 send_security_headers($cspNonce);
 

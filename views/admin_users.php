@@ -20,15 +20,24 @@ $users = $pdo->query("SELECT * FROM users ORDER BY id ASC")->fetchAll();
             <h5 class="card-title mb-0"><i class="fas fa-user-plus me-2"></i><?= t('create_user') ?></h5>
         </div>
         <div class="card-body">
+            <?php
+            $old = $_SESSION['admin_user_old'] ?? [];
+            unset($_SESSION['admin_user_old']);
+            if (!empty($_SESSION['admin_user_error'])): ?>
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                <?= escape($_SESSION['admin_user_error']) ?>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+            <?php unset($_SESSION['admin_user_error']); endif; ?>
             <form method="POST" action="<?= url('admin_create_user') ?>" class="row g-3">
                 <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                 <div class="col-md-3">
                     <label class="form-label small fw-bold"><?= t('username') ?></label>
-                    <input type="text" name="username" class="form-control" required>
+                    <input type="text" name="username" class="form-control" value="<?= escape($old['username'] ?? '') ?>" required>
                 </div>
                 <div class="col-md-3">
                     <label class="form-label small fw-bold"><?= t('email') ?></label>
-                    <input type="email" name="email" class="form-control">
+                    <input type="email" name="email" class="form-control" value="<?= escape($old['email'] ?? '') ?>">
                 </div>
                 <div class="col-md-2">
                     <label class="form-label small fw-bold"><?= t('password') ?></label>
@@ -37,22 +46,22 @@ $users = $pdo->query("SELECT * FROM users ORDER BY id ASC")->fetchAll();
                 <div class="col-md-2">
                     <label class="form-label small fw-bold"><?= t('role') ?></label>
                     <select name="role" class="form-select">
-                        <option value="user"><?= t('role_user') ?></option>
-                        <option value="moderator"><?= t('role_moderator') ?></option>
-                        <option value="admin"><?= t('role_admin') ?></option>
+                        <option value="user" <?= ($old['role'] ?? 'user') === 'user' ? 'selected' : '' ?>><?= t('role_user') ?></option>
+                        <option value="moderator" <?= ($old['role'] ?? '') === 'moderator' ? 'selected' : '' ?>><?= t('role_moderator') ?></option>
+                        <option value="admin" <?= ($old['role'] ?? '') === 'admin' ? 'selected' : '' ?>><?= t('role_admin') ?></option>
                     </select>
                 </div>
                 <div class="col-md-1">
                     <label class="form-label small fw-bold"><?= t('status') ?></label>
                     <select name="status" class="form-select">
-                        <option value="active"><?= t('active') ?></option>
-                        <option value="suspended"><?= t('suspended') ?></option>
-                        <option value="banned"><?= t('banned') ?></option>
+                        <option value="active" <?= ($old['status'] ?? 'active') === 'active' ? 'selected' : '' ?>><?= t('active') ?></option>
+                        <option value="suspended" <?= ($old['status'] ?? '') === 'suspended' ? 'selected' : '' ?>><?= t('suspended') ?></option>
+                        <option value="banned" <?= ($old['status'] ?? '') === 'banned' ? 'selected' : '' ?>><?= t('banned') ?></option>
                     </select>
                 </div>
                 <div class="col-md-1 d-flex align-items-end">
                     <div class="form-check">
-                        <input class="form-check-input" type="checkbox" name="email_verified" id="email_verified" checked>
+                        <input class="form-check-input" type="checkbox" name="email_verified" id="email_verified" <?= ($old['emailVerified'] ?? true) ? 'checked' : '' ?>>
                         <label class="form-check-label small" for="email_verified"><?= t('verified') ?></label>
                     </div>
                 </div>
