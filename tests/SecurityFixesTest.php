@@ -7,6 +7,9 @@
 require_once __DIR__ . '/harness.php';
 require_once __DIR__ . '/../src/helpers.php';
 require_once __DIR__ . '/../lib/AuthZ.php';
+require_once __DIR__ . '/../src/Errors.php';
+require_once __DIR__ . '/../src/App.php';
+require_once __DIR__ . '/../src/actions/content.php';
 
 echo "SecurityFixesTest loaded\n";
 
@@ -82,6 +85,17 @@ function setupDB(): PDO
             token_hash TEXT DEFAULT NULL,
             expires_at DATETIME NOT NULL,
             used INTEGER DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE uploads (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            thread_id INTEGER,
+            post_id INTEGER,
+            user_id INTEGER,
+            filename TEXT,
+            original_name TEXT,
+            size INTEGER,
+            mime_type TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
     ");
@@ -295,8 +309,8 @@ function test_no_eval_in_langs(): Test
 
 function test_tls_verification_enabled(): Test
 {
-    $t = new Test('TLS verification enabled in UpdateManager');
-    $code = file_get_contents(__DIR__ . '/../lib/UpdateManager.php');
+    $t = new Test('TLS verification enabled in UpdateFetcher');
+    $code = file_get_contents(__DIR__ . '/../lib/UpdateFetcher.php');
     $t->assert('VERIFYPEER is true', str_contains($code, 'CURLOPT_SSL_VERIFYPEER => true'));
     $t->assert('VERIFYHOST is 2', str_contains($code, 'CURLOPT_SSL_VERIFYHOST => 2'));
     $t->assert('No VERIFYPEER false', !str_contains($code, 'CURLOPT_SSL_VERIFYPEER => false'));
@@ -353,25 +367,24 @@ function test_php_syntax_all_source_files(): Test
 {
     $t = new Test('PHP syntax: all source files valid');
 
+    $phpBinary = PHP_BINARY ?: 'php';
     $dirs = ['src', 'src/actions', 'src/Helpers', 'lib'];
     foreach ($dirs as $dir) {
         $path = __DIR__ . '/../' . $dir;
         if (!is_dir($path)) continue;
         foreach (glob($path . '/*.php') as $file) {
             $rel = str_replace(__DIR__ . '/../', '', $file);
-            // Use php -l to check syntax
             $output = [];
             $ret = 0;
-            exec('php -l ' . escapeshellarg($file) . ' 2>&1', $output, $ret);
+            exec(escapeshellarg($phpBinary) . ' -l ' . escapeshellarg($file) . ' 2>&1', $output, $ret);
             $t->assert("{$rel} has no syntax errors", $ret === 0);
         }
     }
 
-    // Also check setup.php separately
     $setupFile = __DIR__ . '/../src/setup.php';
     $output = [];
     $ret = 0;
-    exec('php -l ' . escapeshellarg($setupFile) . ' 2>&1', $output, $ret);
+    exec(escapeshellarg($phpBinary) . ' -l ' . escapeshellarg($setupFile) . ' 2>&1', $output, $ret);
     $t->assert('src/setup.php has no syntax errors', $ret === 0);
 
     return $t;
@@ -496,7 +509,7 @@ function test_regression_no_eval_anywhere(): Test
 function test_regression_ssl_verify_never_disabled(): Test
 {
     $t = new Test('Regression: SSL verification never disabled');
-    $code = file_get_contents(__DIR__ . '/../lib/UpdateManager.php');
+    $code = file_get_contents(__DIR__ . '/../lib/UpdateFetcher.php');
     $t->assert('No VERIFYPEER => false', !str_contains($code, 'CURLOPT_SSL_VERIFYPEER => false'));
     $t->assert('No VERIFYHOST => false', !str_contains($code, 'CURLOPT_SSL_VERIFYHOST => false'));
     $t->assert('VERIFYPEER is true', str_contains($code, 'CURLOPT_SSL_VERIFYPEER => true'));
@@ -511,6 +524,244 @@ function test_regression_download_requires_thread_access(): Test
     $t->assert('can_view_thread in download handler', str_contains($code, 'can_view_thread'));
     $t->assert('ForbiddenException for unauthorized', str_contains($code, 'ForbiddenException'));
     $t->assert('Thread status checked', str_contains($code, 'thread_status'));
+    return $t;
+}
+
+function test_download_hidden_thread_guest_forbidden(): Test
+{
+    $t = new Test('Download: guest cannot download from hidden thread');
+    $pdo = setupDB();
+    $authz = new AuthZ($pdo);
+    App::reset();
+    App::getInstance()->authz = $authz;
+    App::getInstance()->pdo = $pdo;
+    $_SESSION = [];
+
+    $stmt = $pdo->prepare("INSERT INTO threads (id, category_id, user_id, title, status) VALUES (1, 1, 1, 'Hidden thread', 'hidden')");
+    $stmt->execute();
+    $stmt = $pdo->prepare("INSERT INTO uploads (id, thread_id, user_id, filename, original_name, size, mime_type) VALUES (100, 1, 1, 'testfile.txt', 'testfile.txt', 100, 'text/plain')");
+    $stmt->execute();
+
+    $threw = false;
+    try {
+        handle_download(['id' => 100]);
+    } catch (\Bulletin\ForbiddenException $e) {
+        $threw = true;
+    } catch (\Throwable $e) {
+        $t->assert('Expected ForbiddenException, got: ' . get_class($e), false);
+    }
+    $t->assertTrue('Guest blocked from hidden thread download', $threw);
+
+    App::reset();
+    return $t;
+}
+
+function test_download_hidden_thread_regular_user_forbidden(): Test
+{
+    $t = new Test('Download: regular user cannot download from hidden thread');
+    $pdo = setupDB();
+    $authz = new AuthZ($pdo);
+    App::reset();
+    App::getInstance()->authz = $authz;
+    App::getInstance()->pdo = $pdo;
+    $_SESSION = ['user_id' => 100, 'user_role' => 'user'];
+    $stmt = $pdo->prepare("INSERT INTO users (id, username, password, role, status) VALUES (100, 'user', 'hash', 'user', 'active')");
+    $stmt->execute();
+    $stmt = $pdo->prepare("INSERT INTO threads (id, category_id, user_id, title, status) VALUES (1, 1, 1, 'Hidden thread', 'hidden')");
+    $stmt->execute();
+    $stmt = $pdo->prepare("INSERT INTO uploads (id, thread_id, user_id, filename, original_name, size, mime_type) VALUES (100, 1, 1, 'testfile.txt', 'testfile.txt', 100, 'text/plain')");
+    $stmt->execute();
+
+    $threw = false;
+    try {
+        handle_download(['id' => 100]);
+    } catch (\Bulletin\ForbiddenException $e) {
+        $threw = true;
+    } catch (\Throwable $e) {
+        $t->assert('Expected ForbiddenException, got: ' . get_class($e), false);
+    }
+    $t->assertTrue('Regular user blocked from hidden thread download', $threw);
+
+    App::reset();
+    return $t;
+}
+
+function test_download_hidden_thread_moderator_allowed(): Test
+{
+    $t = new Test('Download: moderator can download from hidden thread');
+    $pdo = setupDB();
+    $authz = new AuthZ($pdo);
+    App::reset();
+    App::getInstance()->authz = $authz;
+    App::getInstance()->pdo = $pdo;
+    $_SESSION = ['user_id' => 99, 'user_role' => 'moderator'];
+    $stmt = $pdo->prepare("INSERT INTO users (id, username, password, role, status) VALUES (99, 'mod', 'hash', 'moderator', 'active')");
+    $stmt->execute();
+    $stmt = $pdo->prepare("INSERT INTO threads (id, category_id, user_id, title, status) VALUES (1, 1, 1, 'Hidden thread', 'hidden')");
+    $stmt->execute();
+    $stmt = $pdo->prepare("INSERT INTO uploads (id, thread_id, user_id, filename, original_name, size, mime_type) VALUES (100, 1, 1, 'testfile.txt', 'testfile.txt', 100, 'text/plain')");
+    $stmt->execute();
+
+    @unlink(__DIR__ . '/../uploads/testfile.txt');
+
+    $threwForbidden = false;
+    $passedAccessControl = false;
+    try {
+        handle_download(['id' => 100]);
+    } catch (\Bulletin\ForbiddenException $e) {
+        $threwForbidden = true;
+    } catch (\Bulletin\NotFoundException $e) {
+        $passedAccessControl = true;
+    }
+    $t->assertFalse('Moderator not blocked from hidden thread download', $threwForbidden);
+    $t->assertTrue('Moderator passed access control (reached file serve)', $passedAccessControl);
+
+    App::reset();
+    return $t;
+}
+
+function test_download_pending_thread_guest_forbidden(): Test
+{
+    $t = new Test('Download: guest cannot download from pending thread');
+    $pdo = setupDB();
+    $authz = new AuthZ($pdo);
+    App::reset();
+    App::getInstance()->authz = $authz;
+    App::getInstance()->pdo = $pdo;
+    $_SESSION = [];
+
+    $stmt = $pdo->prepare("INSERT INTO threads (id, category_id, user_id, title, status) VALUES (2, 1, 1, 'Pending thread', 'pending')");
+    $stmt->execute();
+    $stmt = $pdo->prepare("INSERT INTO uploads (id, thread_id, user_id, filename, original_name, size, mime_type) VALUES (101, 2, 1, 'testfile2.txt', 'testfile2.txt', 100, 'text/plain')");
+    $stmt->execute();
+
+    $threw = false;
+    try {
+        handle_download(['id' => 101]);
+    } catch (\Bulletin\ForbiddenException $e) {
+        $threw = true;
+    } catch (\Throwable $e) {
+        $t->assert('Expected ForbiddenException, got: ' . get_class($e), false);
+    }
+    $t->assertTrue('Guest blocked from pending thread download', $threw);
+
+    App::reset();
+    return $t;
+}
+
+function test_download_visible_thread_guest_allowed(): Test
+{
+    $t = new Test('Download: guest can download from visible thread');
+    $pdo = setupDB();
+    $authz = new AuthZ($pdo);
+    App::reset();
+    App::getInstance()->authz = $authz;
+    App::getInstance()->pdo = $pdo;
+    $_SESSION = [];
+
+    $stmt = $pdo->prepare("INSERT INTO threads (id, category_id, user_id, title, status) VALUES (3, 1, 1, 'Visible thread', 'visible')");
+    $stmt->execute();
+    $stmt = $pdo->prepare("INSERT INTO uploads (id, thread_id, user_id, filename, original_name, size, mime_type) VALUES (102, 3, 1, 'testfile3.txt', 'testfile3.txt', 100, 'text/plain')");
+    $stmt->execute();
+
+    @unlink(__DIR__ . '/../uploads/testfile3.txt');
+
+    $threwForbidden = false;
+    $passedAccessControl = false;
+    try {
+        handle_download(['id' => 102]);
+    } catch (\Bulletin\ForbiddenException $e) {
+        $threwForbidden = true;
+    } catch (\Bulletin\NotFoundException $e) {
+        $passedAccessControl = true;
+    }
+    $t->assertFalse('Guest not blocked from visible thread download', $threwForbidden);
+    $t->assertTrue('Guest passed access control (reached file serve)', $passedAccessControl);
+
+    App::reset();
+    return $t;
+}
+
+function test_download_orphan_upload_guest_forbidden(): Test
+{
+    $t = new Test('Download: guest cannot download orphan upload (no thread)');
+    $pdo = setupDB();
+    $authz = new AuthZ($pdo);
+    App::reset();
+    App::getInstance()->authz = $authz;
+    App::getInstance()->pdo = $pdo;
+    $_SESSION = [];
+
+    $stmt = $pdo->prepare("INSERT INTO uploads (id, thread_id, user_id, filename, original_name, size, mime_type) VALUES (103, NULL, 1, 'orphan.txt', 'orphan.txt', 100, 'text/plain')");
+    $stmt->execute();
+
+    $threw = false;
+    try {
+        handle_download(['id' => 103]);
+    } catch (\Bulletin\ForbiddenException $e) {
+        $threw = true;
+    } catch (\Throwable $e) {
+        $t->assert('Expected ForbiddenException, got: ' . get_class($e), false);
+    }
+    $t->assertTrue('Guest blocked from orphan upload download', $threw);
+
+    App::reset();
+    return $t;
+}
+
+function test_download_via_post_id_association(): Test
+{
+    $t = new Test('Download: upload linked via post_id to hidden thread is protected');
+    $pdo = setupDB();
+    $authz = new AuthZ($pdo);
+    App::reset();
+    App::getInstance()->authz = $authz;
+    App::getInstance()->pdo = $pdo;
+    $_SESSION = [];
+
+    $stmt = $pdo->prepare("INSERT INTO threads (id, category_id, user_id, title, status) VALUES (4, 1, 1, 'Hidden thread', 'hidden')");
+    $stmt->execute();
+    $stmt = $pdo->prepare("INSERT INTO posts (id, thread_id, user_id, content, status) VALUES (50, 4, 1, 'Reply', 'visible')");
+    $stmt->execute();
+    $stmt = $pdo->prepare("INSERT INTO uploads (id, thread_id, post_id, user_id, filename, original_name, size, mime_type) VALUES (104, NULL, 50, 1, 'attached.txt', 'attached.txt', 100, 'text/plain')");
+    $stmt->execute();
+
+    $threw = false;
+    try {
+        handle_download(['id' => 104]);
+    } catch (\Bulletin\ForbiddenException $e) {
+        $threw = true;
+    } catch (\Throwable $e) {
+        $t->assert('Expected ForbiddenException, got: ' . get_class($e), false);
+    }
+    $t->assertTrue('Guest blocked from download via post_id to hidden thread', $threw);
+
+    App::reset();
+    App::getInstance()->authz = $authz;
+    App::getInstance()->pdo = $pdo;
+
+    $stmt = $pdo->prepare("INSERT INTO threads (id, category_id, user_id, title, status) VALUES (5, 1, 1, 'Visible thread', 'visible')");
+    $stmt->execute();
+    $stmt = $pdo->prepare("INSERT INTO posts (id, thread_id, user_id, content, status) VALUES (51, 5, 1, 'Reply', 'visible')");
+    $stmt->execute();
+    $stmt = $pdo->prepare("INSERT INTO uploads (id, thread_id, post_id, user_id, filename, original_name, size, mime_type) VALUES (105, NULL, 51, 1, 'attached2.txt', 'attached2.txt', 100, 'text/plain')");
+    $stmt->execute();
+
+    @unlink(__DIR__ . '/../uploads/attached2.txt');
+
+    $threwForbidden = false;
+    $passedAccessControl = false;
+    try {
+        handle_download(['id' => 105]);
+    } catch (\Bulletin\ForbiddenException $e) {
+        $threwForbidden = true;
+    } catch (\Bulletin\NotFoundException $e) {
+        $passedAccessControl = true;
+    }
+    $t->assertFalse('Guest not blocked from download via post_id to visible thread', $threwForbidden);
+    $t->assertTrue('Guest passed access control for post_id to visible thread', $passedAccessControl);
+
+    App::reset();
     return $t;
 }
 
@@ -540,6 +791,13 @@ $tests = [
     test_regression_no_eval_anywhere(),
     test_regression_ssl_verify_never_disabled(),
     test_regression_download_requires_thread_access(),
+    test_download_hidden_thread_guest_forbidden(),
+    test_download_hidden_thread_regular_user_forbidden(),
+    test_download_hidden_thread_moderator_allowed(),
+    test_download_pending_thread_guest_forbidden(),
+    test_download_visible_thread_guest_allowed(),
+    test_download_orphan_upload_guest_forbidden(),
+    test_download_via_post_id_association(),
 ];
 
 $totalPassed = 0;

@@ -357,16 +357,24 @@ It is the basis for the **Plugin API v1** in the roadmap.
 
 | Method | Line | Signature |
 |--------|------|-----------|
-| `setVersion()` | 96 | `setVersion(string $type, string $name, string $version): void` |
-| `getVersion()` | 105 | `getVersion(string $type, string $name): string` |
-| `recordCheck()` | 110 | `recordCheck(string $type, string $name, ?string $remoteVersion, ?string $updateUrl = null, ?string $updateNotes = null): void` |
-| `getAvailableUpdate()` | 127 | `getAvailableUpdate(string $type, string $name): ?array` |
-| `checkAll()` | 132 | `checkAll(string $coreVersion, PluginManager $pluginManager, ThemeManager $themeManager, ?array $catalog = null): array` |
-| `applyUpdate()` | 284 | `applyUpdate(string $type, string $name, string $zipPath): bool` |
-| `applyCoreUpdate()` | 327 | `applyCoreUpdate(string $tag): bool` |
-| `applyExtensionUpdate()` | 430 | `applyExtensionUpdate(string $type, string $name, string $tag, ?string $repoUrl = null): bool` |
-| `getRemoteVersion()` | 621 | `getRemoteVersion(string $type, string $name, ?string $repoUrl = null): ?string` |
-| `getLockedExtensions()` | 626 | `getLockedExtensions(): array` |
+| `setVersion()` | 55 | `setVersion(string $type, string $name, string $version): void` |
+| `getVersion()` | 64 | `getVersion(string $type, string $name): string` |
+| `recordCheck()` | 69 | `recordCheck(string $type, string $name, ?string $remoteVersion, ?string $updateUrl = null, ?string $updateNotes = null): void` |
+| `getAvailableUpdate()` | 86 | `getAvailableUpdate(string $type, string $name): ?array` |
+| `checkAll()` | 91 | `checkAll(string $coreVersion, PluginManager $pluginManager, ThemeManager $themeManager, ?array $catalog = null): array` |
+| `applyUpdate()` | 196 | `applyUpdate(string $type, string $name, string $zipPath): bool` |
+| `applyCoreUpdate()` | 334 | `applyCoreUpdate(string $tag): bool` |
+| `applyExtensionUpdate()` | 459 | `applyExtensionUpdate(string $type, string $name, string $tag, ?string $repoUrl = null): bool` |
+| `getRemoteVersion()` | 591 | `getRemoteVersion(string $type, string $name, ?string $repoUrl = null): ?string` |
+| `getLockedExtensions()` | 596 | `getLockedExtensions(): array` |
+
+#### Private methods (ZIP upload dispatch)
+
+| Method | Line | Signature |
+|--------|------|-----------|
+| `applyExtensionUpdateFromZip()` | 209 | `applyExtensionUpdateFromZip(string $type, string $name, string $zipPath): bool` |
+| `applyCoreUpdateFromZip()` | 279 | `applyCoreUpdateFromZip(string $zipPath): bool` |
+| `detectVersionFromPackage()` | 314 | `detectVersionFromPackage(string $targetDir): string` |
 
 ---
 

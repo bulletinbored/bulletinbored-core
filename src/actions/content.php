@@ -69,9 +69,11 @@ function handle_download(array $params = []): \Bulletin\Response|bool
 
     $uploadId = (int)($params['id'] ?? $_GET['id'] ?? 0);
     $stmt = $pdo->prepare("
-        SELECT u.*, t.status AS thread_status
+        SELECT u.*, COALESCE(t.status, t2.status) AS thread_status
         FROM uploads u
         LEFT JOIN threads t ON u.thread_id = t.id
+        LEFT JOIN posts p ON u.post_id = p.id
+        LEFT JOIN threads t2 ON p.thread_id = t2.id
         WHERE u.id = ?
     ");
     $stmt->execute([$uploadId]);
@@ -81,7 +83,12 @@ function handle_download(array $params = []): \Bulletin\Response|bool
         throw new \Bulletin\NotFoundException('File not found');
     }
 
-    if (!can_view_thread($upload['thread_status'] ?? 'visible')) {
+    $threadStatus = $upload['thread_status'] ?? null;
+    if ($threadStatus === null) {
+        if (!is_logged_in()) {
+            throw new \Bulletin\ForbiddenException('Not authorized');
+        }
+    } elseif (!can_view_thread($threadStatus)) {
         throw new \Bulletin\ForbiddenException('Not authorized');
     }
 

@@ -34,9 +34,13 @@ function handle_upload_image(): \Bulletin\Response|bool
         return \Bulletin\Response::json(['ok' => false, 'error' => 'Move failed'], 500);
     }
 
-    $stmt = $pdo->prepare("INSERT INTO uploads (user_id, filename, original_name, size, mime_type) VALUES (?, ?, ?, ?, ?)");
+    $threadId = (int)($_POST['thread_id'] ?? 0);
+    $postId = (int)($_POST['post_id'] ?? 0);
+    $stmt = $pdo->prepare("INSERT INTO uploads (user_id, thread_id, post_id, filename, original_name, size, mime_type) VALUES (?, ?, ?, ?, ?, ?, ?)");
     $stmt->execute([
         $_SESSION['user_id'],
+        $threadId > 0 ? $threadId : null,
+        $postId > 0 ? $postId : null,
         $info['safe_name'],
         basename($_FILES['image']['name'] ?? 'image.' . $info['ext']),
         filesize($dest),

@@ -1,67 +1,26 @@
 <?php
 
+require_once __DIR__ . '/UpdateFetcher.php';
+require_once __DIR__ . '/UpdateBackup.php';
+
 class UpdateManager
 {
     private string $manifestPath;
     private array $manifest = [];
-    private ?string $updateServer = null;
-    private ?string $updateMirror = null;
-    private ?string $githubToken = null;
-    private int $cacheTTL = 3600;
+    private ?string $updateServer;
+    private UpdateFetcher $fetcher;
+    private UpdateBackup $backup;
 
     public function __construct(string $manifestPath, ?string $updateServer = null, ?string $githubToken = null, ?string $updateMirror = null)
     {
         $this->manifestPath = $manifestPath;
         $this->updateServer = $updateServer;
-        $this->githubToken = $githubToken;
-        $this->updateMirror = rtrim($updateMirror ?? '', '/');
         $this->loadManifest();
-    }
 
-    private function cachePath(): string
-    {
-        return dirname($this->manifestPath) . '/update-cache.json';
-    }
-
-    private function loadCache(): array
-    {
-        $path = $this->cachePath();
-        if (!file_exists($path)) {
-            return [];
-        }
-
-        $data = json_decode(file_get_contents($path), true);
-        return is_array($data) ? $data : [];
-    }
-
-    private function saveCache(array $cache): void
-    {
-        file_put_contents($this->cachePath(), json_encode($cache, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-    }
-
-    private function getCachedVersion(string $type, ?string $name = null): ?string
-    {
-        $cache = $this->loadCache();
-        $key = $type . ':' . ($name ?? 'core');
-        if (isset($cache[$key]['version'], $cache[$key]['timestamp']) && (time() - (int)$cache[$key]['timestamp'] < $this->cacheTTL)) {
-            return $cache[$key]['version'];
-        }
-
-        return null;
-    }
-
-    private function setCachedVersion(string $type, ?string $name, string $version): void
-    {
-        if ($version === '' || $version === null) {
-            return;
-        }
-        $cache = $this->loadCache();
-        $key = $type . ':' . ($name ?? 'core');
-        $cache[$key] = [
-            'version' => $version,
-            'timestamp' => time(),
-        ];
-        $this->saveCache($cache);
+        $dataDir = dirname($manifestPath);
+        $rootDir = rtrim(__DIR__ . '/../', '/');
+        $this->fetcher = new UpdateFetcher($dataDir, $updateServer, $githubToken, $updateMirror);
+        $this->backup = new UpdateBackup($dataDir, $rootDir);
     }
 
     private function loadManifest(): void
@@ -138,7 +97,7 @@ class UpdateManager
         $results = [
             'core' => ['installed' => $coreVersion, 'remote' => null, 'update_available' => false, 'update_url' => null],
         ];
-        $results['core']['remote'] = $this->fetchRemoteVersion('core');
+        $results['core']['remote'] = $this->fetcher->fetchRemoteVersion('core');
         if ($results['core']['remote'] && version_compare($results['core']['remote'], $coreVersion, '>')) {
             $results['core']['update_available'] = true;
             $results['core']['update_url'] = $this->updateServer;
@@ -156,7 +115,7 @@ class UpdateManager
 
         foreach ($pluginManager->getAll() as $key => $plugin) {
             $repoUrl = $catalogMap[$key] ?? null;
-            $remote = $this->fetchRemoteVersion('plugin', $key, $repoUrl);
+            $remote = $this->fetcher->fetchRemoteVersion('plugin', $key, $repoUrl);
             if ($remote === null && !empty($catalogVersions[$key])) {
                 $remote = $catalogVersions[$key];
             }
@@ -172,7 +131,7 @@ class UpdateManager
 
         foreach ($themeManager->getAll() as $key => $theme) {
             $repoUrl = $catalogMap[$key] ?? null;
-            $remote = $this->fetchRemoteVersion('theme', $key, $repoUrl);
+            $remote = $this->fetcher->fetchRemoteVersion('theme', $key, $repoUrl);
             if ($remote === null && !empty($catalogVersions[$key])) {
                 $remote = $catalogVersions[$key];
             }
@@ -189,118 +148,16 @@ class UpdateManager
         return $results;
     }
 
-    /**
-     * HTTP GET helper that prefers cURL (reliable with HTTPS on Windows/XAMPP)
-     * and falls back to file_get_contents when cURL is unavailable.
-     */
-    private function httpGet(string $url, int $timeout = 10, ?string $token = null): ?string
-    {
-        if (function_exists('curl_init')) {
-            $ch = curl_init($url);
-            curl_setopt_array($ch, [
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_FOLLOWLOCATION => true,
-                CURLOPT_TIMEOUT => $timeout,
-                CURLOPT_CONNECTTIMEOUT => $timeout,
-                CURLOPT_USERAGENT => 'bulletinbored-update-checker/1.0',
-                CURLOPT_SSL_VERIFYPEER => true,
-                CURLOPT_SSL_VERIFYHOST => 2,
-            ]);
-            if ($token) {
-                curl_setopt($ch, CURLOPT_HTTPHEADER, ['Authorization: token ' . $token]);
-            }
-            $body = curl_exec($ch);
-            $errno = curl_errno($ch);
-            curl_close($ch);
-            if ($errno !== 0 || $body === false) {
-                return null;
-            }
-            return $body;
-        }
-
-        $headers = [
-            'timeout' => $timeout,
-            'user_agent' => 'bulletinbored-update-checker/1.0',
-        ];
-        if ($token) {
-            $headers['header'] = 'Authorization: token ' . $token;
-        }
-        $body = @file_get_contents($url, false, stream_context_create(['http' => $headers]));
-        return $body === false ? null : $body;
-    }
-
-    private function fetchRemoteVersion(string $type, ?string $name = null, ?string $repoUrl = null): ?string
-    {
-        $cached = $this->getCachedVersion($type, $name);
-        if ($cached !== null) {
-            return $cached;
-        }
-
-        $version = null;
-
-        // Primary source: a static mirror (versions.json) to avoid GitHub API
-        // rate limits. One request per check instead of one per extension.
-        if ($this->updateMirror) {
-            $json = $this->httpGet($this->updateMirror . '/versions.json', 10);
-            if ($json !== null) {
-                $data = json_decode($json, true);
-                if (is_array($data)) {
-                    if ($type === 'core') {
-                        $version = $data['core']['version'] ?? null;
-                    } else {
-                        $section = $data[$type . 's'] ?? $data[$type] ?? [];
-                        $key = is_string($name) ? strtolower($name) : null;
-                        if ($key !== null && isset($section[$key]['version'])) {
-                            $version = $section[$key]['version'];
-                        }
-                    }
-                }
-            }
-        }
-
-        // Fallback: GitHub releases/latest API (needs a repo URL).
-        if ($version === null && !$repoUrl && !empty($this->updateServer)
-            && preg_match('#github\.com/([^/]+)/([^/]+)#i', $this->updateServer, $m)) {
-            $repoUrl = 'https://github.com/' . $m[1] . '/' . $m[2];
-        }
-        if ($version === null && $repoUrl && preg_match('#(?:https?://)?github\.com/([^/]+)/([^/]+)(?:/|$)#i', $repoUrl, $m)) {
-            $apiUrl = 'https://api.github.com/repos/' . rawurlencode($m[1]) . '/' . rawurlencode($m[2]) . '/releases/latest';
-            $json = $this->httpGet($apiUrl, 10, $this->githubToken);
-            if ($json) {
-                $release = json_decode($json, true);
-                if (is_array($release) && !empty($release['tag_name'])) {
-                    $version = ltrim($release['tag_name'], 'v');
-                }
-            }
-        }
-
-        if ($version !== null) {
-            $this->setCachedVersion($type, $name, $version);
-        }
-
-        return $version;
-    }
-
-    /**
-     * Preflight checks before applying any update.
-     * Returns array of error messages (empty = all clear).
-     *
-     * @param string $type 'core', 'plugin', or 'theme'
-     * @param string $tag  Version tag being applied
-     * @param int    $requiredBytes  Estimated space needed (0 = auto-estimate)
-     */
     public function preflight(string $type, string $tag, int $requiredBytes = 0): array
     {
         $errors = [];
 
-        // PHP version check — core requires 8.1+
         if ($type === 'core') {
             if (version_compare(PHP_VERSION, '8.1.0', '<')) {
                 $errors[] = 'PHP 8.1+ required, current: ' . PHP_VERSION;
             }
         }
 
-        // Disk space check — need at least 50MB free for core updates
         $needed = $requiredBytes > 0 ? $requiredBytes : (50 * 1024 * 1024);
         $root = rtrim(__DIR__ . '/../', '/');
         $freeSpace = @disk_free_space($root);
@@ -312,12 +169,10 @@ class UpdateManager
             );
         }
 
-        // Writable check
         if (!is_writable($root)) {
             $errors[] = 'Root directory is not writable: ' . $root;
         }
 
-        // Config writable check
         $configPath = $root . '/config.json';
         if (file_exists($configPath) && !is_writable($configPath)) {
             $errors[] = 'config.json is not writable';
@@ -344,6 +199,91 @@ class UpdateManager
             return false;
         }
 
+        if ($type === 'plugin' || $type === 'theme') {
+            return $this->applyExtensionUpdateFromZip($type, $name, $zipPath);
+        }
+
+        return $this->applyCoreUpdateFromZip($zipPath);
+    }
+
+    private function applyExtensionUpdateFromZip(string $type, string $name, string $zipPath): bool
+    {
+        $errors = $this->preflight($type, '');
+        if (!empty($errors)) {
+            error_log('BB EXTENSION PREFLIGHT FAIL: ' . implode('; ', $errors));
+            return false;
+        }
+
+        $zip = new ZipArchive();
+        if ($zip->open($zipPath) !== true) {
+            return false;
+        }
+
+        if ($type === 'plugin') {
+            $extractTo = rtrim(__DIR__ . '/../plugins', '/') . '/';
+        } else {
+            $extractTo = rtrim(__DIR__ . '/../themes', '/') . '/';
+        }
+
+        require_once __DIR__ . '/repo_install.php';
+
+        $tmpExtract = $extractTo . '_update_' . uniqid() . '/';
+        mkdir($tmpExtract, 0755, true);
+        $ok = extract_zip($zipPath, $tmpExtract);
+        $zip->close();
+        @unlink($zipPath);
+
+        if (!$ok) {
+            $this->backup->deleteRecursive($tmpExtract);
+            return false;
+        }
+
+        $src = $tmpExtract;
+        $topFolders = glob($tmpExtract . '*', GLOB_ONLYDIR);
+        if (count($topFolders) === 1) {
+            $src = $topFolders[0];
+        }
+
+        $targetDir = $extractTo . $name;
+        $oldDir = $extractTo . '_old_' . $name . '_' . uniqid();
+        if (is_dir($targetDir)) {
+            if (!@rename($targetDir, $oldDir)) {
+                $this->backup->deleteRecursive($tmpExtract);
+                return false;
+            }
+        }
+
+        if (!@rename($src, $targetDir)) {
+            if (is_dir($oldDir)) {
+                @rename($oldDir, $targetDir);
+            }
+            $this->backup->deleteRecursive($tmpExtract);
+            return false;
+        }
+
+        $this->backup->deleteRecursive($oldDir);
+        $this->backup->deleteRecursive($tmpExtract);
+
+        if (!is_dir($targetDir) || !glob($targetDir . '/*')) {
+            return false;
+        }
+
+        $version = $this->detectVersionFromPackage($targetDir);
+
+        $this->syncVersionMetadata($targetDir, $version);
+        $this->setVersion($type . 's', $name, $version);
+        $this->fetcher->clearCache();
+        return true;
+    }
+
+    private function applyCoreUpdateFromZip(string $zipPath): bool
+    {
+        $errors = $this->preflight('core', '');
+        if (!empty($errors)) {
+            error_log('BB CORE PREFLIGHT FAIL: ' . implode('; ', $errors));
+            return false;
+        }
+
         require_once __DIR__ . '/repo_install.php';
 
         $zip = new ZipArchive();
@@ -359,31 +299,40 @@ class UpdateManager
         @unlink($zipPath);
 
         if (!$ok) {
-            $this->deleteRecursive($tmpExtract);
+            $this->backup->deleteRecursive($tmpExtract);
             return false;
         }
 
         $root = rtrim(__DIR__ . '/../', '/');
-        $this->copyRecursive($tmpExtract, $root);
-        $this->deleteRecursive($tmpExtract);
+        $this->backup->copyRecursive($tmpExtract, $root);
+        $this->backup->deleteRecursive($tmpExtract);
 
-        $version = '1.0.0';
-        if ($type === 'plugin') {
-            $pm = new PluginManager(__DIR__ . '/../plugins', __DIR__ . '/../data/plugins.json');
-            $version = $pm->getVersion($name);
-        } elseif ($type === 'theme') {
-            $tm = new ThemeManager(__DIR__ . '/../themes', __DIR__ . '/../data/themes.json', 'freshbored');
-            $version = $tm->getVersion($name);
+        $this->fetcher->clearCache();
+        return true;
+    }
+
+    private function detectVersionFromPackage(string $targetDir): string
+    {
+        $manifestFile = $targetDir . '/manifest.json';
+        if (file_exists($manifestFile)) {
+            $data = json_decode(file_get_contents($manifestFile), true);
+            if (is_array($data) && !empty($data['version'])) {
+                return $data['version'];
+            }
         }
 
-        $this->setVersion($type, $name, $version);
-        $this->clearCache();
-        return true;
+        foreach (glob($targetDir . '/*.php') as $phpFile) {
+            $content = file_get_contents($phpFile);
+            if (preg_match('/Version:\s*([\d\.]+)/i', $content, $m)) {
+                return $m[1];
+            }
+        }
+
+        return '1.0.0';
     }
 
     public function applyCoreUpdate(string $tag): bool
     {
-        // Preflight checks
         $errors = $this->preflight('core', $tag);
         if (!empty($errors)) {
             error_log('BB CORE PREFLIGHT FAIL: ' . implode('; ', $errors));
@@ -393,7 +342,7 @@ class UpdateManager
         $zipUrl = 'https://github.com/bulletinbored/bulletinbored-core/archive/refs/tags/' . rawurlencode($tag) . '.zip';
         $tmpZip = tempnam(sys_get_temp_dir(), 'bbcore') . '.zip';
         error_log('BB CORE START tag=' . $tag . ' zip=' . $zipUrl);
-        $data = $this->httpGet($zipUrl, 30);
+        $data = $this->fetcher->httpGet($zipUrl, 30);
         if ($data === null) {
             error_log('BB CORE FAIL download');
             return false;
@@ -417,66 +366,56 @@ class UpdateManager
         @unlink($tmpZip);
 
         if (!$ok) {
-            $this->deleteRecursive($tmpExtract);
+            $this->backup->deleteRecursive($tmpExtract);
             error_log('BB CORE FAIL unsafe zip');
             return false;
         }
 
-        // Verify the extracted package has expected structure
         $topDirs = glob($tmpExtract . '*', GLOB_ONLYDIR);
         $sourceDir = (count($topDirs) === 1) ? $topDirs[0] : $tmpExtract;
         if (!file_exists($sourceDir . '/index.php') || !file_exists($sourceDir . '/VERSION')) {
-            $this->deleteRecursive($tmpExtract);
+            $this->backup->deleteRecursive($tmpExtract);
             error_log('BB CORE FAIL invalid package structure');
             return false;
         }
 
-        // Create backup before applying
-        $backupPath = $this->backupCore();
+        $backupPath = $this->backup->backupCore();
         if ($backupPath === null) {
             error_log('BB CORE FAIL: backup failed, aborting update');
-            $this->deleteRecursive($tmpExtract);
+            $this->backup->deleteRecursive($tmpExtract);
             return false;
         }
 
         $root = rtrim(__DIR__ . '/../', '/');
 
         try {
-            $this->copyRecursive($sourceDir, $root);
+            $this->backup->copyRecursive($sourceDir, $root);
         } catch (\Throwable $e) {
-            // Recovery: restore backup on failure
             if ($backupPath !== null) {
-                $this->restoreCoreBackup($backupPath);
+                $this->backup->restoreCoreBackup($backupPath);
             }
-            $this->deleteRecursive($tmpExtract);
+            $this->backup->deleteRecursive($tmpExtract);
             error_log('BB CORE FAIL copy error: ' . $e->getMessage());
             return false;
         }
-        $this->deleteRecursive($tmpExtract);
+        $this->backup->deleteRecursive($tmpExtract);
 
-        // Self-healing: if a previous (buggy) run left the nested
-        // "<repo>-<ref>/" folder inside $root, flatten it now so the
-        // updated files actually land in the document root.
         foreach (glob($root . '/bulletinbored-core-*', GLOB_ONLYDIR) as $nested) {
             foreach (glob($nested . '/*') as $item) {
                 $base = basename($item);
                 $dest = $root . '/' . $base;
                 if (is_dir($item)) {
-                    $this->copyRecursive($item, $dest);
+                    $this->backup->copyRecursive($item, $dest);
                 } elseif (is_file($item)) {
                     if (is_dir($dest)) {
-                        $this->deleteRecursive($dest);
+                        $this->backup->deleteRecursive($dest);
                     }
                     copy($item, $dest);
                 }
             }
-            $this->deleteRecursive($nested);
+            $this->backup->deleteRecursive($nested);
         }
 
-        // A core update re-extracts the installer scripts from the package.
-        // Remove them again so they do not re-appear on a deployed (already
-        // installed) forum. They are only kept when the forum is not yet
-        // installed (no config.json), so first-run setup still works.
         $this->removeInstallerScripts($root);
         error_log('BB CORE extracted');
 
@@ -486,31 +425,35 @@ class UpdateManager
             file_put_contents($versionFile, $tag);
         }
 
+        $this->updateVersionInConfig($tag);
+
+        $this->fetcher->clearCache();
+        return true;
+    }
+
+    private function updateVersionInConfig(string $tag): void
+    {
         $configJsonPath = __DIR__ . '/../config.json';
         $legacyConfigPath = __DIR__ . '/../config.php';
+        $version = ltrim($tag, 'v');
+
         if (file_exists($configJsonPath) && is_writable($configJsonPath)) {
             $config = json_decode(file_get_contents($configJsonPath), true);
             if (is_array($config)) {
-                $config['version'] = ltrim($tag, 'v');
+                $config['version'] = $version;
                 file_put_contents($configJsonPath, json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
             }
         } elseif (file_exists($legacyConfigPath) && is_writable($legacyConfigPath)) {
             $content = file_get_contents($legacyConfigPath);
             $content = preg_replace(
-                <<<'REGEX'
-                /\$config\['version'\]\s*=\s*\'[^\']*\';/
-                REGEX
-                ,
-                "\$config['version'] = '" . ltrim($tag, 'v') . "';",
+                '/\$config\[\'version\'\]\s*=\s*\'[^\']*\';/',
+                "\$config['version'] = '{$version}';",
                 $content
             );
             if ($content !== null) {
                 file_put_contents($legacyConfigPath, $content);
             }
         }
-
-        $this->clearCache();
-        return true;
     }
 
     public function applyExtensionUpdate(string $type, string $name, string $tag, ?string $repoUrl = null): bool
@@ -535,7 +478,7 @@ class UpdateManager
 
         $zipUrl = 'https://github.com/' . rawurlencode($m[1]) . '/' . rawurlencode($m[2]) . '/archive/refs/tags/' . rawurlencode($tag) . '.zip';
         $tmpZip = tempnam(sys_get_temp_dir(), 'bbext') . '.zip';
-        $data = $this->httpGet($zipUrl, 30);
+        $data = $this->fetcher->httpGet($zipUrl, 30);
         if ($data === null) {
             return false;
         }
@@ -562,7 +505,7 @@ class UpdateManager
         @unlink($tmpZip);
 
         if (!$ok) {
-            $this->deleteRecursive($tmpExtract);
+            $this->backup->deleteRecursive($tmpExtract);
             return false;
         }
 
@@ -576,7 +519,7 @@ class UpdateManager
         $oldDir = $extractTo . '_old_' . $name . '_' . uniqid();
         if (is_dir($pluginDir)) {
             if (!@rename($pluginDir, $oldDir)) {
-                $this->deleteRecursive($tmpExtract);
+                $this->backup->deleteRecursive($tmpExtract);
                 return false;
             }
         }
@@ -585,208 +528,48 @@ class UpdateManager
             if (is_dir($oldDir)) {
                 @rename($oldDir, $pluginDir);
             }
-            $this->deleteRecursive($tmpExtract);
+            $this->backup->deleteRecursive($tmpExtract);
             return false;
         }
 
-        $this->deleteRecursive($oldDir);
-        $this->deleteRecursive($tmpExtract);
+        $this->backup->deleteRecursive($oldDir);
+        $this->backup->deleteRecursive($tmpExtract);
 
         $targetDir = $extractTo . $name;
         if (!is_dir($targetDir) || !glob($targetDir . '/*')) {
             return false;
         }
 
-        // Keep the installed version in sync with the applied tag, regardless of
-        // the "Version:" declared inside the package files.
+        $this->syncVersionMetadata($targetDir, $tag);
+
+        $this->setVersion($type . 's', $name, $tag);
+        $this->fetcher->clearCache();
+        return true;
+    }
+
+    private function syncVersionMetadata(string $targetDir, string $tag): void
+    {
+        $version = ltrim($tag, 'v');
         $manifestFile = $targetDir . '/manifest.json';
         if (file_exists($manifestFile)) {
             $pm = json_decode(file_get_contents($manifestFile), true);
             if (is_array($pm)) {
-                $pm['version'] = ltrim($tag, 'v');
+                $pm['version'] = $version;
                 file_put_contents($manifestFile, json_encode($pm, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
             }
         } else {
-            file_put_contents($manifestFile, json_encode(['version' => ltrim($tag, 'v')], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+            file_put_contents($manifestFile, json_encode(['version' => $version], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
         }
         foreach (glob($targetDir . '/*.php') as $phpFile) {
             $content = file_get_contents($phpFile);
             if (preg_match('/Version:\s*([\d\.]+)/i', $content)) {
-                $content = preg_replace('/(Version:\s*)[\d\.]+/i', '$1' . ltrim($tag, 'v'), $content);
+                $content = preg_replace('/(Version:\s*)[\d\.]+/i', '$1' . $version, $content);
                 file_put_contents($phpFile, $content);
                 break;
             }
         }
-
-        $this->setVersion($type . 's', $name, $tag);
-        $this->clearCache();
-        return true;
     }
 
-    /**
-     * Create a backup of the core files before an update.
-     * Returns the backup directory path, or null on failure.
-     */
-    public function backupCore(): ?string
-    {
-        $root = rtrim(__DIR__ . '/../', '/');
-        $backupDir = dirname($this->manifestPath) . '/backups';
-        if (!is_dir($backupDir)) {
-            @mkdir($backupDir, 0755, true);
-        }
-
-        $backupPath = $backupDir . '/core_' . date('Ymd_His') . '_' . uniqid();
-        if (!mkdir($backupPath, 0755, true)) {
-            return null;
-        }
-
-        // Backup core files (exclude data, plugins, themes, uploads, config)
-        $exclude = ['data', 'plugins', 'themes', 'uploads', 'vendor'];
-        $items = glob($root . '/*');
-        foreach ($items as $item) {
-            $basename = basename($item);
-            if (in_array($basename, $exclude, true)) {
-                continue;
-            }
-            $dest = $backupPath . '/' . $basename;
-            if (is_dir($item)) {
-                $this->copyRecursive($item, $dest);
-            } else {
-                copy($item, $dest);
-            }
-        }
-
-        // Clean old backups (keep last 3)
-        $backups = glob($backupDir . '/core_*', GLOB_ONLYDIR);
-        if (count($backups) > 3) {
-            usort($backups, fn($a, $b) => filemtime($a) <=> filemtime($b));
-            $toDelete = array_slice($backups, 0, count($backups) - 3);
-            foreach ($toDelete as $old) {
-                $this->deleteRecursive($old);
-            }
-        }
-
-        return $backupPath;
-    }
-
-    /**
-     * Restore a core backup. Returns true on success.
-     */
-    public function restoreCoreBackup(string $backupPath): bool
-    {
-        if (!is_dir($backupPath)) {
-            return false;
-        }
-
-        $root = rtrim(__DIR__ . '/../', '/');
-        $items = glob($backupPath . '/*');
-        foreach ($items as $item) {
-            $basename = basename($item);
-            $dest = $root . '/' . $basename;
-            if (is_dir($item)) {
-                if (is_dir($dest)) {
-                    $this->deleteRecursive($dest);
-                }
-                $this->copyRecursive($item, $dest);
-            } else {
-                copy($item, $dest);
-            }
-        }
-
-        return true;
-    }
-
-    /**
-     * List available core backups.
-     */
-    public function listBackups(): array
-    {
-        $backupDir = dirname($this->manifestPath) . '/backups';
-        if (!is_dir($backupDir)) {
-            return [];
-        }
-
-        $backups = [];
-        foreach (glob($backupDir . '/core_*', GLOB_ONLYDIR) as $dir) {
-            $backups[] = [
-                'path' => $dir,
-                'name' => basename($dir),
-                'date' => date('Y-m-d H:i:s', filemtime($dir)),
-                'size' => $this->dirSize($dir),
-            ];
-        }
-
-        usort($backups, fn($a, $b) => strcmp($b['name'], $a['name']));
-        return $backups;
-    }
-
-    private function dirSize(string $dir): int
-    {
-        $size = 0;
-        foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($dir, \RecursiveDirectoryIterator::SKIP_DOTS)) as $file) {
-            $size += $file->getSize();
-        }
-        return $size;
-    }
-
-    private function copyRecursive(string $src, string $dst): void
-    {
-        if (is_dir($src)) {
-            if (!is_dir($dst)) {
-                if (file_exists($dst)) {
-                    @unlink($dst);
-                }
-                mkdir($dst, 0755, true);
-            }
-            $items = glob($src . '/*');
-            foreach ($items as $item) {
-                $basename = basename($item);
-                $target = $dst . '/' . $basename;
-                if (is_dir($item)) {
-                    $this->copyRecursive($item, $target);
-                } elseif (is_file($item)) {
-                    copy($item, $target);
-                }
-            }
-        } elseif (is_file($src)) {
-            if (is_dir($dst)) {
-                $this->deleteRecursive($dst);
-            }
-            copy($src, $dst);
-        }
-    }
-
-    private function deleteRecursive(string $dir): bool
-    {
-        if (!is_dir($dir)) {
-            return @unlink($dir);
-        }
-        $items = @scandir($dir);
-        if ($items === false) {
-            return false;
-        }
-        foreach ($items as $item) {
-            if ($item === '.' || $item === '..') {
-                continue;
-            }
-            $path = $dir . '/' . $item;
-            if (is_dir($path)) {
-                $this->deleteRecursive($path);
-            } else {
-                @unlink($path);
-            }
-        }
-        return @rmdir($dir);
-    }
-
-    /**
-     * Remove the installer scripts from a deployed root, but only when the
-     * forum is already installed (config.json present). On a fresh install
-     * (no config.json yet) the scripts must stay so setup can run.
-     *
-     * Called after a core update, since the update package re-ships the
-     * installer files and would otherwise re-expose them.
-     */
     private function removeInstallerScripts(string $root): void
     {
         if (!file_exists($root . '/config.json')) {
@@ -805,18 +588,28 @@ class UpdateManager
         }
     }
 
-    private function clearCache(): void
-    {
-        @unlink($this->cachePath());
-    }
-
     public function getRemoteVersion(string $type, string $name, ?string $repoUrl = null): ?string
     {
-        return $this->fetchRemoteVersion($type, $name, $repoUrl);
+        return $this->fetcher->fetchRemoteVersion($type, $name, $repoUrl);
     }
 
     public function getLockedExtensions(): array
     {
         return ['php', 'css', 'js', 'json', 'sql', 'html', 'md', 'txt', 'ico', 'gif', 'png', 'jpg', 'jpeg', 'svg', 'webp', 'woff', 'woff2', 'ttf', 'eot'];
+    }
+
+    public function backupCore(): ?string
+    {
+        return $this->backup->backupCore();
+    }
+
+    public function restoreCoreBackup(string $backupPath): bool
+    {
+        return $this->backup->restoreCoreBackup($backupPath);
+    }
+
+    public function listBackups(): array
+    {
+        return $this->backup->listBackups();
     }
 }

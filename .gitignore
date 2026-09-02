@@ -34,6 +34,7 @@ data/backups/
 !/themes/freshbored/**
 
 TODO.md
+TODO-test.md
 
 docs/phase1-audit-report.md
 RELEASE-NOTES.md
