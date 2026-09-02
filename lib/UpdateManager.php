@@ -303,9 +303,50 @@ class UpdateManager
             return false;
         }
 
+        $topDirs = glob($tmpExtract . '*', GLOB_ONLYDIR);
+        $sourceDir = (count($topDirs) === 1) ? $topDirs[0] : $tmpExtract;
+        if (!file_exists($sourceDir . '/index.php') || !file_exists($sourceDir . '/VERSION')) {
+            $this->backup->deleteRecursive($tmpExtract);
+            error_log('BB CORE FAIL invalid package structure');
+            return false;
+        }
+
+        $backupPath = $this->backup->backupCore();
+        if ($backupPath === null) {
+            error_log('BB CORE FAIL: backup failed, aborting update');
+            $this->backup->deleteRecursive($tmpExtract);
+            return false;
+        }
+
         $root = rtrim(__DIR__ . '/../', '/');
-        $this->backup->copyRecursive($tmpExtract, $root);
+
+        try {
+            $this->backup->copyRecursive($sourceDir, $root);
+        } catch (\Throwable $e) {
+            if ($backupPath !== null) {
+                $this->backup->restoreCoreBackup($backupPath);
+            }
+            $this->backup->deleteRecursive($tmpExtract);
+            error_log('BB CORE FAIL copy error: ' . $e->getMessage());
+            return false;
+        }
         $this->backup->deleteRecursive($tmpExtract);
+
+        foreach (glob($root . '/bulletinbored-core-*', GLOB_ONLYDIR) as $nested) {
+            foreach (glob($nested . '/*') as $item) {
+                $base = basename($item);
+                $dest = $root . '/' . $base;
+                if (is_dir($item)) {
+                    $this->backup->copyRecursive($item, $dest);
+                } elseif (is_file($item)) {
+                    if (is_dir($dest)) {
+                        $this->backup->deleteRecursive($dest);
+                    }
+                    copy($item, $dest);
+                }
+            }
+            $this->backup->deleteRecursive($nested);
+        }
 
         $this->fetcher->clearCache();
         return true;
