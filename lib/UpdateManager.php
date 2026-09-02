@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/UpdateFetcher.php';
 require_once __DIR__ . '/UpdateBackup.php';
+require_once __DIR__ . '/PackageInstaller.php';
 
 class UpdateManager
 {
@@ -214,62 +215,36 @@ class UpdateManager
             return false;
         }
 
-        $zip = new ZipArchive();
-        if ($zip->open($zipPath) !== true) {
-            return false;
-        }
-
         if ($type === 'plugin') {
-            $extractTo = rtrim(__DIR__ . '/../plugins', '/') . '/';
+            $packagesDir = rtrim(__DIR__ . '/../plugins', '/') . '/';
         } else {
-            $extractTo = rtrim(__DIR__ . '/../themes', '/') . '/';
+            $packagesDir = rtrim(__DIR__ . '/../themes', '/') . '/';
         }
 
-        require_once __DIR__ . '/repo_install.php';
+        $targetDir = $packagesDir . $name;
+        $backupDir = $packagesDir . '_old_' . $name . '_' . uniqid();
 
-        $tmpExtract = $extractTo . '_update_' . uniqid() . '/';
-        mkdir($tmpExtract, 0755, true);
-        $ok = extract_zip($zipPath, $tmpExtract);
-        $zip->close();
-        @unlink($zipPath);
-
-        if (!$ok) {
-            $this->backup->deleteRecursive($tmpExtract);
-            return false;
-        }
-
-        $src = $tmpExtract;
-        $topFolders = glob($tmpExtract . '*', GLOB_ONLYDIR);
-        if (count($topFolders) === 1) {
-            $src = $topFolders[0];
-        }
-
-        $targetDir = $extractTo . $name;
-        $oldDir = $extractTo . '_old_' . $name . '_' . uniqid();
         if (is_dir($targetDir)) {
-            if (!@rename($targetDir, $oldDir)) {
-                $this->backup->deleteRecursive($tmpExtract);
+            if (!@rename($targetDir, $backupDir)) {
                 return false;
             }
         }
 
-        if (!@rename($src, $targetDir)) {
-            if (is_dir($oldDir)) {
-                @rename($oldDir, $targetDir);
+        $installer = new PackageInstaller($packagesDir, 'verify_files');
+        $result = $installer->install($zipPath, $targetDir);
+
+        if (!$result['success']) {
+            if (is_dir($backupDir)) {
+                @rename($backupDir, $targetDir);
             }
-            $this->backup->deleteRecursive($tmpExtract);
             return false;
         }
 
-        $this->backup->deleteRecursive($oldDir);
-        $this->backup->deleteRecursive($tmpExtract);
-
-        if (!is_dir($targetDir) || !glob($targetDir . '/*')) {
-            return false;
+        if (is_dir($backupDir)) {
+            $this->backup->deleteRecursive($backupDir);
         }
 
         $version = $this->detectVersionFromPackage($targetDir);
-
         $this->syncVersionMetadata($targetDir, $version);
         $this->setVersion($type . 's', $name, $version);
         $this->fetcher->clearCache();
@@ -525,67 +500,7 @@ class UpdateManager
         }
         file_put_contents($tmpZip, $data);
 
-        $zip = new ZipArchive();
-        if ($zip->open($tmpZip) !== true) {
-            @unlink($tmpZip);
-            return false;
-        }
-
-        if ($type === 'plugin') {
-            $extractTo = rtrim(__DIR__ . '/../plugins', '/') . '/';
-        } else {
-            $extractTo = rtrim(__DIR__ . '/../themes', '/') . '/';
-        }
-
-        require_once __DIR__ . '/repo_install.php';
-
-        $tmpExtract = $extractTo . '_update_' . uniqid() . '/';
-        mkdir($tmpExtract, 0755, true);
-        $ok = extract_zip($tmpZip, $tmpExtract);
-        $zip->close();
-        @unlink($tmpZip);
-
-        if (!$ok) {
-            $this->backup->deleteRecursive($tmpExtract);
-            return false;
-        }
-
-        $src = $tmpExtract;
-        $topFolders = glob($tmpExtract . '*', GLOB_ONLYDIR);
-        if (count($topFolders) === 1) {
-            $src = $topFolders[0];
-        }
-
-        $pluginDir = $extractTo . $name;
-        $oldDir = $extractTo . '_old_' . $name . '_' . uniqid();
-        if (is_dir($pluginDir)) {
-            if (!@rename($pluginDir, $oldDir)) {
-                $this->backup->deleteRecursive($tmpExtract);
-                return false;
-            }
-        }
-
-        if (!@rename($src, $pluginDir)) {
-            if (is_dir($oldDir)) {
-                @rename($oldDir, $pluginDir);
-            }
-            $this->backup->deleteRecursive($tmpExtract);
-            return false;
-        }
-
-        $this->backup->deleteRecursive($oldDir);
-        $this->backup->deleteRecursive($tmpExtract);
-
-        $targetDir = $extractTo . $name;
-        if (!is_dir($targetDir) || !glob($targetDir . '/*')) {
-            return false;
-        }
-
-        $this->syncVersionMetadata($targetDir, $tag);
-
-        $this->setVersion($type . 's', $name, $tag);
-        $this->fetcher->clearCache();
-        return true;
+        return $this->applyExtensionUpdateFromZip($type, $name, $tmpZip);
     }
 
     private function syncVersionMetadata(string $targetDir, string $tag): void
