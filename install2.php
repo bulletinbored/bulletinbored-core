@@ -72,13 +72,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'All fields are required.';
     } elseif ($adminPass !== $adminPassConfirm) {
         $error = 'Passwords do not match.';
-    } elseif (strlen($adminPass) < 12) {
-        $error = 'Password must be at least 12 characters.';
-    } elseif (!filter_var($adminEmail, FILTER_VALIDATE_EMAIL)) {
-        $error = 'Please enter a valid email address.';
-    } elseif (file_exists(__DIR__ . '/config.json')) {
-        $error = 'Configuration file already exists. Remove it to reinstall.';
     } else {
+        require_once __DIR__ . '/src/Helpers/AuthHelpers.php';
+        $passwordErrors = validate_password_strength($adminPass);
+        if (!empty($passwordErrors)) {
+            $error = 'Password must be at least 10 characters with lowercase, uppercase, and a number.';
+        }
+    }
+    if (empty($error) && !filter_var($adminEmail, FILTER_VALIDATE_EMAIL)) {
+        $error = 'Please enter a valid email address.';
+    }
+    if (empty($error) && file_exists(__DIR__ . '/config.json')) {
+        $error = 'Configuration file already exists. Remove it to reinstall.';
+    }
+    if (empty($error)) {
         $_SESSION['install_site_name'] = $siteName;
         $_SESSION['install_admin_user'] = $adminUser;
         $_SESSION['install_admin_pass'] = $adminPass;
@@ -351,7 +358,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="mb-3">
                     <label class="form-label" for="admin_pass">Admin Password</label>
                     <input type="password" class="form-control" id="admin_pass" name="admin_pass" required>
-                     <div class="text-muted small mt-1">Minimum 12 characters. A passphrase is recommended.</div>
+                     <div class="text-muted small mt-1">Minimum 10 characters with lowercase, uppercase, and a number. A passphrase is recommended.</div>
                 </div>
 
                 <div class="mb-3">
