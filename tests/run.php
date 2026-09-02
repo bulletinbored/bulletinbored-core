@@ -14,7 +14,10 @@ require_once __DIR__ . '/harness.php';
 $filter = $argv[1] ?? '';
 $verbose = in_array('--verbose', $argv) || in_array('-v', $argv);
 
-$testFiles = glob(__DIR__ . '/*Test.php');
+$testFiles = array_merge(
+    glob(__DIR__ . '/*Test.php'),
+    glob(__DIR__ . '/../plugins/*/tests/*Test.php')
+);
 sort($testFiles);
 
 $suite = new TestSuite();

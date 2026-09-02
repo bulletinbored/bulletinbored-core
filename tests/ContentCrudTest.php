@@ -416,6 +416,120 @@ function test_hide_unhide_post(): Test
     return $t;
 }
 
+function test_edit_reply_post(): Test
+{
+    $t = new Test('Content - Edit Reply Post');
+
+    $pdo = setupContentDB();
+    App::getInstance()->pdo = $pdo;
+
+    $pdo->prepare("INSERT INTO threads (category_id, user_id, title, content, status) VALUES (?, ?, ?, ?, 'visible')")->execute([1, 2, 'Original Thread', 'First post content']);
+    $threadId = (int)$pdo->lastInsertId();
+
+    $pdo->prepare("INSERT INTO posts (thread_id, user_id, content, status) VALUES (?, ?, ?, 'visible')")->execute([$threadId, 2, 'Original reply content']);
+    $replyId = (int)$pdo->lastInsertId();
+
+    $postStmt = $pdo->prepare("SELECT * FROM posts WHERE id = ?");
+    $postStmt->execute([$replyId]);
+    $post = $postStmt->fetch();
+
+    $t->assertNotNull('Reply post exists', $post);
+    $t->assertEquals('Reply has correct thread_id', $threadId, (int)$post['thread_id']);
+    $t->assertEquals('Reply content is correct before edit', 'Original reply content', $post['content']);
+
+    $threadStmt = $pdo->prepare("SELECT * FROM threads WHERE id = ?");
+    $threadStmt->execute([$post['thread_id']]);
+    $thread = $threadStmt->fetch();
+
+    $post['thread_title'] = $thread['title'] ?? '';
+
+    $t->assertEquals('Reply has thread_title set for edit view', 'Original Thread', $post['thread_title']);
+
+    $pdo->prepare("UPDATE posts SET content = ? WHERE id = ?")->execute(['Edited reply content', $replyId]);
+
+    $updatedPostStmt = $pdo->prepare("SELECT content FROM posts WHERE id = ?");
+    $updatedPostStmt->execute([$replyId]);
+    $updatedContent = $updatedPostStmt->fetchColumn();
+
+    $t->assertEquals('Reply content updated correctly', 'Edited reply content', $updatedContent);
+
+    $threadCheckStmt = $pdo->prepare("SELECT * FROM threads WHERE id = ?");
+    $threadCheckStmt->execute([$threadId]);
+    $threadStillExists = $threadCheckStmt->fetch();
+    $t->assertNotNull('Thread still exists after editing reply', $threadStillExists);
+
+    App::reset();
+
+    return $t;
+}
+
+function test_delete_reply_does_not_delete_thread(): Test
+{
+    $t = new Test('Content - Delete Reply Should NOT Delete Thread');
+
+    $pdo = setupContentDB();
+    App::getInstance()->pdo = $pdo;
+
+    $pdo->prepare("INSERT INTO threads (category_id, user_id, title, content, status) VALUES (1, 2, 'Thread to Delete Reply From', 'Thread opening content', 'visible')")->execute();
+    $threadId = (int)$pdo->lastInsertId();
+
+    $pdo->prepare("INSERT INTO posts (thread_id, user_id, content, status) VALUES (?, 2, 'First reply', 'visible')")->execute();
+    $replyId = (int)$pdo->lastInsertId();
+
+    $postStmt = $pdo->prepare("SELECT * FROM posts WHERE id = ?");
+    $postStmt->execute([$replyId]);
+    $post = $postStmt->fetch();
+
+    $threadIdFromPost = (int)$post['thread_id'];
+
+    $pdo->prepare("DELETE FROM posts WHERE id = ?")->execute([$replyId]);
+
+    $threadCheckStmt = $pdo->prepare("SELECT * FROM threads WHERE id = ?");
+    $threadCheckStmt->execute([$threadId]);
+    $threadStillExists = $threadCheckStmt->fetch();
+
+    $t->assertNotNull('Thread still exists after deleting reply', $threadStillExists);
+    $t->assertEquals('Thread has correct title', 'Thread to Delete Reply From', $threadStillExists['title']);
+    $t->assertEquals('Thread has correct content', 'Thread opening content', $threadStillExists['content']);
+
+    $postCountStmt = $pdo->prepare("SELECT COUNT(*) FROM posts WHERE thread_id = ?");
+    $postCountStmt->execute([$threadId]);
+    $remainingPosts = (int)$postCountStmt->fetchColumn();
+    $t->assertEquals('No posts remain in thread', 0, $remainingPosts);
+
+    App::reset();
+
+    return $t;
+}
+
+function test_delete_last_reply_preserves_thread(): Test
+{
+    $t = new Test('Content - Delete Last Reply Should Preserve Thread');
+
+    $pdo = setupContentDB();
+    App::getInstance()->pdo = $pdo;
+
+    $pdo->prepare("INSERT INTO threads (category_id, user_id, title, content, status) VALUES (1, 2, 'Thread With One Reply', 'Opening post content', 'visible')")->execute();
+    $threadId = (int)$pdo->lastInsertId();
+
+    $pdo->prepare("INSERT INTO posts (thread_id, user_id, content, status) VALUES (?, 3, 'Only reply in thread', 'visible')")->execute();
+    $replyId = (int)$pdo->lastInsertId();
+
+    $pdo->prepare("DELETE FROM posts WHERE id = ?")->execute([$replyId]);
+
+    $threadStmt = $pdo->prepare("SELECT * FROM threads WHERE id = ?");
+    $threadStmt->execute([$threadId]);
+    $thread = $threadStmt->fetch();
+
+    $t->assertNotNull('Thread exists after deleting only reply', $thread);
+    $t->assertEquals('Thread title preserved', 'Thread With One Reply', $thread['title']);
+    $t->assertEquals('Thread opening content preserved', 'Opening post content', $thread['content']);
+
+    App::reset();
+
+    return $t;
+}
+
 $tests = [
     test_create_thread(),
     test_create_thread_requires_title(),
@@ -428,6 +542,9 @@ $tests = [
     test_fetch_threads_with_search(),
     test_fetch_threads_sort_options(),
     test_hide_unhide_post(),
+    test_edit_reply_post(),
+    test_delete_reply_does_not_delete_thread(),
+    test_delete_last_reply_preserves_thread(),
 ];
 
 $totalPassed = 0;

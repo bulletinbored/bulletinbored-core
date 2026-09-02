@@ -101,6 +101,11 @@ function handle_edit_post(string $method, array $params = []): \Bulletin\Respons
         return redirect(url('home'));
     }
 
+    $threadStmt = $pdo->prepare("SELECT * FROM threads WHERE id = ?");
+    $threadStmt->execute([$post['thread_id']]);
+    $thread = $threadStmt->fetch();
+    $post['thread_title'] = $thread['title'] ?? '';
+
     $userId = (int)$_SESSION['user_id'];
     if (!$authz->canOnOwned($userId, 'posts.edit', (int)$post['user_id'])) {
         throw new \Bulletin\ForbiddenException('Not authorized');
@@ -120,26 +125,27 @@ function handle_edit_post(string $method, array $params = []): \Bulletin\Respons
             }
 
             $setParts = [];
-            $params = [];
+            $sqlParams = [];
             foreach ($updateData as $col => $val) {
                 $setParts[] = "{$col} = ?";
-                $params[] = $val;
+                $sqlParams[] = $val;
             }
-            $params[] = $postId;
-            $pdo->prepare("UPDATE posts SET " . implode(', ', $setParts) . " WHERE id = ?")->execute($params);
+            $sqlParams[] = $postId;
+            $pdo->prepare("UPDATE posts SET " . implode(', ', $setParts) . " WHERE id = ?")->execute($sqlParams);
 
             if (isset($pluginManager)) {
                 $pluginManager->runHook('post_after_update', $postId, $updateData, $post);
             }
         }
 
-        $threadStmt = $pdo->prepare("SELECT * FROM threads WHERE id = ?");
-        $threadStmt->execute([$post['thread_id']]);
-        $thread = $threadStmt->fetch();
-
-        return redirect(url('thread', ['id' => $post['thread_id'], 'slug' => slugify($thread['title'] ?? '')]));
+        $slug = slugify($post['thread_title'] ?? '');
+        $redirectUrl = $slug !== 'n-a'
+            ? url('thread', ['id' => $post['thread_id'], 'slug' => $slug])
+            : url('thread', ['id' => $post['thread_id']]);
+        return redirect($redirectUrl);
     }
 
+    $editThreadTitle = false;
     include __DIR__ . '/../../views/edit_post.php';
     return true;
 }
@@ -190,16 +196,6 @@ function handle_delete_post(array $params = []): \Bulletin\Response|bool
 
     if (isset($pluginManager)) {
         $pluginManager->runHook('post_after_delete', $postId, $threadId);
-    }
-
-    $countStmt = $pdo->prepare("SELECT COUNT(*) FROM posts WHERE thread_id = ?");
-    $countStmt->execute([$threadId]);
-    if ((int)$countStmt->fetchColumn() === 0) {
-        $threadStmt = $pdo->prepare("SELECT * FROM threads WHERE id = ?");
-        $threadStmt->execute([$threadId]);
-        $thread = $threadStmt->fetch();
-        $pdo->prepare("DELETE FROM threads WHERE id = ?")->execute([$threadId]);
-        return redirect(url('category', ['id' => $thread['category_id']]));
     }
 
     return redirect(url('thread', ['id' => $threadId]));
@@ -266,7 +262,11 @@ function handle_edit_thread(string $method, array $params = []): \Bulletin\Respo
             }
         }
 
-        return redirect(url('thread', ['id' => $threadId, 'slug' => slugify($thread['title'] ?? '')]));
+        $slug = slugify($thread['title'] ?? '');
+        $redirectUrl = $slug !== 'n-a'
+            ? url('thread', ['id' => $threadId, 'slug' => $slug])
+            : url('thread', ['id' => $threadId]);
+        return redirect($redirectUrl);
     }
 
     $editThreadTitle = true;

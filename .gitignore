@@ -2,6 +2,7 @@ config.json
 config.php
 data/database.sqlite
 data/update-cache.json
+data/cache/
 data/plugins.json
 data/installed.json
 data/updates.json
@@ -34,7 +35,6 @@ data/backups/
 !/themes/freshbored/**
 
 TODO.md
-TODO-test.md
 
 docs/phase1-audit-report.md
 RELEASE-NOTES.md
