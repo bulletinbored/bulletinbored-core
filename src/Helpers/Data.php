@@ -83,11 +83,17 @@ function fetch_threads(array $opts = []) {
         FROM threads t
         JOIN users u ON t.user_id = u.id
         LEFT JOIN categories c ON t.category_id = c.id
-        LEFT JOIN posts lp ON lp.id = (
-            SELECT id FROM posts
-            WHERE thread_id = t.id AND status = 'visible'
-            ORDER BY created_at DESC LIMIT 1
-        )
+        LEFT JOIN (
+            SELECT lp2.id, lp2.thread_id, lp2.user_id, lp2.created_at, lp2.content
+            FROM posts lp2
+            INNER JOIN (
+                SELECT thread_id, MAX(created_at) AS max_created_at
+                FROM posts
+                WHERE status = 'visible'
+                GROUP BY thread_id
+            ) lp3 ON lp3.thread_id = lp2.thread_id AND lp3.max_created_at = lp2.created_at
+            WHERE lp2.status = 'visible'
+        ) lp ON lp.thread_id = t.id
         LEFT JOIN users lu ON lu.id = lp.user_id
         WHERE {$whereSql}
         ORDER BY {$orderBy}
