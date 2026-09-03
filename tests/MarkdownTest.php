@@ -4,6 +4,8 @@
  * MarkdownTest.php — tests for the Markdown parser security.
  */
 
+require_once __DIR__ . '/harness.php';
+require_once __DIR__ . '/../src/bootstrap.php';
 require_once __DIR__ . '/../src/markdown.php';
 
 function test_markdown_escapes_raw_html(): Test

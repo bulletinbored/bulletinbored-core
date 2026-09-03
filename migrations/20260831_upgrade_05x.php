@@ -40,6 +40,25 @@ class Upgrade05x
 
     public function up(PDO $pdo): void
     {
+        $driver = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+        $intType = $driver === 'mysql' ? 'INTEGER DEFAULT 0' : 'INTEGER DEFAULT 0';
+        $textType = $driver === 'mysql' ? 'TEXT DEFAULT NULL' : 'TEXT DEFAULT NULL';
+
+        // users.email_verified
+        if (!$this->columnExists($pdo, 'users', 'email_verified')) {
+            $pdo->exec("ALTER TABLE users ADD COLUMN email_verified {$intType}");
+        }
+
+        // threads.views
+        if (!$this->columnExists($pdo, 'threads', 'views')) {
+            $pdo->exec("ALTER TABLE threads ADD COLUMN views {$intType}");
+        }
+
+        // categories.allowed_roles
+        if (!$this->columnExists($pdo, 'categories', 'allowed_roles')) {
+            $pdo->exec("ALTER TABLE categories ADD COLUMN allowed_roles {$textType}");
+        }
+
         // Add token_hash column to email_verifications if missing
         if (!$this->columnExists($pdo, 'email_verifications', 'token_hash')) {
             $driver = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);

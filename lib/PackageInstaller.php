@@ -93,10 +93,14 @@ class PackageInstaller
 
     /**
      * Safe ZIP extraction with Zip Slip protection.
+     * Single-pass: validate AND extract in one go to prevent TOCTOU between validation and extraction.
      */
     public function safeExtractZip(ZipArchive $zip, string $dest): bool
     {
         $dest = rtrim(str_replace('\\', '/', $dest), '/');
+        if (!is_dir($dest)) {
+            @mkdir($dest, 0755, true);
+        }
         $realDest = realpath($dest);
         if ($realDest === false) {
             return false;
@@ -115,26 +119,60 @@ class PackageInstaller
             }
 
             $target = $dest . '/' . $name;
-            if (!str_starts_with($target, $realDest . '/')) {
-                return false;
+            $realTarget = realpath($target);
+            if ($realTarget !== false) {
+                $realTarget = str_replace('\\', '/', $realTarget);
+                if (!str_starts_with($realTarget, $realDest . '/')) {
+                    return false;
+                }
+            } else {
+                if (!str_starts_with($target, $realDest . '/')) {
+                    return false;
+                }
+            }
+
+            if (substr($name, -1) === '/') {
+                if (!is_dir($target)) {
+                    @mkdir($target, 0755, true);
+                }
+            } else {
+                $parent = dirname($target);
+                if (!is_dir($parent)) {
+                    @mkdir($parent, 0755, true);
+                }
+                $content = $zip->getFromIndex($i);
+                if ($content === false) {
+                    return false;
+                }
+                if (file_put_contents($target, $content) === false) {
+                    return false;
+                }
             }
         }
 
-        return $zip->extractTo($dest);
+        return true;
     }
 
     /**
-     * Verify that every extracted folder honours the "files" list in its manifest.json.
+     * Verify that every extracted package honours the "files" list in its manifest.json.
+     * Handles both wrapped (one subdir) and flat (manifest at root) layouts.
      */
     public function verifyInstalledFiles(string $targetDir): array
     {
         $pending = [];
+
+        $dirsToCheck = [];
+        if (file_exists($targetDir . '/manifest.json')) {
+            $dirsToCheck[] = $targetDir;
+        }
         foreach (glob($targetDir . '/*', GLOB_ONLYDIR) as $dir) {
-            $manifestFile = $dir . '/manifest.json';
-            if (!file_exists($manifestFile)) {
-                continue;
+            if (file_exists($dir . '/manifest.json')) {
+                $dirsToCheck[] = $dir;
             }
-            $manifest = json_decode(file_get_contents($manifestFile), true);
+        }
+
+        foreach ($dirsToCheck as $dir) {
+            $manifest = json_decode(file_get_contents($dir . '/manifest.json'), true);
             if (!is_array($manifest) || empty($manifest['files']) || !is_array($manifest['files'])) {
                 continue;
             }
@@ -177,22 +215,34 @@ class PackageInstaller
 
     /**
      * Flatten nested directory structure (e.g. package-1.0.0/file → file).
+     * Works whether the package has exactly one top-level subdir or is already flat.
      */
     public function flattenNestedDir(string $targetDir): void
     {
         $entries = glob($targetDir . '/*', GLOB_ONLYDIR);
-        if (count($entries) !== 1) {
+        $files = glob($targetDir . '/*');
+        $topLevelFiles = array_filter($files, fn($f) => !is_dir($f));
+
+        if (count($entries) === 1 && empty($topLevelFiles)) {
+            $nested = $entries[0];
+            foreach (glob($nested . '/*') as $item) {
+                $destItem = $targetDir . '/' . basename($item);
+                if (file_exists($destItem)) {
+                    continue;
+                }
+                @rename($item, $destItem);
+            }
+            @rmdir($nested);
             return;
         }
-        $nested = $entries[0];
-        foreach (glob($nested . '/*') as $item) {
-            $destItem = $targetDir . '/' . basename($item);
-            if (file_exists($destItem)) {
-                continue;
-            }
-            rename($item, $destItem);
+
+        if (count($entries) === 1 && !empty($topLevelFiles)) {
+            return;
         }
-        @rmdir($nested);
+
+        if (empty($entries) && !empty($topLevelFiles)) {
+            return;
+        }
     }
 
     /**

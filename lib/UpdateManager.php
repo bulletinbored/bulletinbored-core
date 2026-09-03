@@ -230,12 +230,20 @@ class UpdateManager
             }
         }
 
-        $installer = new PackageInstaller($packagesDir, 'verify_files');
-        $result = $installer->install($zipPath, $targetDir);
+        $verifyConfigKey = $type === 'plugin' ? 'plugin_verify_files' : 'theme_verify_files';
+        $installer = new PackageInstaller($packagesDir, $verifyConfigKey);
+
+        $verifyCallback = function (string $tmpDir) use ($type) {
+            return $this->verifyExtractedPackage($type, $tmpDir);
+        };
+
+        $result = $installer->install($zipPath, $targetDir, $verifyCallback);
 
         if (!$result['success']) {
             if (is_dir($backupDir)) {
                 @rename($backupDir, $targetDir);
+            } else {
+                $this->backup->deleteRecursive($targetDir);
             }
             return false;
         }
@@ -248,6 +256,70 @@ class UpdateManager
         $this->syncVersionMetadata($targetDir, $version);
         $this->setVersion($type . 's', $name, $version);
         $this->fetcher->clearCache();
+        return true;
+    }
+
+    /**
+     * Verify a freshly extracted extension package.
+     * Returns null on success, or ['success'=>false, 'message'=>...] to abort.
+     */
+    public function verifyExtractedPackage(string $type, string $targetDir): ?array
+    {
+        $manifestFile = $targetDir . '/manifest.json';
+        if (!file_exists($manifestFile)) {
+            return ['success' => false, 'message' => 'Missing manifest.json'];
+        }
+
+        $manifest = json_decode(file_get_contents($manifestFile), true);
+        if (!is_array($manifest)) {
+            return ['success' => false, 'message' => 'Invalid manifest.json'];
+        }
+
+        if (empty($manifest['name'])) {
+            return ['success' => false, 'message' => 'Manifest missing required field: name'];
+        }
+        if (empty($manifest['version'])) {
+            return ['success' => false, 'message' => 'Manifest missing required field: version'];
+        }
+
+        if (!empty($manifest['core'])) {
+            $coreVersion = trim(@file_get_contents(__DIR__ . '/../VERSION') ?: '0.0.0');
+            $constraint = $manifest['core'];
+            $ok = $this->checkVersionConstraint($coreVersion, $constraint);
+            if (!$ok) {
+                return ['success' => false, 'message' => "Core version {$coreVersion} does not satisfy constraint '{$constraint}'"];
+            }
+        }
+
+        if (!empty($manifest['php'])) {
+            $ok = $this->checkVersionConstraint(PHP_VERSION, $manifest['php']);
+            if (!$ok) {
+                return ['success' => false, 'message' => "PHP version " . PHP_VERSION . " does not satisfy constraint '{$manifest['php']}'"];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Check a version against a constraint string (e.g. ">=8.1 <9.0").
+     * Returns true if all parts of the constraint are satisfied.
+     */
+    public function checkVersionConstraint(string $version, string $constraint): bool
+    {
+        $parts = preg_split('/\s+/', trim($constraint));
+        foreach ($parts as $c) {
+            $c = trim($c);
+            if ($c === '') {
+                continue;
+            }
+            if (!preg_match('/^(>=|<=|>|<|==|!=)(.+)$/', $c, $m)) {
+                continue;
+            }
+            if (!version_compare($version, trim($m[2]), $m[1])) {
+                return false;
+            }
+        }
         return true;
     }
 
