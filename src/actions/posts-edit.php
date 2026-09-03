@@ -69,6 +69,8 @@ function handle_reply_post(): \Bulletin\Response|bool
     $stmt->execute([$postData['thread_id'], $postData['user_id'], $postData['content'], $postData['created_at']]);
     $postId = $pdo->lastInsertId();
 
+    $pdo->prepare("UPDATE threads SET updated_at = ? WHERE id = ?")->execute([$postData['created_at'], $threadId]);
+
     if (isset($pluginManager)) {
         $pluginManager->runHook('post_after_create', $postId, $postData, $thread);
     }

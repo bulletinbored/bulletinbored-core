@@ -73,10 +73,22 @@ function fetch_threads(array $opts = []) {
         SELECT t.*, u.username AS author, u.avatar AS author_avatar,
                c.name AS category_name, c.id AS category_id,
                COALESCE(t.views, 0) AS view_count,
-               (SELECT COUNT(*) FROM posts WHERE thread_id = t.id AND status = 'visible') AS reply_count
+               (SELECT COUNT(*) FROM posts WHERE thread_id = t.id AND status = 'visible') AS reply_count,
+               lp.user_id AS last_author_id,
+               lu.username AS last_author,
+               lu.avatar AS last_author_avatar,
+               lp.created_at AS last_post_at,
+               lp.id AS last_post_id,
+               lp.content AS last_post_content
         FROM threads t
         JOIN users u ON t.user_id = u.id
         LEFT JOIN categories c ON t.category_id = c.id
+        LEFT JOIN posts lp ON lp.id = (
+            SELECT id FROM posts
+            WHERE thread_id = t.id AND status = 'visible'
+            ORDER BY created_at DESC LIMIT 1
+        )
+        LEFT JOIN users lu ON lu.id = lp.user_id
         WHERE {$whereSql}
         ORDER BY {$orderBy}
         LIMIT ? OFFSET ?
