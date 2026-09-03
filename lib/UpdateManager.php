@@ -282,6 +282,18 @@ class UpdateManager
             return ['success' => false, 'message' => 'Manifest missing required field: version'];
         }
 
+        if (isset($manifest['id']) && !preg_match('/^[a-z][a-z0-9-]*$/', $manifest['id'])) {
+            return ['success' => false, 'message' => "Manifest invalid 'id' format: must be lowercase alphanumeric + hyphens, starting with a letter"];
+        }
+
+        if (isset($manifest['permissions']) && !is_array($manifest['permissions'])) {
+            return ['success' => false, 'message' => "Manifest invalid 'permissions' (should be an array of permission strings)"];
+        }
+
+        if (isset($manifest['bootstrap']) && !is_string($manifest['bootstrap'])) {
+            return ['success' => false, 'message' => "Manifest invalid 'bootstrap' (should be a filename string)"];
+        }
+
         if (!empty($manifest['core'])) {
             $coreVersion = trim(@file_get_contents(__DIR__ . '/../VERSION') ?: '0.0.0');
             $constraint = $manifest['core'];
@@ -314,7 +326,7 @@ class UpdateManager
                 continue;
             }
             if (!preg_match('/^(>=|<=|>|<|==|!=)(.+)$/', $c, $m)) {
-                continue;
+                return false;
             }
             if (!version_compare($version, trim($m[2]), $m[1])) {
                 return false;

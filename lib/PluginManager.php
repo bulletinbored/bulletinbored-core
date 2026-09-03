@@ -398,7 +398,7 @@ class PluginManager
         $this->saveManifest();
     }
 
-    public function uninstall(string $name): array
+    public function uninstall(string $name, bool $rollbackMigrations = false): array
     {
         $key = strtolower($name);
         $this->plugins = $this->getAll();
@@ -436,7 +436,10 @@ class PluginManager
         }
 
         $this->callLifecycle($entry, 'cleanup');
-        $this->callLifecycle($entry, 'migration_rollback');
+
+        if ($rollbackMigrations) {
+            $this->callLifecycle($entry, 'migration_rollback');
+        }
 
         $this->removeInstalledRecord($key);
 
