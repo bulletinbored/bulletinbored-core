@@ -10,7 +10,9 @@ function is_logged_in(): bool
         return false;
     }
     if (!isset($_SESSION['session_version'])) {
-        session_destroy();
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_destroy();
+        }
         return false;
     }
     $pdo = App::getInstance()->pdo;
@@ -18,7 +20,9 @@ function is_logged_in(): bool
     $stmt->execute([$_SESSION['user_id']]);
     $dbVersion = $stmt->fetchColumn();
     if ($dbVersion !== false && (int)$dbVersion !== (int)$_SESSION['session_version']) {
-        session_destroy();
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_destroy();
+        }
         return false;
     }
     return true;
