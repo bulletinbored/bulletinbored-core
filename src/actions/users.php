@@ -83,6 +83,7 @@ function handle_login(string $method): \Bulletin\Response|bool
                 $_SESSION['avatar'] = $user['avatar'] ?? '';
                 $_SESSION['user_status'] = $user['status'];
                 $_SESSION['user_suspension_time'] = $user['suspension_time'] ?? 0;
+                $_SESSION['session_version'] = (int)($user['session_version'] ?? 1);
                 session_regenerate_id(true);
                 if ($user['status'] === 'suspended' && !empty($user['suspension_time']) && time() >= $user['suspension_time']) {
                     $pdo->prepare("UPDATE users SET status = 'active', suspension_time = 0 WHERE id = ?")->execute([$user['id']]);
@@ -527,7 +528,7 @@ function handle_reset_password(string $method): \Bulletin\Response|bool
             return true;
         }
 
-        $pdo->prepare("UPDATE users SET password = ? WHERE id = ?")
+        $pdo->prepare("UPDATE users SET password = ?, session_version = COALESCE(session_version, 0) + 1 WHERE id = ?")
             ->execute([password_hash($password, PASSWORD_DEFAULT), $validToken['user_id']]);
 
         $userStmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");

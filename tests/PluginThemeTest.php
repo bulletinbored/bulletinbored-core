@@ -628,35 +628,20 @@ function test_plugin_disable_cascades_to_dependents(): Test
     return $t;
 }
 
-$tests = [
-    test_plugin_enable_disable(),
-    test_plugin_missing_declared_file(),
-    test_plugin_extra_undeclared_file(),
-    test_plugin_dependency_missing(),
-    test_plugin_dependency_cycle(),
-    test_plugin_install_fails_safely(),
-    test_plugin_uninstall(),
-    test_theme_activate(),
-    test_theme_css_loads(),
-    test_theme_install_from_zip(),
-    test_theme_delete(),
-    test_theme_cannot_delete_default(),
-    test_plugin_settings(),
-    test_plugin_version_constraint(),
-    test_plugin_disable_cascades_to_dependents(),
-];
-
-$totalPassed = 0;
-$totalFailed = 0;
-foreach ($tests as $t) {
-    $t->run();
-    $totalPassed += $t->getPassed();
-    $totalFailed += $t->getFailed();
-}
-
-echo "\n";
-echo "############################################################\n";
-echo "# TOTAL: {$totalPassed} passed, {$totalFailed} failed\n";
-echo "############################################################\n";
-
-exit($totalFailed > 0 ? 1 : 0);
+register_tests(
+    'test_plugin_enable_disable',
+    'test_plugin_missing_declared_file',
+    'test_plugin_extra_undeclared_file',
+    'test_plugin_dependency_missing',
+    'test_plugin_dependency_cycle',
+    'test_plugin_install_fails_safely',
+    'test_plugin_uninstall',
+    'test_theme_activate',
+    'test_theme_css_loads',
+    'test_theme_install_from_zip',
+    'test_theme_delete',
+    'test_theme_cannot_delete_default',
+    'test_plugin_settings',
+    'test_plugin_version_constraint',
+    'test_plugin_disable_cascades_to_dependents'
+);

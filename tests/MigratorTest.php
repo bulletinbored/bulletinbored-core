@@ -192,13 +192,12 @@ function test_migration_class_loading(): Test
     return $t;
 }
 
-// Run all migrator tests
-$suite = new TestSuite();
-$suite->addTest(test_migrator_creates_table());
-$suite->addTest(test_migrator_discovers_files());
-$suite->addTest(test_migrator_runs_up());
-$suite->addTest(test_migrator_runs_down());
-$suite->addTest(test_migrator_batch_tracking());
-$suite->addTest(test_migrator_pending_detection());
-$suite->addTest(test_migration_class_loading());
-$suite->run();
+register_tests(
+    'test_migrator_creates_table',
+    'test_migrator_discovers_files',
+    'test_migrator_runs_up',
+    'test_migrator_runs_down',
+    'test_migrator_batch_tracking',
+    'test_migrator_pending_detection',
+    'test_migration_class_loading'
+);

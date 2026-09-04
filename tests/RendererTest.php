@@ -105,10 +105,9 @@ function test_renderer_data_overrides_global(): Test
     return $t;
 }
 
-// Run all renderer tests
-$suite = new TestSuite();
-$suite->addTest(test_renderer_escaping());
-$suite->addTest(test_renderer_variable_passing());
-$suite->addTest(test_renderer_global_variables());
-$suite->addTest(test_renderer_data_overrides_global());
-$suite->run();
+register_tests(
+    'test_renderer_escaping',
+    'test_renderer_variable_passing',
+    'test_renderer_global_variables',
+    'test_renderer_data_overrides_global'
+);

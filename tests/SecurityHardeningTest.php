@@ -333,34 +333,19 @@ function test_upload_null_byte(): Test
     return $t;
 }
 
-$tests = [
-    test_sql_injection_login(),
-    test_sql_injection_search(),
-    test_sql_injection_filter(),
-    test_upload_extension_whitelist(),
-    test_upload_max_size(),
-    test_upload_random_filename(),
-    test_upload_no_php(),
-    test_security_headers_present(),
-    test_security_headers_no_inline_scripts(),
-    test_security_headers_x_content_type(),
-    test_security_headers_frame_options(),
-    test_csp_nonce_generation(),
-    test_upload_double_extension(),
-    test_upload_null_byte(),
-];
-
-$totalPassed = 0;
-$totalFailed = 0;
-foreach ($tests as $t) {
-    $t->run();
-    $totalPassed += $t->getPassed();
-    $totalFailed += $t->getFailed();
-}
-
-echo "\n";
-echo "############################################################\n";
-echo "# TOTAL: {$totalPassed} passed, {$totalFailed} failed\n";
-echo "############################################################\n";
-
-exit($totalFailed > 0 ? 1 : 0);
+register_tests(
+    'test_sql_injection_login',
+    'test_sql_injection_search',
+    'test_sql_injection_filter',
+    'test_upload_extension_whitelist',
+    'test_upload_max_size',
+    'test_upload_random_filename',
+    'test_upload_no_php',
+    'test_security_headers_present',
+    'test_security_headers_no_inline_scripts',
+    'test_security_headers_x_content_type',
+    'test_security_headers_frame_options',
+    'test_csp_nonce_generation',
+    'test_upload_double_extension',
+    'test_upload_null_byte'
+);

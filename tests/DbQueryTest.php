@@ -254,15 +254,14 @@ function test_dbquery_raw(): Test
     return $t;
 }
 
-// Run all DbQuery tests
-$suite = new TestSuite();
-$suite->addTest(test_dbquery_insert_and_select());
-$suite->addTest(test_dbquery_where());
-$suite->addTest(test_dbquery_update_delete());
-$suite->addTest(test_dbquery_order_limit_offset());
-$suite->addTest(test_dbquery_count_exists());
-$suite->addTest(test_dbquery_paginate());
-$suite->addTest(test_dbquery_insert_ignore());
-$suite->addTest(test_dbquery_pluck());
-$suite->addTest(test_dbquery_raw());
-$suite->run();
+register_tests(
+    'test_dbquery_insert_and_select',
+    'test_dbquery_where',
+    'test_dbquery_update_delete',
+    'test_dbquery_order_limit_offset',
+    'test_dbquery_count_exists',
+    'test_dbquery_paginate',
+    'test_dbquery_insert_ignore',
+    'test_dbquery_pluck',
+    'test_dbquery_raw'
+);

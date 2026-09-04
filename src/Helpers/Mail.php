@@ -5,10 +5,35 @@
  */
 
 function send_email($to, $subject, $body) {
+    if ($to === '' || preg_match('/[\r\n]/', $to)) {
+        error_log("send_email: invalid recipient address");
+        return false;
+    }
+
+    $filtered = filter_var($to, FILTER_VALIDATE_EMAIL);
+    if ($filtered === false) {
+        error_log("send_email: email validation failed for: " . substr($to, 0, 50));
+        return false;
+    }
+    $to = $filtered;
+
     $config = App::getInstance()->config;
+
+    $mailFrom = $config['mail_from'] ?? '';
+    $mailFromName = $config['mail_from_name'] ?? '';
+
+    if ($mailFrom === '' || preg_match('/[\r\n]/', $mailFrom)) {
+        error_log("send_email: invalid mail_from address");
+        return false;
+    }
+    if (preg_match('/[\r\n]/', $mailFromName)) {
+        error_log("send_email: invalid mail_from_name");
+        return false;
+    }
+
     $headers = "MIME-Version: 1.0\r\n";
     $headers .= "Content-Type: text/html; charset=UTF-8\r\n";
-    $headers .= "From: {$config['mail_from_name']} <{$config['mail_from']}>\r\n";
+    $headers .= "From: {$mailFromName} <{$mailFrom}>\r\n";
     $headers .= "X-Mailer: bulletinbored/1.0\r\n";
 
     $siteLogoHtml = '';

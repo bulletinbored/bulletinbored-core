@@ -325,11 +325,10 @@ function test_e2e_current_route_action(): Test
     return $t;
 }
 
-// Run all e2e tests
-$suite = new TestSuite();
-$suite->addTest(test_e2e_thread_lifecycle());
-$suite->addTest(test_e2e_json_api_flow());
-$suite->addTest(test_e2e_plugin_route_registration());
-$suite->addTest(test_e2e_migration_plugin_paths());
-$suite->addTest(test_e2e_current_route_action());
-$suite->run();
+register_tests(
+    'test_e2e_thread_lifecycle',
+    'test_e2e_json_api_flow',
+    'test_e2e_plugin_route_registration',
+    'test_e2e_migration_plugin_paths',
+    'test_e2e_current_route_action'
+);

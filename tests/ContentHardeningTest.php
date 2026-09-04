@@ -206,15 +206,14 @@ function test_request_parsing_edge_cases(): Test
     return $t;
 }
 
-// Run all content hardening tests
-$suite = new TestSuite();
-$suite->addTest(test_markdown_fuzzing_nested());
-$suite->addTest(test_markdown_fuzzing_unicode());
-$suite->addTest(test_markdown_fuzzing_long_input());
-$suite->addTest(test_markdown_fuzzing_malformed());
-$suite->addTest(test_markdown_fuzzing_attribute_breakout());
-$suite->addTest(test_url_validation());
-$suite->addTest(test_upload_validation());
-$suite->addTest(test_plugin_manifest_validation());
-$suite->addTest(test_request_parsing_edge_cases());
-$suite->run();
+register_tests(
+    'test_markdown_fuzzing_nested',
+    'test_markdown_fuzzing_unicode',
+    'test_markdown_fuzzing_long_input',
+    'test_markdown_fuzzing_malformed',
+    'test_markdown_fuzzing_attribute_breakout',
+    'test_url_validation',
+    'test_upload_validation',
+    'test_plugin_manifest_validation',
+    'test_request_parsing_edge_cases'
+);

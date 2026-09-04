@@ -4,7 +4,25 @@
  * Authentication and authorization helpers.
  */
 
-function is_logged_in() { return isset($_SESSION['user_id']); }
+function is_logged_in(): bool
+{
+    if (!isset($_SESSION['user_id'])) {
+        return false;
+    }
+    if (!isset($_SESSION['session_version'])) {
+        session_destroy();
+        return false;
+    }
+    $pdo = App::getInstance()->pdo;
+    $stmt = $pdo->prepare("SELECT session_version FROM users WHERE id = ?");
+    $stmt->execute([$_SESSION['user_id']]);
+    $dbVersion = $stmt->fetchColumn();
+    if ($dbVersion !== false && (int)$dbVersion !== (int)$_SESSION['session_version']) {
+        session_destroy();
+        return false;
+    }
+    return true;
+}
 function is_admin() { return ($_SESSION['user_role'] ?? '') === 'admin'; }
 
 function validate_password_strength(string $password): array

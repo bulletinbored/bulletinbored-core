@@ -530,34 +530,19 @@ function test_delete_last_reply_preserves_thread(): Test
     return $t;
 }
 
-$tests = [
-    test_create_thread(),
-    test_create_thread_requires_title(),
-    test_reply_to_thread(),
-    test_view_thread_pagination(),
-    test_view_thread_order(),
-    test_view_threads_by_category(),
-    test_view_user_profile(),
-    test_view_nonexistent_profile(),
-    test_fetch_threads_with_search(),
-    test_fetch_threads_sort_options(),
-    test_hide_unhide_post(),
-    test_edit_reply_post(),
-    test_delete_reply_does_not_delete_thread(),
-    test_delete_last_reply_preserves_thread(),
-];
-
-$totalPassed = 0;
-$totalFailed = 0;
-foreach ($tests as $t) {
-    $t->run();
-    $totalPassed += $t->getPassed();
-    $totalFailed += $t->getFailed();
-}
-
-echo "\n";
-echo "############################################################\n";
-echo "# TOTAL: {$totalPassed} passed, {$totalFailed} failed\n";
-echo "############################################################\n";
-
-exit($totalFailed > 0 ? 1 : 0);
+register_tests(
+    'test_create_thread',
+    'test_create_thread_requires_title',
+    'test_reply_to_thread',
+    'test_view_thread_pagination',
+    'test_view_thread_order',
+    'test_view_threads_by_category',
+    'test_view_user_profile',
+    'test_view_nonexistent_profile',
+    'test_fetch_threads_with_search',
+    'test_fetch_threads_sort_options',
+    'test_hide_unhide_post',
+    'test_edit_reply_post',
+    'test_delete_reply_does_not_delete_thread',
+    'test_delete_last_reply_preserves_thread'
+);

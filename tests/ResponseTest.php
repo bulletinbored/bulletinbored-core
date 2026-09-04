@@ -149,14 +149,14 @@ function test_typed_request_enum(): Test
     return $t;
 }
 
-$suite = new TestSuite();
-$suite->addTest(test_response_html());
-$suite->addTest(test_response_json());
-$suite->addTest(test_response_redirect());
-$suite->addTest(test_response_error());
-$suite->addTest(test_typed_request_string());
-$suite->addTest(test_typed_request_int());
-$suite->addTest(test_typed_request_bool());
-$suite->addTest(test_typed_request_email());
-$suite->addTest(test_typed_request_enum());
-$suite->run();
+register_tests(
+    'test_response_html',
+    'test_response_json',
+    'test_response_redirect',
+    'test_response_error',
+    'test_typed_request_string',
+    'test_typed_request_int',
+    'test_typed_request_bool',
+    'test_typed_request_email',
+    'test_typed_request_enum'
+);

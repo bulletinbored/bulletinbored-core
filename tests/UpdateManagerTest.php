@@ -488,33 +488,18 @@ function test_zip_entries_safe_blocks_traversal(): Test
     return $t;
 }
 
-$tests = [
-    test_zip_slip_traversal_blocked(),
-    test_zip_absolute_path_blocked(),
-    test_valid_zip_extracts(),
-    test_zip_missing_version_rejected(),
-    test_zip_missing_index_php_rejected(),
-    test_nested_github_directory_flattened(),
-    test_invalid_zip_rejected(),
-    test_update_version_tracking(),
-    test_update_check_records_version(),
-    test_preflight_php_version_check(),
-    test_backup_creates_copy(),
-    test_restore_from_backup(),
-    test_zip_entries_safe_blocks_traversal(),
-];
-
-$totalPassed = 0;
-$totalFailed = 0;
-foreach ($tests as $t) {
-    $t->run();
-    $totalPassed += $t->getPassed();
-    $totalFailed += $t->getFailed();
-}
-
-echo "\n";
-echo "############################################################\n";
-echo "# TOTAL: {$totalPassed} passed, {$totalFailed} failed\n";
-echo "############################################################\n";
-
-exit($totalFailed > 0 ? 1 : 0);
+register_tests(
+    'test_zip_slip_traversal_blocked',
+    'test_zip_absolute_path_blocked',
+    'test_valid_zip_extracts',
+    'test_zip_missing_version_rejected',
+    'test_zip_missing_index_php_rejected',
+    'test_nested_github_directory_flattened',
+    'test_invalid_zip_rejected',
+    'test_update_version_tracking',
+    'test_update_check_records_version',
+    'test_preflight_php_version_check',
+    'test_backup_creates_copy',
+    'test_restore_from_backup',
+    'test_zip_entries_safe_blocks_traversal'
+);

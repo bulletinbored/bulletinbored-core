@@ -464,17 +464,16 @@ function test_moderation_authorization(): Test
     return $t;
 }
 
-// Run all moderation tests
-$suite = new TestSuite();
-$suite->addTest(test_moderation_approve());
-$suite->addTest(test_moderation_lock_unlock());
-$suite->addTest(test_moderation_sticky_unsticky());
-$suite->addTest(test_moderation_hide());
-$suite->addTest(test_moderation_delete_thread());
-$suite->addTest(test_moderation_move_thread());
-$suite->addTest(test_moderation_copy_thread());
-$suite->addTest(test_moderation_split_thread());
-$suite->addTest(test_moderation_merge_thread());
-$suite->addTest(test_moderation_csrf_protection());
-$suite->addTest(test_moderation_authorization());
-$suite->run();
+register_tests(
+    'test_moderation_approve',
+    'test_moderation_lock_unlock',
+    'test_moderation_sticky_unsticky',
+    'test_moderation_hide',
+    'test_moderation_delete_thread',
+    'test_moderation_move_thread',
+    'test_moderation_copy_thread',
+    'test_moderation_split_thread',
+    'test_moderation_merge_thread',
+    'test_moderation_csrf_protection',
+    'test_moderation_authorization'
+);

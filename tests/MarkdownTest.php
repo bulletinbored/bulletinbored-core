@@ -119,11 +119,11 @@ function test_markdown_xss_vectors(): Test
     return $t;
 }
 
-$suite = new TestSuite();
-$suite->addTest(test_markdown_escapes_raw_html());
-$suite->addTest(test_markdown_url_schemes());
-$suite->addTest(test_markdown_image_schemes());
-$suite->addTest(test_markdown_basic_formatting());
-$suite->addTest(test_markdown_code_blocks());
-$suite->addTest(test_markdown_xss_vectors());
-$suite->run();
+register_tests(
+    'test_markdown_escapes_raw_html',
+    'test_markdown_url_schemes',
+    'test_markdown_image_schemes',
+    'test_markdown_basic_formatting',
+    'test_markdown_code_blocks',
+    'test_markdown_xss_vectors'
+);

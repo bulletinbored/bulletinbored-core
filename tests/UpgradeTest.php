@@ -145,10 +145,9 @@ function test_migration_failure_atomicity(): Test
     return $t;
 }
 
-// Run all upgrade tests
-$suite = new TestSuite();
-$suite->addTest(test_upgrade_05x_to_current());
-$suite->addTest(test_migration_namespacing());
-$suite->addTest(test_irreversible_migration());
-$suite->addTest(test_migration_failure_atomicity());
-$suite->run();
+register_tests(
+    'test_upgrade_05x_to_current',
+    'test_migration_namespacing',
+    'test_irreversible_migration',
+    'test_migration_failure_atomicity'
+);

@@ -157,7 +157,7 @@ function test_password_reset_token(): Test
     return $t;
 }
 
-function test_account_enumeration_prevention(): Test
+function test_auth_account_enumeration_prevention(): Test
 {
     $t = new Test('Auth Hardening - Account Enumeration Prevention');
 
@@ -256,13 +256,12 @@ function test_rate_limiting(): Test
     return $t;
 }
 
-// Run all auth hardening tests
-$suite = new TestSuite();
-$suite->addTest(test_session_lifecycle());
-$suite->addTest(test_email_verification_token());
-$suite->addTest(test_email_verification_expired_token());
-$suite->addTest(test_password_reset_token());
-$suite->addTest(test_account_enumeration_prevention());
-$suite->addTest(test_csrf_token_rotation());
-$suite->addTest(test_rate_limiting());
-$suite->run();
+register_tests(
+    'test_session_lifecycle',
+    'test_email_verification_token',
+    'test_email_verification_expired_token',
+    'test_password_reset_token',
+    'test_auth_account_enumeration_prevention',
+    'test_csrf_token_rotation',
+    'test_rate_limiting'
+);

@@ -162,15 +162,15 @@ function test_plugin_manager_remove_hook(): Test
 }
 
 // Run all PluginManager tests
-$suite = new TestSuite();
-$suite->addTest(test_plugin_manager_hooks());
-$suite->addTest(test_plugin_manager_filter());
-$suite->addTest(test_plugin_manager_check());
-$suite->addTest(test_plugin_manager_priority());
-$suite->addTest(test_plugin_manager_remove_hook());
-$suite->addTest(test_plugin_manager_delete_dir());
-$suite->addTest(test_plugin_manager_validate_manifest());
-$suite->run();
+register_tests(
+    'test_plugin_manager_hooks',
+    'test_plugin_manager_filter',
+    'test_plugin_manager_check',
+    'test_plugin_manager_priority',
+    'test_plugin_manager_remove_hook',
+    'test_plugin_manager_delete_dir',
+    'test_plugin_manager_validate_manifest'
+);
 
 function test_plugin_manager_validate_manifest(): Test
 {

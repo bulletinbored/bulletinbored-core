@@ -398,30 +398,15 @@ function test_concurrent_registration_race(): Test
     return $t;
 }
 
-$tests = [
-    test_register_duplicate_email(),
-    test_csrf_concurrent_requests(),
-    test_thread_merge_preserves_ownership(),
-    test_category_allowed_roles(),
-    test_thread_watcher_notification(),
-    test_private_messages(),
-    test_search_malicious_input(),
-    test_pagination_edge_cases(),
-    test_username_case_sensitivity(),
-    test_concurrent_registration_race(),
-];
-
-$totalPassed = 0;
-$totalFailed = 0;
-foreach ($tests as $t) {
-    $t->run();
-    $totalPassed += $t->getPassed();
-    $totalFailed += $t->getFailed();
-}
-
-echo "\n";
-echo "############################################################\n";
-echo "# TOTAL: {$totalPassed} passed, {$totalFailed} failed\n";
-echo "############################################################\n";
-
-exit($totalFailed > 0 ? 1 : 0);
+register_tests(
+    'test_register_duplicate_email',
+    'test_csrf_concurrent_requests',
+    'test_thread_merge_preserves_ownership',
+    'test_category_allowed_roles',
+    'test_thread_watcher_notification',
+    'test_private_messages',
+    'test_search_malicious_input',
+    'test_pagination_edge_cases',
+    'test_username_case_sensitivity',
+    'test_concurrent_registration_race'
+);

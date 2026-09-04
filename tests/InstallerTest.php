@@ -322,31 +322,16 @@ function test_installer_config_file_format(): Test
     return $t;
 }
 
-$tests = [
-    test_installer_fresh_install(),
-    test_installer_creates_admin(),
-    test_installer_idempotent(),
-    test_installer_validates_username(),
-    test_installer_validates_password(),
-    test_installer_validates_email(),
-    test_installer_seeds_default_roles(),
-    test_installer_seeds_default_category(),
-    test_installer_rollback_on_failure(),
-    test_installer_sqlite_support(),
-    test_installer_config_file_format(),
-];
-
-$totalPassed = 0;
-$totalFailed = 0;
-foreach ($tests as $t) {
-    $t->run();
-    $totalPassed += $t->getPassed();
-    $totalFailed += $t->getFailed();
-}
-
-echo "\n";
-echo "############################################################\n";
-echo "# TOTAL: {$totalPassed} passed, {$totalFailed} failed\n";
-echo "############################################################\n";
-
-exit($totalFailed > 0 ? 1 : 0);
+register_tests(
+    'test_installer_fresh_install',
+    'test_installer_creates_admin',
+    'test_installer_idempotent',
+    'test_installer_validates_username',
+    'test_installer_validates_password',
+    'test_installer_validates_email',
+    'test_installer_seeds_default_roles',
+    'test_installer_seeds_default_category',
+    'test_installer_rollback_on_failure',
+    'test_installer_sqlite_support',
+    'test_installer_config_file_format'
+);

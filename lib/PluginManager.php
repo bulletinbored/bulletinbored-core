@@ -622,7 +622,7 @@ class PluginManager
             $c = trim($c);
             if ($c === '') continue;
             if (!preg_match('/^(>=|<=|>|<|==|!=)(.+)$/', $c, $m)) {
-                continue;
+                return false;
             }
             $op = $m[1];
             $target = trim($m[2]);

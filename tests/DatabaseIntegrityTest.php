@@ -319,31 +319,16 @@ function test_thread_belongs_to_valid_category(): Test
     return $t;
 }
 
-$tests = [
-    test_foreign_key_cascade_delete_user(),
-    test_foreign_key_cascade_delete_thread(),
-    test_foreign_key_set_null_category(),
-    test_unique_constraint_username(),
-    test_unique_constraint_category_name(),
-    test_reply_count_accurate(),
-    test_views_count_accurate(),
-    test_soft_delete_thread(),
-    test_hard_delete_thread(),
-    test_not_null_constraints(),
-    test_thread_belongs_to_valid_category(),
-];
-
-$totalPassed = 0;
-$totalFailed = 0;
-foreach ($tests as $t) {
-    $t->run();
-    $totalPassed += $t->getPassed();
-    $totalFailed += $t->getFailed();
-}
-
-echo "\n";
-echo "############################################################\n";
-echo "# TOTAL: {$totalPassed} passed, {$totalFailed} failed\n";
-echo "############################################################\n";
-
-exit($totalFailed > 0 ? 1 : 0);
+register_tests(
+    'test_foreign_key_cascade_delete_user',
+    'test_foreign_key_cascade_delete_thread',
+    'test_foreign_key_set_null_category',
+    'test_unique_constraint_username',
+    'test_unique_constraint_category_name',
+    'test_reply_count_accurate',
+    'test_views_count_accurate',
+    'test_soft_delete_thread',
+    'test_hard_delete_thread',
+    'test_not_null_constraints',
+    'test_thread_belongs_to_valid_category'
+);

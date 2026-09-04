@@ -25,7 +25,7 @@ function handle_upload_image(): \Bulletin\Response|bool
         return \Bulletin\Response::json(['ok' => false, 'error' => 'Invalid image'], 400);
     }
 
-    $uploadDir = __DIR__ . '/../../uploads';
+    $uploadDir = __DIR__ . '/../../uploads/private';
     if (!is_dir($uploadDir)) {
         @mkdir($uploadDir, 0755, true);
     }
@@ -47,8 +47,8 @@ function handle_upload_image(): \Bulletin\Response|bool
         $info['mime'],
     ]);
 
-    $url = base_url() . '/uploads/' . $info['safe_name'];
-    return \Bulletin\Response::json(['ok' => true, 'url' => $url, 'markdown' => '![](' . $url . ')']);
+    $privateUrl = base_url() . '/download/' . $pdo->lastInsertId();
+    return \Bulletin\Response::json(['ok' => true, 'url' => $privateUrl, 'markdown' => '![](' . $privateUrl . ')']);
 }
 
 function handle_thread_view(array $params = []): \Bulletin\Response|bool

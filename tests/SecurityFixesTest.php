@@ -765,52 +765,37 @@ function test_download_via_post_id_association(): Test
     return $t;
 }
 
-$tests = [
-    test_bb001_can_view_thread_helper(),
-    test_bb001_moderator_can_view_hidden(),
-    test_bb001_user_cannot_view_hidden(),
-    test_bb002_suspension_time_column(),
-    test_bb005_restricted_cannot_create(),
-    test_bb005_user_can_create(),
-    test_bb007_atomic_token_consume(),
-    test_bb008_rate_limit(),
-    test_nb001_version(),
-    test_nb003_permission_notation(),
-    test_password_policy(),
-    test_logout_csrf(),
-    test_token_hash_lookup(),
-    test_no_eval_in_langs(),
-    test_tls_verification_enabled(),
-    test_download_requires_thread_access(),
-    test_integration_bootstrap_no_fatal(),
-    test_php_syntax_all_source_files(),
-    test_integration_csp_allows_fonts(),
-    test_trusted_proxies_ipv4(),
-    test_trusted_proxies_ipv6(),
-    test_trusted_proxies_cidr(),
-    test_regression_no_eval_anywhere(),
-    test_regression_ssl_verify_never_disabled(),
-    test_regression_download_requires_thread_access(),
-    test_download_hidden_thread_guest_forbidden(),
-    test_download_hidden_thread_regular_user_forbidden(),
-    test_download_hidden_thread_moderator_allowed(),
-    test_download_pending_thread_guest_forbidden(),
-    test_download_visible_thread_guest_allowed(),
-    test_download_orphan_upload_guest_forbidden(),
-    test_download_via_post_id_association(),
-];
-
-$totalPassed = 0;
-$totalFailed = 0;
-foreach ($tests as $t) {
-    $t->run();
-    $totalPassed += $t->getPassed();
-    $totalFailed += $t->getFailed();
-}
-
-echo "\n";
-echo "############################################################\n";
-echo "# TOTAL: {$totalPassed} passed, {$totalFailed} failed\n";
-echo "############################################################\n";
-
-exit($totalFailed > 0 ? 1 : 0);
+register_tests(
+    'test_bb001_can_view_thread_helper',
+    'test_bb001_moderator_can_view_hidden',
+    'test_bb001_user_cannot_view_hidden',
+    'test_bb002_suspension_time_column',
+    'test_bb005_restricted_cannot_create',
+    'test_bb005_user_can_create',
+    'test_bb007_atomic_token_consume',
+    'test_bb008_rate_limit',
+    'test_nb001_version',
+    'test_nb003_permission_notation',
+    'test_password_policy',
+    'test_logout_csrf',
+    'test_token_hash_lookup',
+    'test_no_eval_in_langs',
+    'test_tls_verification_enabled',
+    'test_download_requires_thread_access',
+    'test_integration_bootstrap_no_fatal',
+    'test_php_syntax_all_source_files',
+    'test_integration_csp_allows_fonts',
+    'test_trusted_proxies_ipv4',
+    'test_trusted_proxies_ipv6',
+    'test_trusted_proxies_cidr',
+    'test_regression_no_eval_anywhere',
+    'test_regression_ssl_verify_never_disabled',
+    'test_regression_download_requires_thread_access',
+    'test_download_hidden_thread_guest_forbidden',
+    'test_download_hidden_thread_regular_user_forbidden',
+    'test_download_hidden_thread_moderator_allowed',
+    'test_download_pending_thread_guest_forbidden',
+    'test_download_visible_thread_guest_allowed',
+    'test_download_orphan_upload_guest_forbidden',
+    'test_download_via_post_id_association'
+);

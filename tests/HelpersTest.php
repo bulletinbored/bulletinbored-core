@@ -194,35 +194,20 @@ function test_thread_sort_options(): Test
     return $t;
 }
 
-$tests = [
-    test_escape_escapes_html(),
-    test_validate_input_trims(),
-    test_clean_text_escapes(),
-    test_time_ago(),
-    test_compact_number(),
-    test_excerpt(),
-    test_marked_parse(),
-    test_avatar_initial(),
-    test_avatar_color_deterministic(),
-    test_render_avatar_fallback(),
-    test_validate_password_strength(),
-    test_can_view_thread(),
-    test_can_view_thread_moderator(),
-    test_forum_statistics(),
-    test_thread_sort_options(),
-];
-
-$totalPassed = 0;
-$totalFailed = 0;
-foreach ($tests as $t) {
-    $t->run();
-    $totalPassed += $t->getPassed();
-    $totalFailed += $t->getFailed();
-}
-
-echo "\n";
-echo "############################################################\n";
-echo "# TOTAL: {$totalPassed} passed, {$totalFailed} failed\n";
-echo "############################################################\n";
-
-exit($totalFailed > 0 ? 1 : 0);
+register_tests(
+    'test_escape_escapes_html',
+    'test_validate_input_trims',
+    'test_clean_text_escapes',
+    'test_time_ago',
+    'test_compact_number',
+    'test_excerpt',
+    'test_marked_parse',
+    'test_avatar_initial',
+    'test_avatar_color_deterministic',
+    'test_render_avatar_fallback',
+    'test_validate_password_strength',
+    'test_can_view_thread',
+    'test_can_view_thread_moderator',
+    'test_forum_statistics',
+    'test_thread_sort_options'
+);

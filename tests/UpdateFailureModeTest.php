@@ -573,20 +573,20 @@ function test_dep_semver_full_constraint(): Test
     return $t;
 }
 
-$suite = new TestSuite();
-$suite->addTest(test_failure_corrupt_zip());
-$suite->addTest(test_failure_zip_slip());
-$suite->addTest(test_failure_invalid_manifest());
-$suite->addTest(test_failure_manifest_missing_name());
-$suite->addTest(test_failure_extra_files());
-$suite->addTest(test_failure_missing_files());
-$suite->addTest(test_failure_php_version_constraint());
-$suite->addTest(test_failure_core_version_constraint());
-$suite->addTest(test_failure_no_tmp_dir_left());
-$suite->addTest(test_failure_init_throws());
-$suite->addTest(test_failure_update_then_rollback());
-$suite->addTest(test_success_update_replaces_plugin());
-$suite->addTest(test_uninstall_uses_installed_identity());
-$suite->addTest(test_dep_disable_cascades());
-$suite->addTest(test_dep_semver_full_constraint());
-$suite->run();
+register_tests(
+    'test_failure_corrupt_zip',
+    'test_failure_zip_slip',
+    'test_failure_invalid_manifest',
+    'test_failure_manifest_missing_name',
+    'test_failure_extra_files',
+    'test_failure_missing_files',
+    'test_failure_php_version_constraint',
+    'test_failure_core_version_constraint',
+    'test_failure_no_tmp_dir_left',
+    'test_failure_init_throws',
+    'test_failure_update_then_rollback',
+    'test_success_update_replaces_plugin',
+    'test_uninstall_uses_installed_identity',
+    'test_dep_disable_cascades',
+    'test_dep_semver_full_constraint'
+);

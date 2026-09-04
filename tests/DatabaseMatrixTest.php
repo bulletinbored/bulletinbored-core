@@ -421,36 +421,36 @@ function test_authz_integration(): Test
     return $t;
 }
 
-// Run tests for all configured databases
-$driver = $_ENV['DB_DRIVER'] ?? getenv('DB_DRIVER') ?? 'sqlite';
-$availableDrivers = ['sqlite'];
+function register_database_matrix_tests(): void
+{
+    $driver = $_ENV['DB_DRIVER'] ?? getenv('DB_DRIVER') ?? 'sqlite';
+    $availableDrivers = ['sqlite'];
 
-// Check if MySQL is configured
-if (in_array($driver, ['mysql', 'mariadb'])) {
-    $availableDrivers[] = 'mysql';
-}
-
-$suite = new TestSuite();
-
-foreach ($availableDrivers as $d) {
-    // Set environment for this iteration
-    if ($d !== 'sqlite') {
-        $_ENV['DB_DRIVER'] = $d;
-        putenv("DB_DRIVER={$d}");
+    if (in_array($driver, ['mysql', 'mariadb'])) {
+        $availableDrivers[] = 'mysql';
     }
 
-    $skip = skipIfNoDB($d);
-    if ($skip) {
-        echo "\n[SKIP] {$d} — not available (configure DB_DRIVER/DB_HOST/DB_NAME/DB_USER/DB_PASS)\n";
-        continue;
-    }
+    $suite = get_test_suite();
 
-    $suite->addTest(test_schema_creation());
-    $suite->addTest(test_crud_operations());
-    $suite->addTest(test_transactions());
-    $suite->addTest(test_unicode());
-    $suite->addTest(test_migration_compatibility());
-    $suite->addTest(test_authz_integration());
+    foreach ($availableDrivers as $d) {
+        if ($d !== 'sqlite') {
+            $_ENV['DB_DRIVER'] = $d;
+            putenv("DB_DRIVER={$d}");
+        }
+
+        $skip = skipIfNoDB($d);
+        if ($skip) {
+            echo "\n[SKIP] {$d} - not available\n";
+            continue;
+        }
+
+        $suite->addTest(test_schema_creation());
+        $suite->addTest(test_crud_operations());
+        $suite->addTest(test_transactions());
+        $suite->addTest(test_unicode());
+        $suite->addTest(test_migration_compatibility());
+        $suite->addTest(test_authz_integration());
+    }
 }
 
-$suite->run();
+register_database_matrix_tests();

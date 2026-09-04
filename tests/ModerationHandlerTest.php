@@ -291,12 +291,11 @@ function test_frontend_moderate_unauthorized(): Test
     return $t;
 }
 
-// Run all moderation integration tests
-$suite = new TestSuite();
-$suite->addTest(test_moderate_post_approve());
-$suite->addTest(test_moderate_post_delete());
-$suite->addTest(test_moderate_post_invalid_csrf());
-$suite->addTest(test_moderate_post_invalid_thread());
-$suite->addTest(test_frontend_moderate_lock());
-$suite->addTest(test_frontend_moderate_unauthorized());
-$suite->run();
+register_tests(
+    'test_moderate_post_approve',
+    'test_moderate_post_delete',
+    'test_moderate_post_invalid_csrf',
+    'test_moderate_post_invalid_thread',
+    'test_frontend_moderate_lock',
+    'test_frontend_moderate_unauthorized'
+);

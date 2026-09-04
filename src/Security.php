@@ -87,6 +87,11 @@ function rate_limit(string $action, int $max = 10, int $window = 300, ?string $k
 
     $fp = @fopen($file, 'c+');
     if ($fp === false) {
+        log_security_event('rate_limit_file_fail', ['action' => $action, 'key' => $key]);
+        $authActions = ['login', 'register', 'forgot_password', 'reset_password'];
+        if (in_array($action, $authActions, true)) {
+            return false;
+        }
         return true;
     }
     if (flock($fp, LOCK_EX)) {

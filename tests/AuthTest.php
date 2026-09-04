@@ -171,17 +171,6 @@ function test_input_validation(): Test
     return $t;
 }
 
-// Run all Auth tests
-$suite = new TestSuite();
-$suite->addTest(test_password_hashing());
-$suite->addTest(test_csrf_tokens());
-$suite->addTest(test_user_has_permission());
-$suite->addTest(test_is_logged_in());
-$suite->addTest(test_is_banned_suspended());
-$suite->addTest(test_input_validation());
-$suite->addTest(test_authz_service());
-$suite->run();
-
 function test_authz_service(): Test
 {
     $t = new Test('AuthZ - Permission Service');
@@ -241,3 +230,13 @@ function test_authz_service(): Test
 
     return $t;
 }
+
+register_tests(
+    'test_password_hashing',
+    'test_csrf_tokens',
+    'test_user_has_permission',
+    'test_is_logged_in',
+    'test_is_banned_suspended',
+    'test_input_validation',
+    'test_authz_service'
+);

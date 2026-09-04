@@ -312,27 +312,12 @@ function test_e2e_user_cannot_access_admin(): Test
     return $t;
 }
 
-$tests = [
-    test_e2e_register_login_create_thread_reply(),
-    test_e2e_thread_moderator_hides(),
-    test_e2e_ban_user_kicks_session(),
-    test_e2e_admin_manages_settings(),
-    test_e2e_moderator_approves_pending(),
-    test_e2e_guest_cannot_post(),
-    test_e2e_user_cannot_access_admin(),
-];
-
-$totalPassed = 0;
-$totalFailed = 0;
-foreach ($tests as $t) {
-    $t->run();
-    $totalPassed += $t->getPassed();
-    $totalFailed += $t->getFailed();
-}
-
-echo "\n";
-echo "############################################################\n";
-echo "# TOTAL: {$totalPassed} passed, {$totalFailed} failed\n";
-echo "############################################################\n";
-
-exit($totalFailed > 0 ? 1 : 0);
+register_tests(
+    'test_e2e_register_login_create_thread_reply',
+    'test_e2e_thread_moderator_hides',
+    'test_e2e_ban_user_kicks_session',
+    'test_e2e_admin_manages_settings',
+    'test_e2e_moderator_approves_pending',
+    'test_e2e_guest_cannot_post',
+    'test_e2e_user_cannot_access_admin'
+);

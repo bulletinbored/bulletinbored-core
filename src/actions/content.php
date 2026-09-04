@@ -92,8 +92,14 @@ function handle_download(array $params = []): \Bulletin\Response|bool
         throw new \Bulletin\ForbiddenException('Not authorized');
     }
 
-    $filePath = __DIR__ . '/../../uploads/' . basename($upload['filename']);
-    if (!is_file($filePath)) {
+    $privatePath = __DIR__ . '/../../uploads/private/' . basename($upload['filename']);
+    $publicPath = __DIR__ . '/../../uploads/' . basename($upload['filename']);
+
+    if (is_file($privatePath)) {
+        $filePath = $privatePath;
+    } elseif (is_file($publicPath)) {
+        $filePath = $publicPath;
+    } else {
         throw new \Bulletin\NotFoundException('File not found');
     }
 

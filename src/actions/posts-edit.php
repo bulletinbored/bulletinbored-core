@@ -47,6 +47,10 @@ function handle_reply_post(): \Bulletin\Response|bool
         return redirect(url('thread', ['id' => $threadId]));
     }
 
+    if (!can_view_thread($thread['status'])) {
+        throw new \Bulletin\ForbiddenException('Not authorized to reply to this thread');
+    }
+
     $postData = [
         'thread_id' => $threadId,
         'user_id' => $_SESSION['user_id'],

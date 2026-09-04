@@ -95,9 +95,9 @@ function test_router_populates_get(): Test
     return $t;
 }
 
-$suite = new TestSuite();
-$suite->addTest(test_plugin_registers_route());
-$suite->addTest(test_plugin_registers_middleware());
-$suite->addTest(test_plugin_route_without_router());
-$suite->addTest(test_router_populates_get());
-$suite->run();
+register_tests(
+    'test_plugin_registers_route',
+    'test_plugin_registers_middleware',
+    'test_plugin_route_without_router',
+    'test_router_populates_get'
+);

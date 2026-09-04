@@ -29,7 +29,7 @@ $backUrl = url('thread', ['id' => $post['thread_id'] ?? 0, 'slug' => slugify($po
             </div>
             <?php endif; ?>
             <div class="mb-3">
-                <textarea id="editbored-content" name="content" class="form-control" rows="10" required><?= html_entity_decode($post['content'] ?? '', ENT_QUOTES, 'UTF-8') ?></textarea>
+                <textarea id="editbored-content" name="content" class="form-control" rows="10" required><?= escape(html_entity_decode($post['content'] ?? '', ENT_QUOTES, 'UTF-8')) ?></textarea>
             </div>
             <div class="form-actions">
                 <button type="submit" class="btn btn-brand"><i class="fas fa-save me-2"></i><?= t('save_changes') ?></button>

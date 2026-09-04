@@ -540,35 +540,20 @@ function test_login_rate_limiting(): Test
     return $t;
 }
 
-$tests = [
-    test_register_user_success(),
-    test_register_duplicate_username(),
-    test_register_empty_fields(),
-    test_register_weak_password(),
-    test_login_correct(),
-    test_login_wrong_credentials(),
-    test_login_nonexistent_user(),
-    test_login_banned_user(),
-    test_login_suspended_user(),
-    test_login_unverified_email(),
-    test_ban_kicks_active_session(),
-    test_logout_destroys_session(),
-    test_session_expired(),
-    test_account_enumeration_prevention(),
-    test_login_rate_limiting(),
-];
-
-$totalPassed = 0;
-$totalFailed = 0;
-foreach ($tests as $t) {
-    $t->run();
-    $totalPassed += $t->getPassed();
-    $totalFailed += $t->getFailed();
-}
-
-echo "\n";
-echo "############################################################\n";
-echo "# TOTAL: {$totalPassed} passed, {$totalFailed} failed\n";
-echo "############################################################\n";
-
-exit($totalFailed > 0 ? 1 : 0);
+register_tests(
+    'test_register_user_success',
+    'test_register_duplicate_username',
+    'test_register_empty_fields',
+    'test_register_weak_password',
+    'test_login_correct',
+    'test_login_wrong_credentials',
+    'test_login_nonexistent_user',
+    'test_login_banned_user',
+    'test_login_suspended_user',
+    'test_login_unverified_email',
+    'test_ban_kicks_active_session',
+    'test_logout_destroys_session',
+    'test_session_expired',
+    'test_account_enumeration_prevention',
+    'test_login_rate_limiting'
+);

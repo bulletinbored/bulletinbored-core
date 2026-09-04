@@ -151,15 +151,15 @@ function test_admin_audit_log(): Test
     return $t;
 }
 
-$suite = new TestSuite();
-$suite->addTest(test_csrf_rotation());
-$suite->addTest(test_csrf_field());
-$suite->addTest(test_request_sanitization());
-$suite->addTest(test_request_input_priority());
-$suite->addTest(test_admin_audit_log());
-$suite->addTest(test_trusted_proxies());
-$suite->addTest(test_rate_limit_client_ip());
-$suite->run();
+register_tests(
+    'test_csrf_rotation',
+    'test_csrf_field',
+    'test_request_sanitization',
+    'test_request_input_priority',
+    'test_admin_audit_log',
+    'test_trusted_proxies',
+    'test_rate_limit_client_ip'
+);
 
 function test_trusted_proxies(): Test
 {

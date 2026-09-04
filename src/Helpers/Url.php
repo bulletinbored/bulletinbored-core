@@ -16,14 +16,19 @@ function slugify($text) {
 function url($action, $params = [], $absolute = false) {
     $base = base_url();
     if ($absolute) {
-        $scheme = 'http';
-        if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
-            $scheme = 'https';
-        } elseif (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') {
-            $scheme = 'https';
+        $configBase = App::getInstance()->config['base_url'] ?? '';
+        if (!empty($configBase)) {
+            $base = rtrim($configBase, '/');
+        } else {
+            $scheme = 'http';
+            if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+                $scheme = 'https';
+            } elseif (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') {
+                $scheme = 'https';
+            }
+            $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+            $base = $scheme . '://' . $host . $base;
         }
-        $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-        $base = $scheme . '://' . $host . $base;
     }
     $query = $params;
     switch ($action) {

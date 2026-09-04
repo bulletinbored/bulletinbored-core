@@ -288,11 +288,6 @@ class Migrator
     public function migrate(): array
     {
         $this->ensureMigrationsTable();
-        $pending = $this->getPending();
-
-        if (empty($pending)) {
-            return [];
-        }
 
         $lockFile = $this->getLockFile();
         $lockHandle = fopen($lockFile, 'c');
@@ -304,6 +299,14 @@ class Migrator
         if (!flock($lockHandle, LOCK_EX | LOCK_NB)) {
             fclose($lockHandle);
             throw new RuntimeException("Another migration is already running. Lock file: {$lockFile}");
+        }
+
+        $pending = $this->getPending();
+
+        if (empty($pending)) {
+            flock($lockHandle, LOCK_UN);
+            fclose($lockHandle);
+            return [];
         }
 
         try {
