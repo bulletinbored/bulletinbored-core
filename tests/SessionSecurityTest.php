@@ -21,10 +21,10 @@ function test_session_version_stored_on_login(): Test
 
     $pdo = new PDO('sqlite::memory:');
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    test_setup_schema_session($pdo);
+    setup_schema_session($pdo);
     App::getInstance()->pdo = $pdo;
 
-    $userId = test_create_user_session($pdo, 'testuser', 'user');
+    $userId = create_user_session($pdo, 'testuser', 'user');
     $pdo->prepare("UPDATE users SET session_version = 1 WHERE id = ?")->execute([$userId]);
 
     $_SESSION = [
@@ -51,11 +51,11 @@ function test_session_invalid_after_password_reset(): Test
 
     $pdo = new PDO('sqlite::memory:');
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    test_setup_schema_session($pdo);
+    setup_schema_session($pdo);
     App::getInstance()->pdo = $pdo;
     App::getInstance()->authz = new AuthZ($pdo);
 
-    $userId = test_create_user_session($pdo, 'testuser', 'user');
+    $userId = create_user_session($pdo, 'testuser', 'user');
 
     $pdo->prepare("UPDATE users SET session_version = 5 WHERE id = ?")->execute([$userId]);
 
@@ -95,11 +95,11 @@ function test_session_valid_when_versions_match(): Test
 
     $pdo = new PDO('sqlite::memory:');
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    test_setup_schema_session($pdo);
+    setup_schema_session($pdo);
     App::getInstance()->pdo = $pdo;
     App::getInstance()->authz = new AuthZ($pdo);
 
-    $userId = test_create_user_session($pdo, 'testuser', 'user');
+    $userId = create_user_session($pdo, 'testuser', 'user');
 
     $pdo->prepare("UPDATE users SET session_version = 3 WHERE id = ?")->execute([$userId]);
 
@@ -169,11 +169,11 @@ function test_banned_status_invalidates_session(): Test
 
     $pdo = new PDO('sqlite::memory:');
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    test_setup_schema_session($pdo);
+    setup_schema_session($pdo);
     App::getInstance()->pdo = $pdo;
     App::getInstance()->authz = new AuthZ($pdo);
 
-    $userId = test_create_user_session($pdo, 'testuser', 'user');
+    $userId = create_user_session($pdo, 'testuser', 'user');
 
     $_SESSION = [
         'user_id' => $userId,
@@ -254,10 +254,10 @@ function test_concurrent_sessions_same_user(): Test
 
     $pdo = new PDO('sqlite::memory:');
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    test_setup_schema_session($pdo);
+    setup_schema_session($pdo);
     App::getInstance()->pdo = $pdo;
 
-    $userId = test_create_user_session($pdo, 'testuser', 'user');
+    $userId = create_user_session($pdo, 'testuser', 'user');
     $pdo->prepare("UPDATE users SET session_version = 1 WHERE id = ?")->execute([$userId]);
 
     $_SESSION['user_id'] = $userId;
@@ -317,11 +317,11 @@ function test_is_logged_in_checks_version(): Test
 
     $pdo = new PDO('sqlite::memory:');
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    test_setup_schema_session($pdo);
+    setup_schema_session($pdo);
     App::getInstance()->pdo = $pdo;
     App::getInstance()->authz = new AuthZ($pdo);
 
-    $userId = test_create_user_session($pdo, 'testuser', 'user');
+    $userId = create_user_session($pdo, 'testuser', 'user');
     $pdo->prepare("UPDATE users SET session_version = 10 WHERE id = ?")->execute([$userId]);
 
     $_SESSION = [
@@ -358,7 +358,7 @@ register_tests(
     'test_is_logged_in_checks_version'
 );
 
-function test_setup_schema_session(PDO $pdo): void
+function setup_schema_session(PDO $pdo): void
 {
     $pdo->exec("
         CREATE TABLE users (
@@ -382,7 +382,7 @@ function test_setup_schema_session(PDO $pdo): void
     ");
 }
 
-function test_create_user_session(PDO $pdo, string $username, string $role, string $status = 'active'): int
+function create_user_session(PDO $pdo, string $username, string $role, string $status = 'active'): int
 {
     $pdo->prepare("INSERT INTO users (username, password, email, role, status) VALUES (?, ?, ?, ?, ?)")
         ->execute([$username, password_hash('test123', PASSWORD_DEFAULT), $username . '@test.com', $role, $status]);

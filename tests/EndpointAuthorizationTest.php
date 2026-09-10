@@ -32,8 +32,12 @@
  */
 
 require_once __DIR__ . '/harness.php';
+require_once __DIR__ . '/../src/App.php';
+require_once __DIR__ . '/../src/Errors.php';
+require_once __DIR__ . '/../src/Response.php';
 require_once __DIR__ . '/../src/helpers.php';
 require_once __DIR__ . '/../lib/AuthZ.php';
+require_once __DIR__ . '/../src/actions/posts-thread.php';
 
 function test_endpoint_reply_to_hidden_thread(): Test
 {
@@ -41,14 +45,14 @@ function test_endpoint_reply_to_hidden_thread(): Test
 
     $pdo = new PDO('sqlite::memory:');
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    test_setup_schema_endpoint($pdo);
+    setup_schema_endpoint($pdo);
     setup_permissions($pdo);
     App::getInstance()->pdo = $pdo;
     App::getInstance()->authz = new AuthZ($pdo);
 
-    $userId = test_create_user_endpoint($pdo, 'testuser', 'user');
-    $modId = test_create_user_endpoint($pdo, 'moderator', 'moderator');
-    $adminId = test_create_user_endpoint($pdo, 'admin', 'admin');
+    $userId = create_user_endpoint($pdo, 'testuser', 'user');
+    $modId = create_user_endpoint($pdo, 'moderator', 'moderator');
+    $adminId = create_user_endpoint($pdo, 'admin', 'admin');
     $categoryId = create_category($pdo);
 
     $threadId = create_thread($pdo, $categoryId, $modId, 'Hidden Thread', 'Content', 'hidden');
@@ -86,13 +90,13 @@ function test_endpoint_reply_to_pending_thread(): Test
 
     $pdo = new PDO('sqlite::memory:');
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    test_setup_schema_endpoint($pdo);
+    setup_schema_endpoint($pdo);
     setup_permissions($pdo);
     App::getInstance()->pdo = $pdo;
     App::getInstance()->authz = new AuthZ($pdo);
 
-    $userId = test_create_user_endpoint($pdo, 'testuser', 'user');
-    $modId = test_create_user_endpoint($pdo, 'moderator', 'moderator');
+    $userId = create_user_endpoint($pdo, 'testuser', 'user');
+    $modId = create_user_endpoint($pdo, 'moderator', 'moderator');
     $categoryId = create_category($pdo);
 
     $threadId = create_thread($pdo, $categoryId, $userId, 'Pending Thread', 'Content', 'pending');
@@ -126,13 +130,13 @@ function test_endpoint_reply_to_locked_thread(): Test
 
     $pdo = new PDO('sqlite::memory:');
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    test_setup_schema_endpoint($pdo);
+    setup_schema_endpoint($pdo);
     setup_permissions($pdo);
     App::getInstance()->pdo = $pdo;
     App::getInstance()->authz = new AuthZ($pdo);
 
-    $userId = test_create_user_endpoint($pdo, 'testuser', 'user');
-    $modId = test_create_user_endpoint($pdo, 'moderator', 'moderator');
+    $userId = create_user_endpoint($pdo, 'testuser', 'user');
+    $modId = create_user_endpoint($pdo, 'moderator', 'moderator');
     $categoryId = create_category($pdo);
 
     $threadId = create_thread($pdo, $categoryId, $userId, 'Locked Thread', 'Content', 'locked');
@@ -161,13 +165,13 @@ function test_endpoint_download_hidden_attachment(): Test
 
     $pdo = new PDO('sqlite::memory:');
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    test_setup_schema_endpoint($pdo);
+    setup_schema_endpoint($pdo);
     setup_permissions($pdo);
     App::getInstance()->pdo = $pdo;
     App::getInstance()->authz = new AuthZ($pdo);
 
-    $userId = test_create_user_endpoint($pdo, 'testuser', 'user');
-    $modId = test_create_user_endpoint($pdo, 'moderator', 'moderator');
+    $userId = create_user_endpoint($pdo, 'testuser', 'user');
+    $modId = create_user_endpoint($pdo, 'moderator', 'moderator');
     $categoryId = create_category($pdo);
     $threadId = create_thread($pdo, $categoryId, $modId, 'Hidden Thread', 'Content', 'hidden');
 
@@ -204,27 +208,123 @@ function test_endpoint_watch_hidden_thread(): Test
 
     $pdo = new PDO('sqlite::memory:');
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    test_setup_schema_endpoint($pdo);
+    setup_schema_endpoint($pdo);
     setup_permissions($pdo);
     App::getInstance()->pdo = $pdo;
     App::getInstance()->authz = new AuthZ($pdo);
 
-    $userId = test_create_user_endpoint($pdo, 'testuser', 'user');
-    $modId = test_create_user_endpoint($pdo, 'moderator', 'moderator');
+    $userId = create_user_endpoint($pdo, 'testuser', 'user');
+    $modId = create_user_endpoint($pdo, 'moderator', 'moderator');
+    $adminId = create_user_endpoint($pdo, 'admin', 'admin');
     $categoryId = create_category($pdo);
+
     $threadId = create_thread($pdo, $categoryId, $modId, 'Hidden Thread', 'Content', 'hidden');
 
-    $_SESSION = ['user_id' => $userId, 'user_role' => 'user'];
-    $_SESSION['session_version'] = 1;
+    $_SESSION = ['user_id' => $userId, 'user_role' => 'user', 'session_version' => 1];
+    $_SESSION['csrf_token'] = 'test_token';
+    $_POST = ['thread_id' => (string)$threadId, 'csrf_token' => 'test_token'];
 
-    $canWatch = can_watch_thread('hidden', $userId);
-    $t->assertFalse('Regular user cannot watch hidden thread', $canWatch);
+    $threw = false;
+    try {
+        $result = handle_watch();
+    } catch (\Bulletin\ForbiddenException $e) {
+        $threw = true;
+    }
+    $watcherCount = (int)$pdo->query("SELECT COUNT(*) FROM thread_watchers WHERE thread_id = {$threadId} AND user_id = {$userId}")->fetchColumn();
+    $t->assertTrue('Regular user cannot watch hidden thread', $threw && $watcherCount === 0);
 
-    $_SESSION['user_role'] = 'moderator';
-    $canWatchMod = can_watch_thread('hidden', $modId);
-    $t->assertTrue('Moderator can watch hidden thread', $canWatchMod);
+    $_SESSION = ['user_id' => $modId, 'user_role' => 'moderator', 'session_version' => 1];
+    $_SESSION['csrf_token'] = 'test_token_mod';
+    $_POST = ['thread_id' => (string)$threadId, 'csrf_token' => 'test_token_mod'];
+    $result = handle_watch();
+    $watcherCount = (int)$pdo->query("SELECT COUNT(*) FROM thread_watchers WHERE thread_id = {$threadId} AND user_id = {$modId}")->fetchColumn();
+    $t->assertTrue('Moderator can watch hidden thread', $watcherCount === 1);
+    $t->assertTrue('Moderator watch redirects back', $result instanceof \Bulletin\Response && $result->getStatus() === 302);
 
     $_SESSION = [];
+    $_POST = [];
+    App::reset();
+    return $t;
+}
+
+function test_endpoint_unwatch_hidden_thread(): Test
+{
+    $t = new Test('Endpoint - Unwatch hidden thread');
+
+    $pdo = new PDO('sqlite::memory:');
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    setup_schema_endpoint($pdo);
+    setup_permissions($pdo);
+    App::getInstance()->pdo = $pdo;
+    App::getInstance()->authz = new AuthZ($pdo);
+    App::getInstance()->config = [
+        'db_driver' => 'sqlite',
+        'mail_from' => 'noreply@forum.example',
+        'mail_from_name' => 'Forum',
+        'mail_method' => 'mail',
+        'site_name' => 'Forum',
+    ];
+
+    $userId = create_user_endpoint($pdo, 'testuser', 'user');
+    $categoryId = create_category($pdo);
+    $threadId = create_thread($pdo, $categoryId, $userId, 'Hidden Thread', 'Content', 'hidden');
+    $pdo->prepare("INSERT INTO thread_watchers (thread_id, user_id) VALUES (?, ?)")
+        ->execute([$threadId, $userId]);
+
+    $_SESSION = ['user_id' => $userId, 'user_role' => 'user', 'session_version' => 1];
+    $_SESSION['csrf_token'] = 'test_token';
+    $_POST = ['thread_id' => (string)$threadId, 'csrf_token' => 'test_token'];
+
+    $threw = false;
+    try {
+        $result = handle_unwatch();
+    } catch (\Bulletin\ForbiddenException $e) {
+        $threw = true;
+    }
+    $watcherCount = (int)$pdo->query("SELECT COUNT(*) FROM thread_watchers WHERE thread_id = {$threadId} AND user_id = {$userId}")->fetchColumn();
+    $t->assertTrue('Hidden thread watcher remains for unauthorized user', $threw && $watcherCount === 1);
+
+    $_SESSION = [];
+    $_POST = [];
+    App::reset();
+    return $t;
+}
+
+function test_endpoint_moderator_unwatch_hidden_thread(): Test
+{
+    $t = new Test('Endpoint - Moderator unwatch hidden thread');
+
+    $pdo = new PDO('sqlite::memory:');
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    setup_schema_endpoint($pdo);
+    setup_permissions($pdo);
+    App::getInstance()->pdo = $pdo;
+    App::getInstance()->authz = new AuthZ($pdo);
+    App::getInstance()->config = [
+        'db_driver' => 'sqlite',
+        'mail_from' => 'noreply@forum.example',
+        'mail_from_name' => 'Forum',
+        'mail_method' => 'mail',
+        'site_name' => 'Forum',
+    ];
+
+    $modId = create_user_endpoint($pdo, 'moderator', 'moderator');
+    $categoryId = create_category($pdo);
+    $threadId = create_thread($pdo, $categoryId, $modId, 'Hidden Thread', 'Content', 'hidden');
+    $pdo->prepare("INSERT INTO thread_watchers (thread_id, user_id) VALUES (?, ?)")
+        ->execute([$threadId, $modId]);
+
+    $_SESSION = ['user_id' => $modId, 'user_role' => 'moderator', 'session_version' => 1];
+    $_SESSION['csrf_token'] = 'test_token_mod';
+    $_POST = ['thread_id' => (string)$threadId, 'csrf_token' => 'test_token_mod'];
+
+    $result = handle_unwatch();
+    $watcherCount = (int)$pdo->query("SELECT COUNT(*) FROM thread_watchers WHERE thread_id = {$threadId} AND user_id = {$modId}")->fetchColumn();
+    $t->assertTrue('Moderator can unwatch hidden thread', $watcherCount === 0);
+    $t->assertTrue('Moderator unwatch redirects back', $result instanceof \Bulletin\Response && $result->getStatus() === 302);
+
+    $_SESSION = [];
+    $_POST = [];
     App::reset();
     return $t;
 }
@@ -235,13 +335,13 @@ function test_endpoint_notification_authorization(): Test
 
     $pdo = new PDO('sqlite::memory:');
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    test_setup_schema_endpoint($pdo);
+    setup_schema_endpoint($pdo);
     setup_permissions($pdo);
     App::getInstance()->pdo = $pdo;
     App::getInstance()->authz = new AuthZ($pdo);
 
-    $userId = test_create_user_endpoint($pdo, 'testuser', 'user');
-    $otherUserId = test_create_user_endpoint($pdo, 'otheruser', 'user');
+    $userId = create_user_endpoint($pdo, 'testuser', 'user');
+    $otherUserId = create_user_endpoint($pdo, 'otheruser', 'user');
     $categoryId = create_category($pdo);
     $threadId = create_thread($pdo, $categoryId, $otherUserId, 'Private Thread', 'Content', 'visible');
 
@@ -267,14 +367,14 @@ function test_endpoint_private_message_authorization(): Test
 
     $pdo = new PDO('sqlite::memory:');
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    test_setup_schema_endpoint($pdo);
+    setup_schema_endpoint($pdo);
     setup_permissions($pdo);
     App::getInstance()->pdo = $pdo;
     App::getInstance()->authz = new AuthZ($pdo);
 
-    $senderId = test_create_user_endpoint($pdo, 'sender', 'user');
-    $recipientId = test_create_user_endpoint($pdo, 'recipient', 'user');
-    $otherId = test_create_user_endpoint($pdo, 'other', 'user');
+    $senderId = create_user_endpoint($pdo, 'sender', 'user');
+    $recipientId = create_user_endpoint($pdo, 'recipient', 'user');
+    $otherId = create_user_endpoint($pdo, 'other', 'user');
     $categoryId = create_category($pdo);
 
     $pmId = create_private_message($pdo, $senderId, $recipientId, 'Test Subject', 'Test content');
@@ -302,17 +402,17 @@ function test_endpoint_edit_others_post(): Test
 
     $pdo = new PDO('sqlite::memory:');
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    test_setup_schema_endpoint($pdo);
+    setup_schema_endpoint($pdo);
     setup_permissions($pdo);
     App::getInstance()->pdo = $pdo;
     App::getInstance()->authz = new AuthZ($pdo);
 
-    $userId = test_create_user_endpoint($pdo, 'user1', 'user');
-    $otherId = test_create_user_endpoint($pdo, 'user2', 'user');
-    $modId = test_create_user_endpoint($pdo, 'moderator', 'moderator');
+    $userId = create_user_endpoint($pdo, 'user1', 'user');
+    $otherId = create_user_endpoint($pdo, 'user2', 'user');
+    $modId = create_user_endpoint($pdo, 'moderator', 'moderator');
     $categoryId = create_category($pdo);
     $threadId = create_thread($pdo, $categoryId, $userId, 'Test Thread', 'Content', 'visible');
-    $postId = test_create_post_endpoint($pdo, $threadId, $userId, 'Original content');
+    $postId = create_post_endpoint($pdo, $threadId, $userId, 'Original content');
 
     $_SESSION = ['user_id' => $userId, 'user_role' => 'user'];
     $_SESSION['session_version'] = 1;
@@ -339,17 +439,17 @@ function test_endpoint_delete_others_post(): Test
 
     $pdo = new PDO('sqlite::memory:');
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    test_setup_schema_endpoint($pdo);
+    setup_schema_endpoint($pdo);
     setup_permissions($pdo);
     App::getInstance()->pdo = $pdo;
     App::getInstance()->authz = new AuthZ($pdo);
 
-    $userId = test_create_user_endpoint($pdo, 'user1', 'user');
-    $otherId = test_create_user_endpoint($pdo, 'user2', 'user');
-    $modId = test_create_user_endpoint($pdo, 'moderator', 'moderator');
+    $userId = create_user_endpoint($pdo, 'user1', 'user');
+    $otherId = create_user_endpoint($pdo, 'user2', 'user');
+    $modId = create_user_endpoint($pdo, 'moderator', 'moderator');
     $categoryId = create_category($pdo);
     $threadId = create_thread($pdo, $categoryId, $userId, 'Test Thread', 'Content', 'visible');
-    $postId = test_create_post_endpoint($pdo, $threadId, $userId, 'Original content');
+    $postId = create_post_endpoint($pdo, $threadId, $userId, 'Original content');
 
     $_SESSION = ['user_id' => $userId, 'user_role' => 'user'];
     $_SESSION['session_version'] = 1;
@@ -376,12 +476,12 @@ function test_endpoint_banned_user_restrictions(): Test
 
     $pdo = new PDO('sqlite::memory:');
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    test_setup_schema_endpoint($pdo);
+    setup_schema_endpoint($pdo);
     setup_permissions($pdo);
     App::getInstance()->pdo = $pdo;
     App::getInstance()->authz = new AuthZ($pdo);
 
-    $userId = test_create_user_endpoint($pdo, 'banneduser', 'user', 'banned');
+    $userId = create_user_endpoint($pdo, 'banneduser', 'user', 'banned');
     $categoryId = create_category($pdo);
 
     $_SESSION = ['user_id' => $userId, 'user_role' => 'user', 'user_status' => 'banned'];
@@ -393,7 +493,7 @@ function test_endpoint_banned_user_restrictions(): Test
     $canReply = can_reply_to_thread(1, 'visible', $userId, 'user');
     $t->assertFalse('Banned user cannot reply', $canReply);
 
-    $canWatch = can_watch_thread('visible', $userId);
+    $canWatch = can_view_thread_test('visible');
     $t->assertFalse('Banned user cannot watch', $canWatch);
 
     $_SESSION = [];
@@ -407,12 +507,12 @@ function test_endpoint_suspended_user_restrictions(): Test
 
     $pdo = new PDO('sqlite::memory:');
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    test_setup_schema_endpoint($pdo);
+    setup_schema_endpoint($pdo);
     setup_permissions($pdo);
     App::getInstance()->pdo = $pdo;
     App::getInstance()->authz = new AuthZ($pdo);
 
-    $userId = test_create_user_endpoint($pdo, 'suspendeduser', 'user', 'suspended');
+    $userId = create_user_endpoint($pdo, 'suspendeduser', 'user', 'suspended');
     $categoryId = create_category($pdo);
 
     $_SESSION = [
@@ -429,7 +529,7 @@ function test_endpoint_suspended_user_restrictions(): Test
     $canReply = can_reply_to_thread(1, 'visible', $userId, 'user');
     $t->assertFalse('Suspended user cannot reply', $canReply);
 
-    $canWatch = can_watch_thread('visible', $userId);
+    $canWatch = can_view_thread_test('visible');
     $t->assertFalse('Suspended user cannot watch', $canWatch);
 
     $_SESSION = [];
@@ -443,7 +543,7 @@ function test_endpoint_guest_restrictions(): Test
 
     $pdo = new PDO('sqlite::memory:');
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    test_setup_schema_endpoint($pdo);
+    setup_schema_endpoint($pdo);
     setup_permissions($pdo);
     App::getInstance()->pdo = $pdo;
     App::getInstance()->authz = new AuthZ($pdo);
@@ -456,7 +556,7 @@ function test_endpoint_guest_restrictions(): Test
     $canReply = can_reply_to_thread(1, 'visible', 0, 'guest');
     $t->assertFalse('Guest cannot reply', $canReply);
 
-    $canWatch = can_watch_thread('visible', 0);
+    $canWatch = can_view_thread_test('visible');
     $t->assertFalse('Guest cannot watch', $canWatch);
 
     $canDownload = can_download_upload(1, 'visible', 0, 'guest');
@@ -472,6 +572,8 @@ register_tests(
     'test_endpoint_reply_to_locked_thread',
     'test_endpoint_download_hidden_attachment',
     'test_endpoint_watch_hidden_thread',
+    'test_endpoint_unwatch_hidden_thread',
+    'test_endpoint_moderator_unwatch_hidden_thread',
     'test_endpoint_notification_authorization',
     'test_endpoint_private_message_authorization',
     'test_endpoint_edit_others_post',
@@ -481,7 +583,7 @@ register_tests(
     'test_endpoint_guest_restrictions'
 );
 
-function test_setup_schema_endpoint(PDO $pdo): void
+function setup_schema_endpoint(PDO $pdo): void
 {
     $pdo->exec("
         CREATE TABLE users (
@@ -581,7 +683,7 @@ function setup_permissions(PDO $pdo): void
     $pdo->exec("INSERT INTO roles (name, permissions) VALUES ('user', '[\"threads.create\",\"posts.create\",\"posts.edit_own\",\"posts.delete_own\"]')");
 }
 
-function test_create_user_endpoint(PDO $pdo, string $username, string $role, string $status = 'active'): int
+function create_user_endpoint(PDO $pdo, string $username, string $role, string $status = 'active'): int
 {
     $pdo->prepare("INSERT INTO users (username, password, email, role, status) VALUES (?, ?, ?, ?, ?)")
         ->execute([$username, password_hash('test123', PASSWORD_DEFAULT), $username . '@test.com', $role, $status]);
@@ -601,7 +703,7 @@ function create_thread(PDO $pdo, int $categoryId, int $userId, string $title, st
     return (int)$pdo->lastInsertId();
 }
 
-function test_create_post_endpoint(PDO $pdo, int $threadId, int $userId, string $content): int
+function create_post_endpoint(PDO $pdo, int $threadId, int $userId, string $content): int
 {
     $pdo->prepare("INSERT INTO posts (thread_id, user_id, content) VALUES (?, ?, ?)")
         ->execute([$threadId, $userId, $content]);
@@ -651,14 +753,6 @@ function can_reply_to_thread(int $threadId, string $threadStatus, int $userId, s
     }
     if ($threadStatus === 'locked') {
         return $role === 'moderator' || $role === 'admin';
-    }
-    return can_view_thread_test($threadStatus);
-}
-
-function can_watch_thread(string $threadStatus, int $userId): bool
-{
-    if (!isset($_SESSION['user_id']) || $_SESSION['user_id'] !== $userId) {
-        return false;
     }
     return can_view_thread_test($threadStatus);
 }

@@ -12,9 +12,19 @@
 
 require_once __DIR__ . '/harness.php';
 
-$filter = $argv[1] ?? '';
-$verbose = in_array('--verbose', $argv) || in_array('-v', $argv);
-$listOnly = in_array('--list', $argv);
+$filter = '';
+$verbose = false;
+$listOnly = false;
+
+foreach ($argv as $arg) {
+    if ($arg === '--verbose' || $arg === '-v') {
+        $verbose = true;
+    } elseif ($arg === '--list') {
+        $listOnly = true;
+    } elseif ($arg !== __FILE__ && $arg !== 'run.php' && $arg !== 'tests/run.php') {
+        $filter = $arg;
+    }
+}
 
 $testFiles = array_merge(
     glob(__DIR__ . '/*Test.php'),

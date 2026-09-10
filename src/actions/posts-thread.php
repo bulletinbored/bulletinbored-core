@@ -164,16 +164,27 @@ function handle_watch(): \Bulletin\Response|bool
     }
 
     $threadId = (int)($_POST['thread_id'] ?? 0);
-    if ($threadId > 0 && is_logged_in()) {
-        try {
-            $pdo->prepare("INSERT OR IGNORE INTO thread_watchers (thread_id, user_id) VALUES (?, ?)")
-                ->execute([$threadId, $_SESSION['user_id']]);
-        } catch (PDOException $e) {}
-        $watched = $_SESSION['watched_threads'] ?? [];
-        if (!in_array($threadId, $watched, true)) {
-            $watched[] = $threadId;
-            $_SESSION['watched_threads'] = $watched;
-        }
+    if ($threadId <= 0) {
+        return redirect(url('home'));
+    }
+
+    $thread = $pdo->prepare("SELECT status FROM threads WHERE id = ?");
+    $thread->execute([$threadId]);
+    $threadStatus = $thread->fetchColumn();
+
+    if ($threadStatus === false || !can_view_thread((string)$threadStatus)) {
+        throw new \Bulletin\ForbiddenException('Thread not available');
+    }
+
+    try {
+        $pdo->prepare("INSERT OR IGNORE INTO thread_watchers (thread_id, user_id) VALUES (?, ?)")
+            ->execute([$threadId, $_SESSION['user_id']]);
+    } catch (PDOException $e) {}
+
+    $watched = $_SESSION['watched_threads'] ?? [];
+    if (!in_array($threadId, $watched, true)) {
+        $watched[] = $threadId;
+        $_SESSION['watched_threads'] = $watched;
     }
 
     $referer = $_SERVER['HTTP_REFERER'] ?? url('thread', ['id' => $threadId]);
@@ -193,15 +204,26 @@ function handle_unwatch(): \Bulletin\Response|bool
     }
 
     $threadId = (int)($_POST['thread_id'] ?? 0);
-    if ($threadId > 0 && is_logged_in()) {
-        try {
-            $pdo->prepare("DELETE FROM thread_watchers WHERE thread_id = ? AND user_id = ?")
-                ->execute([$threadId, $_SESSION['user_id']]);
-        } catch (PDOException $e) {}
-        $watched = $_SESSION['watched_threads'] ?? [];
-        $watched = array_filter($watched, fn($id) => $id !== $threadId);
-        $_SESSION['watched_threads'] = array_values($watched);
+    if ($threadId <= 0) {
+        return redirect(url('home'));
     }
+
+    $thread = $pdo->prepare("SELECT status FROM threads WHERE id = ?");
+    $thread->execute([$threadId]);
+    $threadStatus = $thread->fetchColumn();
+
+    if ($threadStatus === false || !can_view_thread((string)$threadStatus)) {
+        throw new \Bulletin\ForbiddenException('Thread not available');
+    }
+
+    try {
+        $pdo->prepare("DELETE FROM thread_watchers WHERE thread_id = ? AND user_id = ?")
+            ->execute([$threadId, $_SESSION['user_id']]);
+    } catch (PDOException $e) {}
+
+    $watched = $_SESSION['watched_threads'] ?? [];
+    $watched = array_filter($watched, fn($id) => $id !== $threadId);
+    $_SESSION['watched_threads'] = array_values($watched);
 
     $referer = $_SERVER['HTTP_REFERER'] ?? url('thread', ['id' => $threadId]);
     return redirect($referer);

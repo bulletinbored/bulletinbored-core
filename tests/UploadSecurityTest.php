@@ -161,22 +161,22 @@ function test_download_handler_uses_authorization(): Test
 
     $pdo = new PDO('sqlite::memory:');
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    test_setup_schema_upload($pdo);
+    setup_schema_upload($pdo);
     App::getInstance()->pdo = $pdo;
     App::getInstance()->authz = new AuthZ($pdo);
 
-    $userId = test_create_user_upload($pdo, 'user1', 'user');
-    $modId = test_create_user_upload($pdo, 'moderator', 'moderator');
-    $categoryId = test_create_category_upload($pdo);
-    $threadId = test_create_thread_upload($pdo, $categoryId, $modId, 'Hidden Thread', 'Content', 'hidden');
-    $uploadId = test_create_upload_sec($pdo, $threadId, null, $modId, 'secret.jpg', 'image/jpeg');
+    $userId = create_user_upload($pdo, 'user1', 'user');
+    $modId = create_user_upload($pdo, 'moderator', 'moderator');
+    $categoryId = create_category_upload($pdo);
+    $threadId = create_thread_upload($pdo, $categoryId, $modId, 'Hidden Thread', 'Content', 'hidden');
+    $uploadId = create_upload_sec($pdo, $threadId, null, $modId, 'secret.jpg', 'image/jpeg');
 
     $_SESSION = ['user_id' => $userId, 'user_role' => 'user', 'session_version' => 1];
-    $canDownloadUser = test_can_access_upload($uploadId, 'hidden', $userId, 'user');
+    $canDownloadUser = can_access_upload($uploadId, 'hidden', $userId, 'user');
     $t->assertFalse('Regular user cannot download hidden attachment', $canDownloadUser);
 
     $_SESSION = ['user_id' => $modId, 'user_role' => 'moderator', 'session_version' => 1];
-    $canDownloadMod = test_can_access_upload($uploadId, 'hidden', $modId, 'moderator');
+    $canDownloadMod = can_access_upload($uploadId, 'hidden', $modId, 'moderator');
     $t->assertTrue('Moderator can download hidden attachment', $canDownloadMod);
 
     $_SESSION = [];
@@ -190,31 +190,31 @@ function test_download_checks_thread_status(): Test
 
     $pdo = new PDO('sqlite::memory:');
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    test_setup_schema_upload($pdo);
+    setup_schema_upload($pdo);
     App::getInstance()->pdo = $pdo;
     App::getInstance()->authz = new AuthZ($pdo);
 
-    $userId = test_create_user_upload($pdo, 'user1', 'user');
-    $modId = test_create_user_upload($pdo, 'moderator', 'moderator');
-    $categoryId = test_create_category_upload($pdo);
+    $userId = create_user_upload($pdo, 'user1', 'user');
+    $modId = create_user_upload($pdo, 'moderator', 'moderator');
+    $categoryId = create_category_upload($pdo);
 
-    $visibleThread = test_create_thread_upload($pdo, $categoryId, $userId, 'Visible', 'Content', 'visible');
-    $hiddenThread = test_create_thread_upload($pdo, $categoryId, $modId, 'Hidden', 'Content', 'hidden');
-    $pendingThread = test_create_thread_upload($pdo, $categoryId, $userId, 'Pending', 'Content', 'pending');
+    $visibleThread = create_thread_upload($pdo, $categoryId, $userId, 'Visible', 'Content', 'visible');
+    $hiddenThread = create_thread_upload($pdo, $categoryId, $modId, 'Hidden', 'Content', 'hidden');
+    $pendingThread = create_thread_upload($pdo, $categoryId, $userId, 'Pending', 'Content', 'pending');
 
-    $uploadVisible = test_create_upload_sec($pdo, $visibleThread, null, $userId, 'visible.jpg', 'image/jpeg');
-    $uploadHidden = test_create_upload_sec($pdo, $hiddenThread, null, $modId, 'hidden.jpg', 'image/jpeg');
-    $uploadPending = test_create_upload_sec($pdo, $pendingThread, null, $userId, 'pending.jpg', 'image/jpeg');
+    $uploadVisible = create_upload_sec($pdo, $visibleThread, null, $userId, 'visible.jpg', 'image/jpeg');
+    $uploadHidden = create_upload_sec($pdo, $hiddenThread, null, $modId, 'hidden.jpg', 'image/jpeg');
+    $uploadPending = create_upload_sec($pdo, $pendingThread, null, $userId, 'pending.jpg', 'image/jpeg');
 
     $_SESSION = ['user_id' => $userId, 'user_role' => 'user', 'session_version' => 1];
 
-    $canVisible = test_can_access_upload($uploadVisible, 'visible', $userId, 'user');
+    $canVisible = can_access_upload($uploadVisible, 'visible', $userId, 'user');
     $t->assertTrue('User can download from visible thread', $canVisible);
 
-    $canHidden = test_can_access_upload($uploadHidden, 'hidden', $userId, 'user');
+    $canHidden = can_access_upload($uploadHidden, 'hidden', $userId, 'user');
     $t->assertFalse('User cannot download from hidden thread', $canHidden);
 
-    $canPending = test_can_access_upload($uploadPending, 'pending', $userId, 'user');
+    $canPending = can_access_upload($uploadPending, 'pending', $userId, 'user');
     $t->assertFalse('User cannot download from pending thread', $canPending);
 
     $_SESSION = [];
@@ -228,17 +228,17 @@ function test_upload_orphan_attachment(): Test
 
     $pdo = new PDO('sqlite::memory:');
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    test_setup_schema_upload($pdo);
+    setup_schema_upload($pdo);
     App::getInstance()->pdo = $pdo;
     App::getInstance()->authz = new AuthZ($pdo);
 
-    $userId = test_create_user_upload($pdo, 'user1', 'user');
+    $userId = create_user_upload($pdo, 'user1', 'user');
 
-    $uploadId = test_create_upload_sec($pdo, null, null, $userId, 'orphan.jpg', 'image/jpeg');
+    $uploadId = create_upload_sec($pdo, null, null, $userId, 'orphan.jpg', 'image/jpeg');
 
     $_SESSION = ['user_id' => $userId, 'user_role' => 'user', 'session_version' => 1];
 
-    $canAccess = test_can_access_upload($uploadId, null, $userId, 'user');
+    $canAccess = can_access_upload($uploadId, null, $userId, 'user');
     $t->assertFalse('Orphan upload requires authorization', $canAccess);
 
     $_SESSION = [];
@@ -318,7 +318,7 @@ register_tests(
     'test_direct_access_via_uploads_url_blocked'
 );
 
-function test_setup_schema_upload(PDO $pdo): void
+function setup_schema_upload(PDO $pdo): void
 {
     $pdo->exec("
         CREATE TABLE users (
@@ -370,34 +370,34 @@ function test_setup_schema_upload(PDO $pdo): void
     ");
 }
 
-function test_create_user_upload(PDO $pdo, string $username, string $role): int
+function create_user_upload(PDO $pdo, string $username, string $role): int
 {
     $pdo->prepare("INSERT INTO users (username, password, email, role) VALUES (?, ?, ?, ?)")
         ->execute([$username, password_hash('test123', PASSWORD_DEFAULT), $username . '@test.com', $role]);
     return (int)$pdo->lastInsertId();
 }
 
-function test_create_category_upload(PDO $pdo): int
+function create_category_upload(PDO $pdo): int
 {
     $pdo->prepare("INSERT INTO categories (name) VALUES (?)")->execute(['Test Category']);
     return (int)$pdo->lastInsertId();
 }
 
-function test_create_thread_upload(PDO $pdo, int $categoryId, int $userId, string $title, string $content, string $status): int
+function create_thread_upload(PDO $pdo, int $categoryId, int $userId, string $title, string $content, string $status): int
 {
     $pdo->prepare("INSERT INTO threads (category_id, user_id, title, content, status) VALUES (?, ?, ?, ?, ?)")
         ->execute([$categoryId, $userId, $title, $content, $status]);
     return (int)$pdo->lastInsertId();
 }
 
-function test_create_upload_sec(PDO $pdo, ?int $threadId, ?int $postId, int $userId, string $filename, string $mime): int
+function create_upload_sec(PDO $pdo, ?int $threadId, ?int $postId, int $userId, string $filename, string $mime): int
 {
     $pdo->prepare("INSERT INTO uploads (thread_id, post_id, user_id, filename, original_name, mime_type) VALUES (?, ?, ?, ?, ?, ?)")
         ->execute([$threadId, $postId, $userId, $filename, $filename, $mime]);
     return (int)$pdo->lastInsertId();
 }
 
-function test_can_access_upload(int $uploadId, ?string $threadStatus, int $userId, string $role): bool
+function can_access_upload(int $uploadId, ?string $threadStatus, int $userId, string $role): bool
 {
     if (!isset($_SESSION['user_id']) || $_SESSION['user_id'] !== $userId) {
         return false;
