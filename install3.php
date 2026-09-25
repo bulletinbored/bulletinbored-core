@@ -6,9 +6,13 @@ if (is_dir($sessionDir) && is_writable($sessionDir)) {
 }
 session_start();
 
+date_default_timezone_set('UTC');
+
 require_once __DIR__ . '/src/csp.php';
+require_once __DIR__ . '/src/Security.php';
 $cspNonce = generate_csp_nonce();
 send_security_headers($cspNonce);
+$installerCsrf = generate_csrf_token();
 
 require_once __DIR__ . '/lib/PluginManager.php';
 
@@ -57,28 +61,13 @@ function is_installed() {
     $config = [];
     if (file_exists($configPath)) {
         $config = json_decode(file_get_contents($configPath), true);
+        if (!is_array($config)) { $config = []; }
     } else {
         @include $legacyPath;
+        if (!is_array($config)) { $config = []; }
     }
-    if (empty($config['db_driver'] ?? '')) {
-        return false;
-    }
-    try {
-        if (($config['db_driver'] ?? 'sqlite') === 'mysql') {
-            $pdo = new PDO(
-                "mysql:host={$config['db_host']};dbname={$config['db_name']};charset=utf8mb4",
-                $config['db_user'],
-                $config['db_pass']
-            );
-        } else {
-            $pdo = new PDO('sqlite:' . ($config['db_path'] ?? __DIR__ . '/data/database.sqlite'));
-        }
-        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-        $stmt = $pdo->query("SELECT COUNT(*) FROM users");
-        return $stmt->fetchColumn() > 0;
-    } catch (PDOException $e) {
-        return false;
-    }
+    // Fail closed: a config file with a driver means setup completed.
+    return !empty($config['db_driver']);
 }
 
 function escape($s) {
@@ -127,7 +116,9 @@ if (isset($_POST['install'])) {
     $selected = array_keys($availablePlugins);
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install']) && !validate_csrf_token((string)($_POST['csrf_token'] ?? ''))) {
+    $error = 'Invalid security token. Please reload the page and try again.';
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install'])) {
     $dbDriver = $_SESSION['install_db_driver'];
     $dbHost = $_SESSION['install_db_host'] ?? 'localhost';
     $dbName = $_SESSION['install_db_name'] ?? 'forum';
@@ -322,6 +313,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install'])) {
             }
         }
 
+        // Detect whether this installation is being served over HTTPS. Forcing
+        // HTTPS on a plain-HTTP host without a certificate would 301 every
+        // request to an unreachable https:// URL, so the default must follow
+        // the actual scheme (the admin can still flip it later in config.json).
+        $installIsHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+            || (isset($_SERVER['SERVER_PORT']) && (int)$_SERVER['SERVER_PORT'] === 443)
+            || (strtolower($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+
         $config = [
             'db_driver' => $dbDriver,
             'db_path' => $dbDriver === 'sqlite' ? $dbPath : __DIR__ . '/data/database.sqlite',
@@ -340,7 +339,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install'])) {
             'avatar_max_size' => 2097152,
             'avatar_allowed_types' => ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
             'base_url' => '',
-            'force_https' => true,
+            'force_https' => $installIsHttps,
+            'cookie_secure' => $installIsHttps,
             'site_tagline' => '',
             'site_icon' => '',
             'timezone' => 'UTC',
@@ -391,9 +391,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install'])) {
         $installed = true;
         session_destroy();
     } catch (PDOException $e) {
-        $error = 'Installation failed: ' . $e->getMessage();
+        error_log('bulletinbored installer: ' . $e->getMessage());
+        $error = 'Installation failed. Please check the server error log and try again.';
     } catch (Throwable $e) {
-        $error = 'Installation failed: ' . $e->getMessage();
+        error_log('bulletinbored installer: ' . $e->getMessage());
+        $error = 'Installation failed. Please check the server error log and try again.';
     }
 }
 ?>
@@ -723,6 +725,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install'])) {
                 <?php endif; ?>
 
                 <form method="POST" novalidate>
+                    <input type="hidden" name="csrf_token" value="<?= escape($installerCsrf) ?>">
                     <?php foreach ($availablePlugins as $name => $info): ?>
                         <label class="plugin-card<?= in_array($name, $selected, true) ? ' checked' : '' ?>">
                             <i class="fas <?= $info['icon'] ?> plugin-icon"></i>

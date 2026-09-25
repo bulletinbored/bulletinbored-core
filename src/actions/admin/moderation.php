@@ -14,6 +14,9 @@ function handle_moderate_post(array $params = []): \Bulletin\Response|bool
     if (!csrf_validate_request()) {
         throw new \Bulletin\ForbiddenException('CSRF token invalid');
     }
+    if (!rate_limit('admin_moderate', 30, 3600, (string)($_SESSION['user_id'] ?? 0))) {
+        throw new \Bulletin\TooManyRequestsException('You are moderating too fast. Please try again later.');
+    }
 
     $threadId = (int)($params['id'] ?? $_POST['id'] ?? 0);
     $action = $_POST['do'] ?? '';
@@ -51,6 +54,9 @@ function handle_frontend_moderate_post(): \Bulletin\Response|bool
 
     if (!csrf_validate_request()) {
         throw new \Bulletin\ForbiddenException('CSRF token invalid');
+    }
+    if (!rate_limit('admin_front_moderate', 30, 3600, (string)($_SESSION['user_id'] ?? 0))) {
+        throw new \Bulletin\TooManyRequestsException('You are moderating too fast. Please try again later.');
     }
     $threadId = (int)($_POST['id'] ?? 0);
     $modAction = $_POST['do'] ?? '';
@@ -127,6 +133,9 @@ function handle_split_thread_post(): \Bulletin\Response|bool
     if (!csrf_validate_request()) {
         throw new \Bulletin\ForbiddenException('CSRF token invalid');
     }
+    if (!rate_limit('admin_split_thread', 10, 3600, (string)($_SESSION['user_id'] ?? 0))) {
+        throw new \Bulletin\TooManyRequestsException('You are splitting threads too fast. Please try again later.');
+    }
     $threadId = (int)($_POST['thread_id'] ?? 0);
     $postIds = $_POST['post_ids'] ?? '';
     $newTitle = trim($_POST['new_title'] ?? '');
@@ -202,6 +211,9 @@ function handle_merge_thread_post(): \Bulletin\Response|bool
 
     if (!csrf_validate_request()) {
         throw new \Bulletin\ForbiddenException('CSRF token invalid');
+    }
+    if (!rate_limit('admin_merge_thread', 10, 3600, (string)($_SESSION['user_id'] ?? 0))) {
+        throw new \Bulletin\TooManyRequestsException('You are merging threads too fast. Please try again later.');
     }
     $threadId = (int)($_POST['thread_id'] ?? 0);
     $targetTitle = trim($_POST['target_title'] ?? '');

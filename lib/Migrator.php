@@ -333,11 +333,6 @@ class Migrator
     public function rollback(): array
     {
         $this->ensureMigrationsTable();
-        $lastBatch = $this->getLastBatch();
-
-        if ($lastBatch === null) {
-            return [];
-        }
 
         $lockFile = $this->getLockFile();
         $lockHandle = fopen($lockFile, 'c');
@@ -352,6 +347,11 @@ class Migrator
         }
 
         try {
+            $lastBatch = $this->getLastBatch();
+            if ($lastBatch === null) {
+                return [];
+            }
+
             $migrations = $this->getMigrationsByBatch($lastBatch);
             $rolledBack = [];
 

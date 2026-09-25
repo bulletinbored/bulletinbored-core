@@ -1164,3 +1164,7 @@ hr { border-color: var(--fb-border); opacity: 1; }
 /* ---------- markdown container emitted by the core ---------- */
 .markdown-content > *:first-child { margin-top: 0; }
 .markdown-content > *:last-child { margin-bottom: 0; }
+
+/* ---------- fallback avatar (inline SVG, CSP-safe) ---------- */
+.avatar-initial { display: inline-block; vertical-align: middle; flex-shrink: 0; border-radius: 50%; overflow: hidden; }
+

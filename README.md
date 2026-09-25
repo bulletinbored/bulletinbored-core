@@ -46,10 +46,12 @@ Compatible with Apache `.htaccess` out of the box. No additional configuration n
 ### PHP built-in server (development only)
 
 ```bash
-php -S localhost:8080
+php -S localhost:8080 router.php
 ```
 
-The router handles URL resolution internally, so no rewrite rules are needed.
+The `router.php` front controller handles URL resolution and blocks direct
+access to secrets, which the built-in server would otherwise serve as static
+files. No rewrite rules are needed.
 
 ## Installer steps
 
@@ -74,7 +76,7 @@ Leaving them in place is a security risk.
 
 If you prefer to configure `config.json` yourself instead of using the web installer, copy `config-sample.json` to `config.json` and set your database and site settings manually. Once `config.json` is in place, visiting the site will initialize the database on first access.
 
-See `docs/configuration.md` for the full list of options.
+See the [Configuration documentation](https://docs.bulletinbored.net/configuration/) for the full list of options.
 
 ```json
 {
@@ -119,11 +121,16 @@ Without it, the `force_https` redirect may loop. You can also disable HTTPS forc
 Full documentation lives in the separate [`docs`](https://github.com/bulletinbored/docs) repository (published at https://docs.bulletinbored.net):
 
 - [Architecture](https://docs.bulletinbored.net/architecture/)
+- [API Reference](https://docs.bulletinbored.net/api-reference/)
+- [Route Map](https://docs.bulletinbored.net/routes/)
+- [Action Handlers](https://docs.bulletinbored.net/action-handlers/)
 - [Configuration](https://docs.bulletinbored.net/configuration/)
 - [Managers](https://docs.bulletinbored.net/managers/)
 - [Localization](https://docs.bulletinbored.net/localization/)
 - [Theme Development](https://docs.bulletinbored.net/themes/)
 - [Plugin Development](https://docs.bulletinbored.net/plugins/)
+- [Security Model](https://docs.bulletinbored.net/security/)
+- [Testing](https://docs.bulletinbored.net/testing/)
 - [Versioning](https://docs.bulletinbored.net/versioning/)
 
 ## License
@@ -137,6 +144,16 @@ Part of this code was written with AI assistance, and there is no established co
 If and when a community forms, any future change to the license will be decided together with the community.
 
 Contributions are accepted under the terms of the [CLA.md](CLA.md).
+
+## Testing notes
+
+Run the full CLI test suite with:
+
+```bash
+php tests/run.php
+```
+
+**Known limitation**: `src/bootstrap.php` is not fully exercised by the CLI suite. It contains a `BULLETIN_TEST_MODE` early-return path that skips session startup, security headers, and HTTPS redirects — those paths should be verified through integration testing in a real PHP server environment.
 
 ## Security model & known risks
 

@@ -11,14 +11,29 @@
  *   - the PSR-4 autoloader for the Bulletin\ namespace
  */
 
+// Test mode detection - skip session/install logic if test bootstrap already loaded
+if (defined('BULLETIN_TEST_MODE') && BULLETIN_TEST_MODE) {
+    date_default_timezone_set('UTC');
+    // Still load autoloader for tests
+    // PSR-4 autoloader
+    spl_autoload_register(function ($class) {
+        $prefix = 'Bulletin\\';
+        $baseDir = __DIR__ . '/';
+        $len = strlen($prefix);
+        if (strncmp($prefix, $class, $len) !== 0) {
+            return;
+        }
+        $relative = substr($class, $len);
+        $file = $baseDir . str_replace('\\', '/', $relative) . '.php';
+        if (file_exists($file)) {
+            require $file;
+        }
+    });
+    return;
+}
+
 // --- Security headers -------------------------------------------------------
-// Sent on every request (including the built-in server). Hardening headers
-// that need no app knowledge live here; CSP uses a per-request nonce instead
-// of 'unsafe-inline' so inline scripts are still allowed but bound to this
-// request only.
 require_once __DIR__ . '/csp.php';
-require_once __DIR__ . '/Errors.php';
-require_once __DIR__ . '/Response.php';
 $cspNonce = generate_csp_nonce();
 send_security_headers($cspNonce);
 
@@ -63,6 +78,7 @@ $forceHttps = $config['force_https'] ?? true;
 $redirectHttps = $forceHttps && !$isHttps && PHP_SAPI !== 'cli' && PHP_SAPI !== 'cli-server';
 if ($redirectHttps) {
     $host = $_SERVER['HTTP_HOST'] ?? ($_SERVER['SERVER_NAME'] ?? '');
+    $host = preg_replace('/[\x00-\x1F\x7F\r\n\/]/', '', $host);
     $reqUri = $_SERVER['REQUEST_URI'] ?? '/';
     if ($host !== '' && !preg_match('#^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$#i', $host)) {
         header('Location: https://' . $host . $reqUri, true, 301);
@@ -102,6 +118,32 @@ spl_autoload_register(function ($class) {
     }
 });
 
+// --- Global exception safety net -------------------------------------------
+// The router only converts HttpException into a response; anything else
+// (PDOException, TypeError, ...) would otherwise become an uncaught fatal,
+// possibly leaking paths/stack traces when display_errors is on. Log it and
+// return a generic 500 instead. Not registered in test mode (handlers must be
+// able to throw so assertThrows() works).
+set_exception_handler(function (\Throwable $e): void {
+    @error_log(sprintf(
+        'bulletinbored unhandled %s: %s in %s:%d',
+        get_class($e),
+        $e->getMessage(),
+        $e->getFile(),
+        $e->getLine()
+    ));
+    if (!headers_sent()) {
+        http_response_code(500);
+    }
+    $path = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) ?: '';
+    $wantsJson = str_contains($_SERVER['HTTP_ACCEPT'] ?? '', 'application/json')
+        || str_starts_with(ltrim($path, '/'), 'api/');
+    if (!headers_sent()) {
+        header('Content-Type: ' . ($wantsJson ? 'application/json; charset=utf-8' : 'text/plain; charset=utf-8'));
+    }
+    echo $wantsJson ? json_encode(['error' => 'Internal Server Error']) : 'Internal Server Error';
+});
+
 // Load configuration
 $configPath = __DIR__ . '/../config.json';
 $legacyConfigPath = __DIR__ . '/../config.php';
@@ -120,6 +162,12 @@ if (file_exists($configPath)) {
         @unlink($legacyConfigPath);
     }
 }
+
+// All timestamps are stored in UTC (SQLite CURRENT_TIMESTAMP is UTC, and MySQL
+// sessions are pinned to +00:00 in setup.php). Pin PHP to UTC as well so that
+// PHP-generated timestamps (e.g. threads.updated_at) stay comparable with
+// database defaults instead of drifting by the server's local offset.
+date_default_timezone_set('UTC');
 
 // Localization
 $lang = $_GET['lang'] ?? $config['default_lang'] ?? 'en';

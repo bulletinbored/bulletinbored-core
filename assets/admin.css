@@ -704,3 +704,6 @@ body.sidebar-toggled #content-wrapper {
 .settings-section {
     scroll-margin-top: 1rem;
 }
+/* ---------- fallback avatar (inline SVG, CSP-safe) ---------- */
+.avatar-initial { display: inline-block; vertical-align: middle; flex-shrink: 0; border-radius: 50%; overflow: hidden; }
+

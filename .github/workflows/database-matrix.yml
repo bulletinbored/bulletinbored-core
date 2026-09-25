@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        php-version: ['8.1', '8.2', '8.3']
+        php-version: ['8.1', '8.2', '8.3', '8.4', '8.5']
     name: SQLite (PHP ${{ matrix.php-version }})
     steps:
       - uses: actions/checkout@v4
@@ -21,13 +21,15 @@ jobs:
           php-version: ${{ matrix.php-version }}
           extensions: pdo, pdo_sqlite
       - name: Run tests
+        env:
+          BB_HTTP_TESTS: '1'
         run: php tests/run.php
 
   test-mysql:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        php-version: ['8.1', '8.2', '8.3']
+        php-version: ['8.1', '8.2', '8.3', '8.4', '8.5']
         mysql-version: ['8.0', '8.4']
     name: MySQL ${{ matrix.mysql-version }} (PHP ${{ matrix.php-version }})
     services:
@@ -49,24 +51,23 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php-version }}
-          extensions: pdo, pdo_mysql
-      - name: Run full test suite
-        run: php tests/run.php
-      - name: Run database matrix tests
+          extensions: pdo, pdo_mysql, pdo_sqlite
+      - name: Run full test suite against the service database
         env:
+          BB_HTTP_TESTS: '1'
           DB_DRIVER: mysql
           DB_HOST: 127.0.0.1
           DB_PORT: 3306
           DB_NAME: bulletinbored_test
           DB_USER: root
           DB_PASS: root
-        run: php tests/DatabaseMatrixTest.php
+        run: php tests/run.php
 
   test-mariadb:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        php-version: ['8.1', '8.2', '8.3']
+        php-version: ['8.1', '8.2', '8.3', '8.4', '8.5']
         mariadb-version: ['10.6', '10.11', '11.4']
     name: MariaDB ${{ matrix.mariadb-version }} (PHP ${{ matrix.php-version }})
     services:
@@ -88,15 +89,28 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php-version }}
-          extensions: pdo, pdo_mysql
-      - name: Run full test suite
-        run: php tests/run.php
-      - name: Run database matrix tests
+          extensions: pdo, pdo_mysql, pdo_sqlite
+      - name: Run full test suite against the service database
         env:
+          BB_HTTP_TESTS: '1'
           DB_DRIVER: mysql
           DB_HOST: 127.0.0.1
           DB_PORT: 3306
           DB_NAME: bulletinbored_test
           DB_USER: root
           DB_PASS: root
-        run: php tests/DatabaseMatrixTest.php
+        run: php tests/run.php
+
+  coverage:
+    runs-on: ubuntu-latest
+    name: Coverage (PCOV)
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup PHP with PCOV
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo, pdo_sqlite
+          coverage: pcov
+      - name: Run tests with line coverage
+        run: php tests/run.php --coverage

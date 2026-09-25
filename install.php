@@ -6,9 +6,13 @@ if (is_dir($sessionDir) && is_writable($sessionDir)) {
 }
 session_start();
 
+date_default_timezone_set('UTC');
+
 require_once __DIR__ . '/src/csp.php';
+require_once __DIR__ . '/src/Security.php';
 $cspNonce = generate_csp_nonce();
 send_security_headers($cspNonce);
+$installerCsrf = generate_csrf_token();
 
 function is_installed() {
     $configPath = __DIR__ . '/config.json';
@@ -19,32 +23,80 @@ function is_installed() {
     $config = [];
     if (file_exists($configPath)) {
         $config = json_decode(file_get_contents($configPath), true);
+        if (!is_array($config)) { $config = []; }
     } else {
         @include $legacyPath;
+        if (!is_array($config)) { $config = []; }
     }
-    if (empty($config['db_driver'] ?? '')) {
-        return false;
-    }
-    try {
-        if (($config['db_driver'] ?? 'sqlite') === 'mysql') {
-            $pdo = new PDO(
-                "mysql:host={$config['db_host']};dbname={$config['db_name']};charset=utf8mb4",
-                $config['db_user'],
-                $config['db_pass']
-            );
-        } else {
-            $pdo = new PDO('sqlite:' . ($config['db_path'] ?? __DIR__ . '/data/database.sqlite'));
-        }
-        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-        $stmt = $pdo->query("SELECT COUNT(*) FROM users");
-        return $stmt->fetchColumn() > 0;
-    } catch (PDOException $e) {
-        return false;
-    }
+    // A config file with a database driver means the installation completed.
+    // Fail closed: never allow a re-install just because the database is
+    // temporarily unreachable or the users table is missing.
+    return !empty($config['db_driver']);
 }
 
 function escape($s) {
     return htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
+}
+
+/**
+ * Resolve a user-supplied SQLite path and confine it to the application
+ * directory. Prevents the (pre-auth) installer from being used to create
+ * files anywhere the web user can write.
+ *
+ * This normalises the nominal path (resolving "." / "..") and additionally
+ * resolves the nearest existing ancestor so a symlinked directory that points
+ * outside the application tree is rejected. The check is best-effort: it can
+ * only resolve ancestors that already exist on disk.
+ */
+function resolve_sqlite_path(?string $path): ?string {
+    $path = trim((string)$path);
+    if ($path === '' || strpos($path, "\0") !== false) {
+        return null;
+    }
+    $path = str_replace('\\', '/', $path);
+    $root = str_replace('\\', '/', realpath(__DIR__) ?: __DIR__);
+    $isAbsolute = ($path[0] === '/') || (bool)preg_match('#^[A-Za-z]:/#', $path);
+    if (!$isAbsolute) {
+        $path = $root . '/' . ltrim($path, '/');
+    }
+    $segments = [];
+    foreach (explode('/', $path) as $segment) {
+        if ($segment === '' || $segment === '.') {
+            continue;
+        }
+        if ($segment === '..') {
+            array_pop($segments);
+            continue;
+        }
+        $segments[] = $segment;
+    }
+    $normalized = implode('/', $segments);
+    $rootNorm = implode('/', array_filter(explode('/', $root), fn($s) => $s !== ''));
+    if ($normalized !== $rootNorm && strncmp($normalized, $rootNorm . '/', strlen($rootNorm) + 1) !== 0) {
+        return null;
+    }
+
+    // Symlink guard: resolve the nearest existing ancestor and make sure it
+    // still lives inside the application root.
+    $existing = $normalized;
+    while ($existing !== '' && !file_exists($existing)) {
+        $parent = dirname($existing);
+        if ($parent === $existing) {
+            break;
+        }
+        $existing = $parent;
+    }
+    $realRoot = realpath(__DIR__);
+    $realExisting = $existing !== '' ? realpath($existing) : false;
+    if ($realRoot !== false && $realExisting !== false) {
+        $realRoot = str_replace('\\', '/', $realRoot);
+        $realExisting = str_replace('\\', '/', $realExisting);
+        if ($realExisting !== $realRoot && strpos($realExisting, $realRoot . '/') !== 0) {
+            return null;
+        }
+    }
+
+    return $normalized;
 }
 
 if (is_installed()) {
@@ -63,7 +115,20 @@ $dbPass = $_POST['db_pass'] ?? '';
 $dbPath = $_POST['db_path'] ?? __DIR__ . '/data/database.sqlite';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['test_connection'])) {
+    if (!validate_csrf_token((string)($_POST['csrf_token'] ?? ''))) {
+        $error = 'Invalid security token. Please reload the page and try again.';
+    }
+
+    if ($error === '' && $dbDriver !== 'mysql') {
+        $resolvedPath = resolve_sqlite_path($dbPath);
+        if ($resolvedPath === null) {
+            $error = 'Invalid database path: it must point inside the application directory.';
+        } else {
+            $dbPath = $resolvedPath;
+        }
+    }
+
+    if ($error === '' && isset($_POST['test_connection'])) {
         try {
             if ($dbDriver === 'mysql') {
                 $pdo = new PDO("mysql:host=$dbHost;dbname=$dbName;charset=utf8mb4", $dbUser, $dbPass);
@@ -80,11 +145,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $success = 'Connection successful!';
             }
         } catch (PDOException $e) {
-            $error = 'Connection failed: ' . $e->getMessage();
+            $error = 'Connection failed. Please check the database settings and try again.';
         }
     }
 
-    if (isset($_POST['next'])) {
+    if ($error === '' && isset($_POST['next'])) {
         try {
             if ($dbDriver === 'mysql') {
                 $pdo = new PDO("mysql:host=$dbHost;dbname=$dbName;charset=utf8mb4", $dbUser, $dbPass);
@@ -110,7 +175,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Location: install2.php');
             exit;
         } catch (PDOException $e) {
-            $error = 'Connection failed: ' . $e->getMessage();
+            $error = 'Connection failed. Please check the database settings and try again.';
         }
     }
 }
@@ -428,6 +493,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <?php endif; ?>
 
             <form method="POST" novalidate>
+                <input type="hidden" name="csrf_token" value="<?= escape($installerCsrf) ?>">
                 <div class="driver-cards">
                     <label class="driver-card">
                         <input type="radio" name="db_driver" value="sqlite" <?= $dbDriver === 'sqlite' ? 'checked' : '' ?>>

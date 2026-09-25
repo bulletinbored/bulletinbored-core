@@ -9,6 +9,12 @@
     RewriteCond %{REQUEST_URI}::$1 ^(.*?/)(.*)::\2$
     RewriteRule ^(.*)$ - [E=BASE:%1]
 
+    # Protect private uploads - deny direct access
+    RewriteRule ^uploads/private(?:/|$) - [F,L]
+
+    # Block direct access to sensitive files (DB credentials, CLI, dev router)
+    RewriteRule ^(?:config\.json|config\.php|bb\.php|router\.php)$ - [F,L]
+
     # If the request is for a real file or directory, serve it directly
     RewriteCond %{REQUEST_FILENAME} -f [OR]
     RewriteCond %{REQUEST_FILENAME} -d
@@ -18,6 +24,15 @@
     RewriteRule ^ %{ENV:BASE}index.php [L]
 </IfModule>
 
+# Deny direct access to private uploads. Files are served only by the
+# authenticated download handler.
+# (The RewriteRule above handles this for mod_rewrite; this uses mod_alias as
+# defense-in-depth. FilesMatch cannot match a URL path — it only sees the
+# filename — so RedirectMatch is the correct directive here.)
+<IfModule mod_alias.c>
+    RedirectMatch 403 (?i)/uploads/private/
+</IfModule>
+
 # Without mod_rewrite the pretty URLs (/login, /register, ...) cannot work.
 # Fail loudly instead of returning a confusing 404 from Apache.
 <IfModule !mod_rewrite.c>
@@ -25,3 +40,14 @@
         DirectoryIndex index.php
     </IfModule>
 </IfModule>
+
+# Defense-in-depth: never serve configuration or CLI files, even if the
+# mod_rewrite rules above are unavailable.
+<FilesMatch "^(config\.json|config\.php|bb\.php|router\.php)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Deny from all
+    </IfModule>
+</FilesMatch>

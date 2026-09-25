@@ -59,7 +59,6 @@ function test_email_crlf_rejected(): Test
         "test@example.com\r",
         "test@example.com\n",
         "test@example.com\r\nMAIL FROM:<attacker@evil.com>",
-        "test@example.com%0d%0aMAIL FROM:<attacker@evil.com>",
         "test\r\n@example.com",
         "test\n@example.com",
         "test@example.com\r\nRCPT TO:<victim@forum.com>",
@@ -69,6 +68,12 @@ function test_email_crlf_rejected(): Test
         $hasCrlf = preg_match('/[\r\n]/', $payload);
         $t->assertTrue("CRLF detected in: " . substr(addslashes($payload), 0, 30), $hasCrlf === 1);
     }
+
+    // Also test URL-encoded CRLF (should be detected after decoding)
+    $encodedPayload = "test@example.com%0d%0aMAIL FROM:<attacker@evil.com>";
+    $decoded = urldecode($encodedPayload);
+    $hasCrlf = preg_match('/[\r\n]/', $decoded);
+    $t->assertTrue("URL-encoded CRLF detected after decoding", $hasCrlf === 1);
 
     return $t;
 }
@@ -213,9 +218,16 @@ function test_email_idna_validation(): Test
         'admin@موقع.مصر',
     ];
 
+    $intlAvailable = extension_loaded('intl');
+    
     foreach ($idnaEmails as $email) {
         $result = filter_var($email, FILTER_VALIDATE_EMAIL);
-        $t->assertFalse("IDNA email validation depends on INTL module", $result === false);
+        if ($intlAvailable) {
+            $t->assertTrue("IDNA email valid with INTL: $email", $result !== false);
+        } else {
+            // Without INTL, FILTER_VALIDATE_EMAIL doesn't support IDNA
+            $t->assertTrue("IDNA email rejected without INTL: $email", $result === false);
+        }
     }
 
     return $t;

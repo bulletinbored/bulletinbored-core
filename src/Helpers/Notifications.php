@@ -21,12 +21,6 @@ function notify_thread_reply($thread, int $authorId, string $content): void
     $authorName = (string)($authorStmt->fetchColumn() ?: '');
 
     $subject = t('reply_notification_subject', ['title' => $title]);
-    $body = t('reply_notification_body', [
-        'username' => $authorName,
-        'author' => $authorName,
-        'title' => $title,
-        'link' => url('thread', ['id' => $threadId, 'slug' => slugify($title)], true),
-    ]);
 
     $recipients = [];
     if (!empty($thread['user_id']) && (int)$thread['user_id'] !== $authorId) {
@@ -43,13 +37,41 @@ function notify_thread_reply($thread, int $authorId, string $content): void
         }
     } catch (Throwable $e) {}
 
+    $ids = array_keys($recipients);
+    if (empty($ids)) {
+        return;
+    }
+
+    // Load usernames/e-mails so each recipient gets a body addressed to them
+    // ({username} = recipient) while {author} stays the person who replied.
+    $byId = [];
+    try {
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $userStmt = $pdo->prepare("SELECT id, username, email FROM users WHERE id IN ($placeholders)");
+        $userStmt->execute($ids);
+        foreach ($userStmt->fetchAll() as $row) {
+            $byId[(int)$row['id']] = $row;
+        }
+    } catch (Throwable $e) {}
+
     $now = date('Y-m-d H:i:s');
     $link = url('thread', ['id' => $threadId, 'slug' => slugify($title)], true);
     $ins = $pdo->prepare("INSERT INTO notifications (user_id, type, title, message, link, is_read, created_at) VALUES (?, 'reply', ?, ?, ?, 0, ?)");
-    foreach (array_keys($recipients) as $uid) {
+    $emailEnabled = App::getInstance()->config['email_notifications'] ?? true;
+
+    foreach ($ids as $uid) {
+        $body = t('reply_notification_body', [
+            'username' => $byId[$uid]['username'] ?? '',
+            'author' => $authorName,
+            'title' => $title,
+            'link' => $link,
+        ]);
         try {
             $ins->execute([$uid, $subject, $body, $link, $now]);
         } catch (Throwable $e) {}
+        if ($emailEnabled && !empty($byId[$uid]['email'])) {
+            send_email($byId[$uid]['email'], $subject, $body);
+        }
     }
 }
 
@@ -69,32 +91,60 @@ function notify_admin_new_user($username, $email = '') {
     return send_email($recipient, $subject, $body);
 }
 
-function notify_mentioned_users($pdo, $content, $threadId, $threadTitle, $authorName) {
-    if (!preg_match_all('/@([a-zA-Z0-9_]+)/', $content, $matches)) {
+function notify_mentioned_users($pdo, $content, $threadId, $threadTitle, $authorName, int $authorId = 0): int
+{
+    if (!isset($pdo) || !$pdo) {
+        return 0;
+    }
+    $threadId = (int)$threadId;
+    if ($threadId <= 0) {
+        return 0;
+    }
+    // Match @username only when not preceded by a word character or another "@",
+    // so e-mail addresses (foo@bar.com) are not treated as mentions.
+    if (!preg_match_all('/(?<![\w@])@([a-zA-Z0-9_]+)/', (string)$content, $matches)) {
         return 0;
     }
     $usernames = array_unique($matches[1]);
-    $sent = 0;
+    if (empty($usernames)) {
+        return 0;
+    }
+
     $threadLink = url('thread', ['id' => $threadId, 'slug' => slugify($threadTitle)], true);
+    $subject = t('mentioned_subject', ['title' => $threadTitle]);
+    $now = date('Y-m-d H:i:s');
+    $emailEnabled = App::getInstance()->config['email_notifications'] ?? true;
+
+    $select = $pdo->prepare("SELECT id, username, email FROM users WHERE username = ?");
+    $insert = $pdo->prepare("INSERT INTO notifications (user_id, type, title, message, link, is_read, created_at) VALUES (?, 'mention', ?, ?, ?, 0, ?)");
+
+    $created = 0;
     foreach ($usernames as $username) {
-        $stmt = $pdo->prepare("SELECT id, email FROM users WHERE username = ? AND email IS NOT NULL AND email <> ''");
-        $stmt->execute([$username]);
-        $user = $stmt->fetch();
+        $select->execute([$username]);
+        $user = $select->fetch();
         if (!$user) {
             continue;
         }
-        $subject = t('mentioned_subject', ['title' => $threadTitle]);
+        $userId = (int)$user['id'];
+        if ($authorId > 0 && $userId === $authorId) {
+            continue;
+        }
         $body = t('mentioned_body', [
-            'username' => escape($user['username'] ?? $username),
-            'author' => escape($authorName),
-            'title' => escape($threadTitle),
+            'username' => $user['username'] ?? $username,
+            'author' => $authorName,
+            'title' => $threadTitle,
             'link' => $threadLink,
         ]);
-        if (send_email($user['email'], $subject, $body)) {
-            $sent++;
+        try {
+            $insert->execute([$userId, $subject, $body, $threadLink, $now]);
+            $created++;
+        } catch (Throwable $e) {
+        }
+        if ($emailEnabled && !empty($user['email'])) {
+            send_email($user['email'], $subject, $body);
         }
     }
-    return $sent;
+    return $created;
 }
 
 function ensure_private_messages_table($pdo) {
@@ -133,15 +183,8 @@ function ensure_private_messages_table($pdo) {
 
 function create_notification(PDO $pdo, int $userId, string $type, string $title, string $message, string $link = ''): void
 {
-    $cfg = App::getInstance()->config;
-    $driver = ($cfg['db_driver'] ?? 'sqlite');
-    if ($driver === 'mysql') {
-        $pdo->prepare("INSERT INTO notifications (user_id, type, title, message, link) VALUES (?, ?, ?, ?, ?)")
-            ->execute([$userId, $type, $title, $message, $link]);
-    } else {
-        $pdo->prepare("INSERT INTO notifications (user_id, type, title, message, link) VALUES (?, ?, ?, ?, ?)")
-            ->execute([$userId, $type, $title, $message, $link]);
-    }
+    $pdo->prepare("INSERT INTO notifications (user_id, type, title, message, link) VALUES (?, ?, ?, ?, ?)")
+        ->execute([$userId, $type, $title, $message, $link]);
 }
 
 function notification_label(array $n): string

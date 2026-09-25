@@ -8,6 +8,9 @@ function handle_admin_categories(string $method): \Bulletin\Response|bool
         if (!csrf_validate_request()) {
             throw new \Bulletin\ForbiddenException('CSRF token invalid');
         }
+        if (!rate_limit('admin_categories', 30, 3600, (string)($_SESSION['user_id'] ?? 0))) {
+            throw new \Bulletin\TooManyRequestsException('You are changing categories too fast. Please try again later.');
+        }
         $allowedRoles = $_POST['allowed_roles'] ?? 'all';
         $allowedRoles = in_array($allowedRoles, ['all', 'admin', 'moderator'], true) ? $allowedRoles : 'all';
         if (isset($_GET['id'])) {
@@ -39,6 +42,9 @@ function handle_delete_category_post(): \Bulletin\Response|bool
     if (!csrf_validate_request()) {
         throw new \Bulletin\ForbiddenException('CSRF token invalid');
     }
+    if (!rate_limit('admin_delete_category', 10, 3600, (string)($_SESSION['user_id'] ?? 0))) {
+        throw new \Bulletin\TooManyRequestsException('You are deleting categories too fast. Please try again later.');
+    }
     $catId = (int)($_GET['id'] ?? 0);
     if ($catId > 0) {
         $pdo->prepare("DELETE FROM categories WHERE id = ?")->execute([$catId]);
@@ -53,6 +59,9 @@ function handle_update_category_order_post(): \Bulletin\Response|bool
 
     if (!csrf_validate_request()) {
         return \Bulletin\Response::json(['success' => false, 'message' => 'CSRF token invalid'], 403);
+    }
+    if (!rate_limit('admin_category_order', 30, 3600, (string)($_SESSION['user_id'] ?? 0))) {
+        return \Bulletin\Response::json(['success' => false, 'message' => 'You are reordering categories too fast. Please try again later.'], 429);
     }
     $orderRaw = $_POST['order'] ?? '';
     $order = is_string($orderRaw) ? json_decode($orderRaw, true) : $orderRaw;

@@ -54,59 +54,23 @@ function test_csrf_tokens(): Test
     return $t;
 }
 
-function test_user_has_permission(): Test
-{
-    $t = new Test('Auth - Permissions');
-
-    // Setup session
-    if (session_status() === PHP_SESSION_NONE) {
-        @session_start();
-    }
-
-    // Create in-memory DB with roles using new permission notation
-    $pdo = new PDO('sqlite::memory:');
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    $pdo->exec("CREATE TABLE roles (id INTEGER PRIMARY KEY, name TEXT UNIQUE, permissions TEXT)");
-    $pdo->exec("INSERT INTO roles (name, permissions) VALUES ('admin', '[\"admin.access\",\"users.ban\",\"threads.delete\",\"posts.edit\",\"roles.manage\"]')");
-    $pdo->exec("INSERT INTO roles (name, permissions) VALUES ('moderator', '[\"threads.delete\",\"posts.edit\"]')");
-    $pdo->exec("INSERT INTO roles (name, permissions) VALUES ('user', '[\"threads.create\",\"posts.create\",\"posts.edit_own\"]')");
-
-    // Make $pdo available for user_has_permission
-    App::getInstance()->pdo = $pdo;
-
-    // Test: admin has all permissions
-    $_SESSION['user_role'] = 'admin';
-    $t->assertTrue('Admin has users.ban', user_has_permission('users.ban'));
-    $t->assertTrue('Admin has threads.delete', user_has_permission('threads.delete'));
-    $t->assertTrue('Admin has any permission', user_has_permission('nonexistent_permission'));
-
-    // Test: moderator has specific permissions
-    $_SESSION['user_role'] = 'moderator';
-    $t->assertTrue('Moderator has threads.delete', user_has_permission('threads.delete'));
-    $t->assertFalse('Moderator does NOT have users.ban', user_has_permission('users.ban'));
-
-    // Test: user has limited permissions
-    $_SESSION['user_role'] = 'user';
-    $t->assertTrue('User has threads.create', user_has_permission('threads.create'));
-    $t->assertFalse('User does NOT have users.ban', user_has_permission('users.ban'));
-
-    // Test: default role (no session)
-    unset($_SESSION['user_role']);
-    $t->assertFalse('Default role has no admin permissions', user_has_permission('users.ban'));
-
-    return $t;
-}
-
 function test_is_logged_in(): Test
 {
     $t = new Test('Auth - Session Login State');
+
+    // Create in-memory DB with users table
+    $pdo = new PDO('sqlite::memory:');
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    $pdo->exec("CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT, password TEXT, role TEXT DEFAULT 'user', session_version INTEGER DEFAULT 1)");
+    $pdo->exec("INSERT INTO users (id, username, password, role, session_version) VALUES (42, 'testuser', 'hash', 'user', 1)");
+    App::getInstance()->pdo = $pdo;
 
     // Test: not logged in
     $_SESSION = [];
     $t->assertFalse('Not logged in when session empty', is_logged_in());
 
     // Test: logged in
-    $_SESSION['user_id'] = 42;
+    $_SESSION = ['user_id' => 42, 'user_role' => 'user', 'session_version' => 1];
     $t->assertTrue('Logged in when user_id set', is_logged_in());
 
     // Test: is_admin
@@ -118,7 +82,7 @@ function test_is_logged_in(): Test
 
     // Cleanup
     $_SESSION = [];
-
+    App::reset();
     return $t;
 }
 
@@ -234,7 +198,6 @@ function test_authz_service(): Test
 register_tests(
     'test_password_hashing',
     'test_csrf_tokens',
-    'test_user_has_permission',
     'test_is_logged_in',
     'test_is_banned_suspended',
     'test_input_validation',

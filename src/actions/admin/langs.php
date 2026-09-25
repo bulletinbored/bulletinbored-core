@@ -40,6 +40,8 @@ function handle_admin_langs(string $method)
     if ($method === 'POST' && isset($_POST['csrf_token'])) {
         if (!csrf_validate_request()) {
             $langError = 'Invalid CSRF token';
+        } elseif (!rate_limit('admin_langs', 20, 3600, (string)($_SESSION['user_id'] ?? 0))) {
+            $langError = 'You are performing too many language operations. Please try again later.';
         } else {
             if (isset($_POST['save_lang_settings'])) {
                 $defaultLang = trim($_POST['default_lang'] ?? $config['default_lang'] ?? 'en');

@@ -7,6 +7,21 @@ if (is_dir($sessionDir) && is_writable($sessionDir)) {
 }
 session_start();
 
+require_once __DIR__ . '/../lib/PluginManager.php';
+require_once __DIR__ . '/../lib/ThemeManager.php';
+require_once __DIR__ . '/../src/Security.php';
+
+// This endpoint does not go through src/bootstrap.php, so it registers its own
+// safety net: never leak internals, always return JSON.
+set_exception_handler(function (\Throwable $e): void {
+    @error_log('api/install: ' . $e->getMessage());
+    if (!headers_sent()) {
+        http_response_code(500);
+        header('Content-Type: application/json');
+    }
+    echo json_encode(['success' => false, 'message' => 'Internal Server Error']);
+});
+
 if (empty($config)) {
     $configPath = __DIR__ . '/../config.json';
     $legacyPath = __DIR__ . '/../config.php';
@@ -22,6 +37,12 @@ if (empty($config)) {
 
 if (empty($_SESSION['user_role']) || $_SESSION['user_role'] !== 'admin') {
     echo json_encode(['success' => false, 'message' => 'Admin required']);
+    exit;
+}
+
+if (!rate_limit('admin_install', 20, 3600, (string)($_SESSION['user_id'] ?? ''))) {
+    http_response_code(429);
+    echo json_encode(['success' => false, 'message' => 'Too many requests']);
     exit;
 }
 
@@ -66,6 +87,13 @@ if (!$repo || !preg_match('#^https?://#i', $repo)) {
 }
 
 $tag = $input['tag'] ?? null;
+if ($tag !== null) {
+    $tag = trim((string)$tag);
+    if ($tag === '' || str_contains($tag, '..') || !preg_match('#^[A-Za-z0-9._/-]+$#', $tag)) {
+        echo json_encode(['success' => false, 'message' => 'Invalid tag']);
+        exit;
+    }
+}
 
 if ($type === 'plugin') {
     $pluginManager = new PluginManager(__DIR__ . '/../plugins', __DIR__ . '/../data/plugins.json');

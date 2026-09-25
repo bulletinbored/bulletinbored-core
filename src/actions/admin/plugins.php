@@ -9,6 +9,8 @@ function handle_admin_plugins(string $method): \Bulletin\Response|bool
     if ($method === 'POST' && isset($_POST['csrf_token'])) {
         if (!csrf_validate_request()) {
             $adminPluginError = 'Invalid CSRF token';
+        } elseif (!rate_limit('admin_plugins', 20, 3600, (string)($_SESSION['user_id'] ?? 0))) {
+            $adminPluginError = 'You are performing too many plugin operations. Please try again later.';
         } else {
             if (isset($_POST['save_plugin_settings'])) {
                 $config['allow_catalog_only'] = !empty($_POST['allow_catalog_only']) ? 1 : 0;

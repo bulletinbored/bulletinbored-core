@@ -18,8 +18,25 @@ function test_session_lifecycle(): Test
     // Anonymous → login
     $_SESSION = [];
     $t->assertFalse('Not logged in when session empty', is_logged_in());
+    
+    // Create a test user in DB
+    $pdo = new PDO('sqlite::memory:');
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    $pdo->exec("
+        CREATE TABLE users (
+            id INTEGER PRIMARY KEY,
+            username TEXT,
+            password TEXT,
+            role TEXT DEFAULT 'user',
+            session_version INTEGER DEFAULT 1
+        );
+    ");
+    $pdo->prepare("INSERT INTO users (id, username, password, role, session_version) VALUES (42, 'testuser', 'hash', 'user', 1)")->execute();
+    App::getInstance()->pdo = $pdo;
+
     $_SESSION['user_id'] = 42;
     $_SESSION['user_role'] = 'user';
+    $_SESSION['session_version'] = 1;
     $t->assertTrue('Logged in after setting user_id', is_logged_in());
 
     // Privilege change: user → admin
@@ -35,6 +52,7 @@ function test_session_lifecycle(): Test
     $_SESSION = [];
     $t->assertFalse('Not logged in after logout', is_logged_in());
 
+    App::reset();
     return $t;
 }
 
@@ -256,6 +274,32 @@ function test_rate_limiting(): Test
     return $t;
 }
 
+function test_rate_limit_gc(): Test
+{
+    $t = new Test('Auth Hardening - Rate Limit GC');
+
+    $dir = sys_get_temp_dir() . '/bb_rl_gc_' . uniqid('', true);
+    @mkdir($dir, 0755, true);
+
+    $stale = $dir . '/stale_action.json';
+    $fresh = $dir . '/fresh_action.json';
+    file_put_contents($stale, '[]');
+    file_put_contents($fresh, '[]');
+    // Backdate the stale bucket well beyond the max age.
+    @touch($stale, time() - 100000);
+
+    $removed = rate_limit_gc($dir, 86400);
+
+    $t->assertEquals('One stale bucket removed', 1, $removed);
+    $t->assertFalse('Stale bucket gone', file_exists($stale));
+    $t->assertTrue('Fresh bucket kept', file_exists($fresh));
+
+    @unlink($fresh);
+    @rmdir($dir);
+
+    return $t;
+}
+
 register_tests(
     'test_session_lifecycle',
     'test_email_verification_token',
@@ -263,5 +307,6 @@ register_tests(
     'test_password_reset_token',
     'test_auth_account_enumeration_prevention',
     'test_csrf_token_rotation',
-    'test_rate_limiting'
+    'test_rate_limiting',
+    'test_rate_limit_gc'
 );

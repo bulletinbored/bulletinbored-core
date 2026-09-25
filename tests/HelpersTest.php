@@ -97,8 +97,9 @@ function test_render_avatar_fallback(): Test
     $t = new Test('Avatar - render_avatar()');
     $html = render_avatar('alice', '', 44);
     $t->assert('Contains initial', str_contains($html, 'A'));
-    $t->assert('Contains size', str_contains($html, '44px'));
-    $t->assert('Uses background color', str_contains($html, 'background:'));
+    $t->assert('Carries the requested size', str_contains($html, 'width="44"') && str_contains($html, 'height="44"'));
+    $t->assert('Renders a filled circle', str_contains($html, '<circle') && str_contains($html, 'fill="#'));
+    $t->assert('CSP-safe: no inline style attribute', !str_contains($html, 'style='));
     return $t;
 }
 
@@ -133,13 +134,13 @@ function test_can_view_thread_moderator(): Test
     $pdo->exec("CREATE TABLE roles (id INTEGER PRIMARY KEY, name TEXT UNIQUE, permissions TEXT)");
     $pdo->exec("INSERT INTO roles (name, permissions) VALUES ('moderator', '[\"threads.approve\"]')");
     $pdo->exec("INSERT INTO roles (name, permissions) VALUES ('user', '[]')");
-    $pdo->exec("CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT, password TEXT, role TEXT, status TEXT DEFAULT 'active')");
+    $pdo->exec("CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT, password TEXT, role TEXT, status TEXT DEFAULT 'active', session_version INTEGER DEFAULT 1)");
 
     $authz = new AuthZ($pdo);
     App::getInstance()->authz = $authz;
     App::getInstance()->pdo = $pdo;
 
-    $_SESSION = ['user_id' => 99, 'user_role' => 'moderator'];
+    $_SESSION = ['user_id' => 99, 'user_role' => 'moderator', 'session_version' => 1];
     $stmt = $pdo->prepare("INSERT INTO users (id, username, password, role, status) VALUES (99, 'mod', 'hash', 'moderator', 'active')");
     $stmt->execute();
 

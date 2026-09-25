@@ -18,10 +18,17 @@ function avatar_color($name) {
 }
 
 function render_avatar($username, $avatar = '', $size = 44, $class = '') {
+    $size = max(8, (int)$size);
     if ($avatar && file_exists(__DIR__ . '/../uploads/avatars/' . $avatar)) {
         return '<img src="' . base_url() . '/uploads/avatars/' . escape($avatar) . '" alt="' . escape($username) . '" class="rounded-circle ' . escape($class) . '" width="' . $size . '" height="' . $size . '">';
     }
+    // Render the fallback as an inline SVG: presentation attributes (fill,
+    // width, font-size) are not affected by the style-src CSP, unlike an
+    // inline style="..." attribute which the strict policy blocks.
     $initial = avatar_initial($username);
     $color = avatar_color($username);
-    return '<div class="rounded-circle d-flex align-items-center justify-content-center ' . escape($class) . '" style="width:' . $size . 'px;height:' . $size . 'px;background:' . $color . ';color:#fff;font-weight:bold;font-size:' . ($size * 0.4) . 'px;">' . escape($initial) . '</div>';
+    return '<svg class="avatar-initial ' . escape($class) . '" width="' . $size . '" height="' . $size . '" viewBox="0 0 100 100" role="img" aria-label="' . escape($username) . '">'
+        . '<circle cx="50" cy="50" r="50" fill="' . $color . '"/>'
+        . '<text x="50" y="50" text-anchor="middle" dominant-baseline="central" fill="#ffffff" font-weight="bold" font-size="42">'
+        . escape($initial) . '</text></svg>';
 }

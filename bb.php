@@ -24,8 +24,16 @@
  *   });
  */
 
+if (PHP_SAPI !== 'cli') {
+    http_response_code(403);
+    exit('This script can only be run from the command line.');
+}
+
 define('BB_CLI', true);
 define('BB_ROOT', __DIR__);
+
+// Timestamps are stored in UTC throughout the application.
+date_default_timezone_set('UTC');
 
 $configPath = BB_ROOT . '/config.json';
 $legacyConfigPath = BB_ROOT . '/config.php';

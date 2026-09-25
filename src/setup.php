@@ -36,6 +36,12 @@ if ($dbDriver === 'mysql') {
         $pdo->exec("SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode, 'ONLY_FULL_GROUP_BY', ''))");
     } catch (PDOException $e) {}
 
+    // Keep the DB session in UTC so CURRENT_TIMESTAMP matches the PHP-side
+    // timestamps written by the application (see bootstrap.php).
+    try {
+        $pdo->exec("SET time_zone = '+00:00'");
+    } catch (PDOException $e) {}
+
     $pdo->exec("SET FOREIGN_KEY_CHECKS = ON");
 } else {
     $isNewDb = !file_exists($dbPath);

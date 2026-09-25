@@ -13,6 +13,9 @@ function handle_admin_roles_action_post(): \Bulletin\Response|bool
     if (!csrf_validate_request()) {
         throw new \Bulletin\ForbiddenException('CSRF token invalid');
     }
+    if (!rate_limit('admin_roles_action', 30, 3600, (string)($_SESSION['user_id'] ?? 0))) {
+        throw new \Bulletin\TooManyRequestsException('You are making too many role changes. Please try again later.');
+    }
     $roleAction = $_POST['do'] ?? '';
     if ($roleAction === 'create') {
         $roleName = validate_input($_POST['role_name'] ?? '');
@@ -64,6 +67,9 @@ function handle_admin_user_edit(string $method, array $params = []): \Bulletin\R
         if (!csrf_validate_request()) {
             throw new \Bulletin\ForbiddenException('CSRF token invalid');
         }
+        if (!rate_limit('admin_user_edit', 20, 3600, (string)($_SESSION['user_id'] ?? 0))) {
+            throw new \Bulletin\TooManyRequestsException('You are editing users too fast. Please try again later.');
+        }
         $newUsername = trim($_POST['username'] ?? '');
         $newEmail = trim($_POST['email'] ?? '');
         $newRole = $_POST['role'] ?? 'user';
@@ -85,6 +91,9 @@ function handle_admin_create_user_post(): \Bulletin\Response|bool
 
     if (!csrf_validate_request()) {
         throw new \Bulletin\ForbiddenException('CSRF token invalid');
+    }
+    if (!rate_limit('admin_create_user', 10, 3600, (string)($_SESSION['user_id'] ?? 0))) {
+        throw new \Bulletin\TooManyRequestsException('You are creating too many users. Please try again later.');
     }
 
     $username = validate_input($_POST['username'] ?? '');
@@ -154,6 +163,9 @@ function handle_delete_user_post(): \Bulletin\Response|bool
     if (!csrf_validate_request()) {
         throw new \Bulletin\ForbiddenException('CSRF token invalid');
     }
+    if (!rate_limit('admin_delete_user', 10, 3600, (string)($_SESSION['user_id'] ?? 0))) {
+        throw new \Bulletin\TooManyRequestsException('You are deleting too many users. Please try again later.');
+    }
     $userId = (int)($_POST['id'] ?? $_GET['id'] ?? 0);
     if ($userId > 0) {
         $stmt = $pdo->prepare("DELETE FROM users WHERE id = ? AND role <> 'admin'");
@@ -176,6 +188,9 @@ function handle_unban_user_post(): \Bulletin\Response|bool
     if (!csrf_validate_request()) {
         throw new \Bulletin\ForbiddenException('CSRF token invalid');
     }
+    if (!rate_limit('admin_unban_user', 20, 3600, (string)($_SESSION['user_id'] ?? 0))) {
+        throw new \Bulletin\TooManyRequestsException('You are unbanning too many users. Please try again later.');
+    }
     $userId = (int)($_POST['id'] ?? $_GET['id'] ?? 0);
     if ($userId > 0) {
         $pdo->prepare("UPDATE users SET status = 'active', suspension_time = 0 WHERE id = ?")->execute([$userId]);
@@ -191,6 +206,9 @@ function handle_ban_user_post(): \Bulletin\Response|bool
     if (!csrf_validate_request()) {
         throw new \Bulletin\ForbiddenException('CSRF token invalid');
     }
+    if (!rate_limit('admin_ban_user', 20, 3600, (string)($_SESSION['user_id'] ?? 0))) {
+        throw new \Bulletin\TooManyRequestsException('You are banning too many users. Please try again later.');
+    }
     $userId = (int)($_POST['id'] ?? $_GET['id'] ?? 0);
     if ($userId > 0) {
         $pdo->prepare("UPDATE users SET status = 'banned' WHERE id = ? AND role <> 'admin'")->execute([$userId]);
@@ -205,6 +223,9 @@ function handle_suspend_user_post(): \Bulletin\Response|bool
 
     if (!csrf_validate_request()) {
         throw new \Bulletin\ForbiddenException('CSRF token invalid');
+    }
+    if (!rate_limit('admin_suspend_user', 20, 3600, (string)($_SESSION['user_id'] ?? 0))) {
+        throw new \Bulletin\TooManyRequestsException('You are suspending too many users. Please try again later.');
     }
     $userId = (int)($_POST['id'] ?? $_GET['id'] ?? 0);
     $days = max(1, (int)($_POST['days'] ?? 1));

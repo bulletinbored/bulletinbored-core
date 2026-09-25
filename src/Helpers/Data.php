@@ -62,11 +62,11 @@ function fetch_threads(array $opts = []) {
     $whereSql = implode(' AND ', $where);
 
     $orderBy = match($sort) {
-        'replies' => '(SELECT COUNT(*) FROM posts WHERE thread_id = t.id) DESC',
-        'views' => 't.views DESC',
-        'newest' => 't.created_at DESC',
-        'oldest' => 't.created_at ASC',
-        default => 't.updated_at DESC',
+        'replies' => '(SELECT COUNT(*) FROM posts WHERE thread_id = t.id) DESC, t.id DESC',
+        'views' => 't.views DESC, t.id DESC',
+        'newest' => 't.created_at DESC, t.id DESC',
+        'oldest' => 't.created_at ASC, t.id ASC',
+        default => 't.updated_at DESC, t.id DESC',
     };
 
     $stmt = $pdo->prepare("
@@ -83,17 +83,13 @@ function fetch_threads(array $opts = []) {
         FROM threads t
         JOIN users u ON t.user_id = u.id
         LEFT JOIN categories c ON t.category_id = c.id
-        LEFT JOIN (
-            SELECT lp2.id, lp2.thread_id, lp2.user_id, lp2.created_at, lp2.content
+        LEFT JOIN posts lp ON lp.id = (
+            SELECT lp2.id
             FROM posts lp2
-            INNER JOIN (
-                SELECT thread_id, MAX(created_at) AS max_created_at
-                FROM posts
-                WHERE status = 'visible'
-                GROUP BY thread_id
-            ) lp3 ON lp3.thread_id = lp2.thread_id AND lp3.max_created_at = lp2.created_at
-            WHERE lp2.status = 'visible'
-        ) lp ON lp.thread_id = t.id
+            WHERE lp2.thread_id = t.id AND lp2.status = 'visible'
+            ORDER BY lp2.created_at DESC, lp2.id DESC
+            LIMIT 1
+        )
         LEFT JOIN users lu ON lu.id = lp.user_id
         WHERE {$whereSql}
         ORDER BY {$orderBy}

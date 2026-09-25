@@ -19,6 +19,9 @@ ini_set('log_errors', '0');
 // Define test mode constant
 define('BULLETIN_TEST_MODE', true);
 
+// The application stores all timestamps in UTC.
+date_default_timezone_set('UTC');
+
 // Reset App singleton for clean test state
 require_once __DIR__ . '/../src/App.php';
 App::reset();
@@ -36,6 +39,23 @@ $dirs = [
 foreach ($dirs as $dir) {
     @mkdir($dir, 0755, true);
 }
+
+// The file-based rate limiter persists buckets on disk under the application
+// data directory (src/../data/ratelimit). Clear them so state from a previous
+// run cannot leak between runs and trip limits mid-suite.
+$rateLimitDir = dirname(__DIR__) . '/data/ratelimit';
+if (is_dir($rateLimitDir)) {
+    foreach (glob($rateLimitDir . '/*.json') as $bucket) {
+        @unlink($bucket);
+    }
+}
+register_shutdown_function(function () use ($rateLimitDir) {
+    if (is_dir($rateLimitDir)) {
+        foreach (glob($rateLimitDir . '/*.json') as $bucket) {
+            @unlink($bucket);
+        }
+    }
+});
 
 // Test configuration
 $config = [
@@ -237,12 +257,12 @@ function cleanup_test_env(): void
         );
         foreach ($files as $file) {
             if ($file->isDir()) {
-                rmdir($file->getPathname());
+                @rmdir($file->getPathname());
             } else {
-                unlink($file->getPathname());
+                @unlink($file->getPathname());
             }
         }
-        rmdir($tempDir);
+        @rmdir($tempDir);
     }
 }
 

@@ -56,7 +56,7 @@ class BbPdo extends PDO
         return $sql;
     }
 
-    public function exec($statement, ...$rest)
+    public function exec($statement, ...$rest): int|false
     {
         $statement = $this->normalize($statement);
         if ($statement === '') {
@@ -65,12 +65,12 @@ class BbPdo extends PDO
         return parent::exec($statement, ...$rest);
     }
 
-    public function query($statement, ...$rest)
+    public function query($statement, ...$rest): PDOStatement|false
     {
         return parent::query($this->normalize($statement), ...$rest);
     }
 
-    public function prepare($statement, $options = null)
+    public function prepare($statement, $options = null): PDOStatement|false
     {
         return parent::prepare($this->normalize($statement), $options ?? []);
     }

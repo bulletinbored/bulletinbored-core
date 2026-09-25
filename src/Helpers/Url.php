@@ -27,6 +27,7 @@ function url($action, $params = [], $absolute = false) {
                 $scheme = 'https';
             }
             $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+            $host = preg_replace('/[\x00-\x1F\x7F\r\n\/]/', '', $host);
             $base = $scheme . '://' . $host . $base;
         }
     }

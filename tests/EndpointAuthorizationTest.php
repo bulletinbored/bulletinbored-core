@@ -63,19 +63,19 @@ function test_endpoint_reply_to_hidden_thread(): Test
     $canView = can_view_thread_test('hidden');
     $t->assertFalse('Regular user cannot view hidden thread', $canView);
 
-    $_SESSION['user_role'] = 'moderator';
+    $_SESSION = ['user_id' => $modId, 'user_role' => 'moderator', 'session_version' => 1];
     $canViewMod = can_view_thread_test('hidden');
     $t->assertTrue('Moderator can view hidden thread', $canViewMod);
 
-    $_SESSION['user_role'] = 'admin';
+    $_SESSION = ['user_id' => $adminId, 'user_role' => 'admin', 'session_version' => 1];
     $canViewAdmin = can_view_thread_test('hidden');
     $t->assertTrue('Admin can view hidden thread', $canViewAdmin);
 
-    $_SESSION['user_role'] = 'user';
+    $_SESSION = ['user_id' => $userId, 'user_role' => 'user', 'session_version' => 1];
     $canReply = can_reply_to_thread($threadId, 'hidden', $userId, 'user');
     $t->assertFalse('Regular user cannot reply to hidden thread', $canReply);
 
-    $_SESSION['user_role'] = 'moderator';
+    $_SESSION = ['user_id' => $modId, 'user_role' => 'moderator', 'session_version' => 1];
     $canReplyMod = can_reply_to_thread($threadId, 'hidden', $modId, 'moderator');
     $t->assertTrue('Moderator can reply to hidden thread', $canReplyMod);
 
@@ -101,21 +101,20 @@ function test_endpoint_reply_to_pending_thread(): Test
 
     $threadId = create_thread($pdo, $categoryId, $userId, 'Pending Thread', 'Content', 'pending');
 
-    $_SESSION = ['user_id' => $userId, 'user_role' => 'user'];
-    $_SESSION['session_version'] = 1;
+    $_SESSION = ['user_id' => $userId, 'user_role' => 'user', 'session_version' => 1];
 
     $canView = can_view_thread_test('pending');
     $t->assertFalse('Regular user cannot view pending thread', $canView);
 
-    $_SESSION['user_role'] = 'moderator';
+    $_SESSION = ['user_id' => $modId, 'user_role' => 'moderator', 'session_version' => 1];
     $canViewMod = can_view_thread_test('pending');
     $t->assertTrue('Moderator can view pending thread', $canViewMod);
 
-    $_SESSION['user_role'] = 'user';
+    $_SESSION = ['user_id' => $userId, 'user_role' => 'user', 'session_version' => 1];
     $canReply = can_reply_to_thread($threadId, 'pending', $userId, 'user');
     $t->assertFalse('User cannot reply to own pending thread', $canReply);
 
-    $_SESSION['user_role'] = 'moderator';
+    $_SESSION = ['user_id' => $modId, 'user_role' => 'moderator', 'session_version' => 1];
     $canReplyMod = can_reply_to_thread($threadId, 'pending', $modId, 'moderator');
     $t->assertTrue('Moderator can reply to pending thread', $canReplyMod);
 
@@ -141,8 +140,7 @@ function test_endpoint_reply_to_locked_thread(): Test
 
     $threadId = create_thread($pdo, $categoryId, $userId, 'Locked Thread', 'Content', 'locked');
 
-    $_SESSION = ['user_id' => $userId, 'user_role' => 'user'];
-    $_SESSION['session_version'] = 1;
+    $_SESSION = ['user_id' => $userId, 'user_role' => 'user', 'session_version' => 1];
 
     $canView = can_view_thread_test('locked');
     $t->assertTrue('Anyone can view locked thread', $canView);
@@ -150,7 +148,7 @@ function test_endpoint_reply_to_locked_thread(): Test
     $canReply = can_reply_to_thread($threadId, 'locked', $userId, 'user');
     $t->assertFalse('Regular user cannot reply to locked thread', $canReply);
 
-    $_SESSION['user_role'] = 'moderator';
+    $_SESSION = ['user_id' => $modId, 'user_role' => 'moderator', 'session_version' => 1];
     $canReplyMod = can_reply_to_thread($threadId, 'locked', $modId, 'moderator');
     $t->assertTrue('Moderator can reply to locked thread', $canReplyMod);
 
@@ -177,23 +175,20 @@ function test_endpoint_download_hidden_attachment(): Test
 
     $uploadId = create_upload($pdo, $threadId, null, $modId, 'secret.jpg', 'image/jpeg');
 
-    $_SESSION = ['user_id' => $userId, 'user_role' => 'user'];
-    $_SESSION['session_version'] = 1;
+    $_SESSION = ['user_id' => $userId, 'user_role' => 'user', 'session_version' => 1];
 
     $canDownload = can_download_upload($uploadId, 'hidden', $userId, 'user');
     $t->assertFalse('Regular user cannot download attachment from hidden thread', $canDownload);
 
-    $_SESSION['user_role'] = 'moderator';
+    $_SESSION = ['user_id' => $modId, 'user_role' => 'moderator', 'session_version' => 1];
     $canDownloadMod = can_download_upload($uploadId, 'hidden', $modId, 'moderator');
     $t->assertTrue('Moderator can download attachment from hidden thread', $canDownloadMod);
 
-    $_SESSION['user_role'] = 'user';
-    $_SESSION['user_status'] = 'banned';
+    $_SESSION = ['user_id' => $userId, 'user_role' => 'user', 'user_status' => 'banned', 'session_version' => 1];
     $canDownloadBanned = can_download_upload($uploadId, 'hidden', $userId, 'user');
     $t->assertFalse('Banned user cannot download attachment', $canDownloadBanned);
 
-    $_SESSION['user_status'] = 'suspended';
-    $_SESSION['user_suspension_time'] = time() + 3600;
+    $_SESSION = ['user_id' => $userId, 'user_role' => 'user', 'user_status' => 'suspended', 'user_suspension_time' => time() + 3600, 'session_version' => 1];
     $canDownloadSuspended = can_download_upload($uploadId, 'hidden', $userId, 'user');
     $t->assertFalse('Suspended user cannot download attachment', $canDownloadSuspended);
 
@@ -379,17 +374,20 @@ function test_endpoint_private_message_authorization(): Test
 
     $pmId = create_private_message($pdo, $senderId, $recipientId, 'Test Subject', 'Test content');
 
-    $_SESSION = ['user_id' => $recipientId, 'user_role' => 'user'];
-    $_SESSION['session_version'] = 1;
-
+    // Test recipient can read
+    $_SESSION = ['user_id' => $recipientId, 'user_role' => 'user', 'session_version' => 1];
     $canReadRecipient = can_read_private_message($pmId, $recipientId);
     $t->assertTrue('Recipient can read their private message', $canReadRecipient);
 
+    // Test sender can read (sent messages)
+    $_SESSION = ['user_id' => $senderId, 'user_role' => 'user', 'session_version' => 1];
     $canReadSender = can_read_private_message($pmId, $senderId);
     $t->assertTrue('Sender can read their sent private message', $canReadSender);
 
-    $canReadOther = can_read_private_message($pmId, $otherId);
-    $t->assertFalse('Other user cannot read private message', $canReadOther);
+    // Test other user cannot read recipient's messages
+    $_SESSION = ['user_id' => $otherId, 'user_role' => 'user', 'session_version' => 1];
+    $canReadOther = can_read_private_message($pmId, $recipientId);
+    $t->assertFalse('Other user cannot read recipient private message', $canReadOther);
 
     $_SESSION = [];
     App::reset();
@@ -733,11 +731,21 @@ function create_private_message(PDO $pdo, int $senderId, int $recipientId, strin
 
 function can_view_thread_test(string $threadStatus): bool
 {
-    if (in_array($threadStatus, ['visible', 'sticky', 'locked'], true)) {
-        return true;
-    }
     if (!isset($_SESSION['user_id'])) {
         return false;
+    }
+    // Check banned/suspended status first
+    if (($_SESSION['user_status'] ?? '') === 'banned') {
+        return false;
+    }
+    if (($_SESSION['user_status'] ?? '') === 'suspended') {
+        $suspensionTime = $_SESSION['user_suspension_time'] ?? 0;
+        if ($suspensionTime > time()) {
+            return false;
+        }
+    }
+    if (in_array($threadStatus, ['visible', 'sticky', 'locked'], true)) {
+        return true;
     }
     $authz = App::getInstance()->authz;
     if (isset($authz) && $authz->can((int)($_SESSION['user_id'] ?? 0), 'threads.approve')) {

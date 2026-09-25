@@ -62,79 +62,81 @@ class AddForeignKeys
             $this->checkOrphansAndFail($pdo, 'email_verifications', 'user_id', 'users', 'id');
             $this->checkOrphansAndFail($pdo, 'password_resets', 'user_id', 'users', 'id');
 
-            $pdo->exec("SET FOREIGN_KEY_CHECKS = 0");
+            try {
+                $pdo->exec("SET FOREIGN_KEY_CHECKS = 0");
 
-            $pdo->exec("ALTER TABLE threads
-                ADD CONSTRAINT fk_threads_category
-                FOREIGN KEY (category_id) REFERENCES categories(id)
-                ON DELETE SET NULL ON UPDATE CASCADE");
+                $pdo->exec("ALTER TABLE threads
+                    ADD CONSTRAINT fk_threads_category
+                    FOREIGN KEY (category_id) REFERENCES categories(id)
+                    ON DELETE SET NULL ON UPDATE CASCADE");
 
-            $pdo->exec("ALTER TABLE threads
-                ADD CONSTRAINT fk_threads_user
-                FOREIGN KEY (user_id) REFERENCES users(id)
-                ON DELETE SET NULL ON UPDATE CASCADE");
+                $pdo->exec("ALTER TABLE threads
+                    ADD CONSTRAINT fk_threads_user
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                    ON DELETE SET NULL ON UPDATE CASCADE");
 
-            $pdo->exec("ALTER TABLE posts
-                ADD CONSTRAINT fk_posts_thread
-                FOREIGN KEY (thread_id) REFERENCES threads(id)
-                ON DELETE CASCADE ON UPDATE CASCADE");
+                $pdo->exec("ALTER TABLE posts
+                    ADD CONSTRAINT fk_posts_thread
+                    FOREIGN KEY (thread_id) REFERENCES threads(id)
+                    ON DELETE CASCADE ON UPDATE CASCADE");
 
-            $pdo->exec("ALTER TABLE posts
-                ADD CONSTRAINT fk_posts_user
-                FOREIGN KEY (user_id) REFERENCES users(id)
-                ON DELETE SET NULL ON UPDATE CASCADE");
+                $pdo->exec("ALTER TABLE posts
+                    ADD CONSTRAINT fk_posts_user
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                    ON DELETE SET NULL ON UPDATE CASCADE");
 
-            $pdo->exec("ALTER TABLE uploads
-                ADD CONSTRAINT fk_uploads_thread
-                FOREIGN KEY (thread_id) REFERENCES threads(id)
-                ON DELETE CASCADE ON UPDATE CASCADE");
+                $pdo->exec("ALTER TABLE uploads
+                    ADD CONSTRAINT fk_uploads_thread
+                    FOREIGN KEY (thread_id) REFERENCES threads(id)
+                    ON DELETE CASCADE ON UPDATE CASCADE");
 
-            $pdo->exec("ALTER TABLE uploads
-                ADD CONSTRAINT fk_uploads_post
-                FOREIGN KEY (post_id) REFERENCES posts(id)
-                ON DELETE CASCADE ON UPDATE CASCADE");
+                $pdo->exec("ALTER TABLE uploads
+                    ADD CONSTRAINT fk_uploads_post
+                    FOREIGN KEY (post_id) REFERENCES posts(id)
+                    ON DELETE CASCADE ON UPDATE CASCADE");
 
-            $pdo->exec("ALTER TABLE uploads
-                ADD CONSTRAINT fk_uploads_user
-                FOREIGN KEY (user_id) REFERENCES users(id)
-                ON DELETE SET NULL ON UPDATE CASCADE");
+                $pdo->exec("ALTER TABLE uploads
+                    ADD CONSTRAINT fk_uploads_user
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                    ON DELETE SET NULL ON UPDATE CASCADE");
 
-            $pdo->exec("ALTER TABLE thread_watchers
-                ADD CONSTRAINT fk_watchers_thread
-                FOREIGN KEY (thread_id) REFERENCES threads(id)
-                ON DELETE CASCADE ON UPDATE CASCADE");
+                $pdo->exec("ALTER TABLE thread_watchers
+                    ADD CONSTRAINT fk_watchers_thread
+                    FOREIGN KEY (thread_id) REFERENCES threads(id)
+                    ON DELETE CASCADE ON UPDATE CASCADE");
 
-            $pdo->exec("ALTER TABLE thread_watchers
-                ADD CONSTRAINT fk_watchers_user
-                FOREIGN KEY (user_id) REFERENCES users(id)
-                ON DELETE CASCADE ON UPDATE CASCADE");
+                $pdo->exec("ALTER TABLE thread_watchers
+                    ADD CONSTRAINT fk_watchers_user
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                    ON DELETE CASCADE ON UPDATE CASCADE");
 
-            $pdo->exec("ALTER TABLE notifications
-                ADD CONSTRAINT fk_notifications_user
-                FOREIGN KEY (user_id) REFERENCES users(id)
-                ON DELETE CASCADE ON UPDATE CASCADE");
+                $pdo->exec("ALTER TABLE notifications
+                    ADD CONSTRAINT fk_notifications_user
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                    ON DELETE CASCADE ON UPDATE CASCADE");
 
-            $pdo->exec("ALTER TABLE private_messages
-                ADD CONSTRAINT fk_pm_sender
-                FOREIGN KEY (sender_id) REFERENCES users(id)
-                ON DELETE CASCADE ON UPDATE CASCADE");
+                $pdo->exec("ALTER TABLE private_messages
+                    ADD CONSTRAINT fk_pm_sender
+                    FOREIGN KEY (sender_id) REFERENCES users(id)
+                    ON DELETE CASCADE ON UPDATE CASCADE");
 
-            $pdo->exec("ALTER TABLE private_messages
-                ADD CONSTRAINT fk_pm_recipient
-                FOREIGN KEY (recipient_id) REFERENCES users(id)
-                ON DELETE CASCADE ON UPDATE CASCADE");
+                $pdo->exec("ALTER TABLE private_messages
+                    ADD CONSTRAINT fk_pm_recipient
+                    FOREIGN KEY (recipient_id) REFERENCES users(id)
+                    ON DELETE CASCADE ON UPDATE CASCADE");
 
-            $pdo->exec("ALTER TABLE email_verifications
-                ADD CONSTRAINT fk_ev_user
-                FOREIGN KEY (user_id) REFERENCES users(id)
-                ON DELETE CASCADE ON UPDATE CASCADE");
+                $pdo->exec("ALTER TABLE email_verifications
+                    ADD CONSTRAINT fk_ev_user
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                    ON DELETE CASCADE ON UPDATE CASCADE");
 
-            $pdo->exec("ALTER TABLE password_resets
-                ADD CONSTRAINT fk_pr_user
-                FOREIGN KEY (user_id) REFERENCES users(id)
-                ON DELETE CASCADE ON UPDATE CASCADE");
-
-            $pdo->exec("SET FOREIGN_KEY_CHECKS = 1");
+                $pdo->exec("ALTER TABLE password_resets
+                    ADD CONSTRAINT fk_pr_user
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                    ON DELETE CASCADE ON UPDATE CASCADE");
+            } finally {
+                $pdo->exec("SET FOREIGN_KEY_CHECKS = 1");
+            }
         } else {
             $pdo->exec("PRAGMA foreign_keys = ON");
 
@@ -160,39 +162,41 @@ class AddForeignKeys
         $driver = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
 
         if ($driver === 'mysql') {
-            $pdo->exec("SET FOREIGN_KEY_CHECKS = 0");
+            try {
+                $pdo->exec("SET FOREIGN_KEY_CHECKS = 0");
 
-            $pdo->exec("ALTER TABLE threads DROP FOREIGN KEY IF EXISTS fk_threads_category");
-            $pdo->exec("ALTER TABLE threads DROP FOREIGN KEY IF EXISTS fk_threads_user");
-            $pdo->exec("ALTER TABLE posts DROP FOREIGN KEY IF EXISTS fk_posts_thread");
-            $pdo->exec("ALTER TABLE posts DROP FOREIGN KEY IF EXISTS fk_posts_user");
-            $pdo->exec("ALTER TABLE uploads DROP FOREIGN KEY IF EXISTS fk_uploads_thread");
-            $pdo->exec("ALTER TABLE uploads DROP FOREIGN KEY IF EXISTS fk_uploads_post");
-            $pdo->exec("ALTER TABLE uploads DROP FOREIGN KEY IF EXISTS fk_uploads_user");
-            $pdo->exec("ALTER TABLE thread_watchers DROP FOREIGN KEY IF EXISTS fk_watchers_thread");
-            $pdo->exec("ALTER TABLE thread_watchers DROP FOREIGN KEY IF EXISTS fk_watchers_user");
-            $pdo->exec("ALTER TABLE notifications DROP FOREIGN KEY IF EXISTS fk_notifications_user");
-            $pdo->exec("ALTER TABLE private_messages DROP FOREIGN KEY IF EXISTS fk_pm_sender");
-            $pdo->exec("ALTER TABLE private_messages DROP FOREIGN KEY IF EXISTS fk_pm_recipient");
-            $pdo->exec("ALTER TABLE email_verifications DROP FOREIGN KEY IF EXISTS fk_ev_user");
-            $pdo->exec("ALTER TABLE password_resets DROP FOREIGN KEY IF EXISTS fk_pr_user");
-
-            $pdo->exec("SET FOREIGN_KEY_CHECKS = 1");
+                $pdo->exec("ALTER TABLE threads DROP FOREIGN KEY IF EXISTS fk_threads_category");
+                $pdo->exec("ALTER TABLE threads DROP FOREIGN KEY IF EXISTS fk_threads_user");
+                $pdo->exec("ALTER TABLE posts DROP FOREIGN KEY IF EXISTS fk_posts_thread");
+                $pdo->exec("ALTER TABLE posts DROP FOREIGN KEY IF EXISTS fk_posts_user");
+                $pdo->exec("ALTER TABLE uploads DROP FOREIGN KEY IF EXISTS fk_uploads_thread");
+                $pdo->exec("ALTER TABLE uploads DROP FOREIGN KEY IF EXISTS fk_uploads_post");
+                $pdo->exec("ALTER TABLE uploads DROP FOREIGN KEY IF EXISTS fk_uploads_user");
+                $pdo->exec("ALTER TABLE thread_watchers DROP FOREIGN KEY IF EXISTS fk_watchers_thread");
+                $pdo->exec("ALTER TABLE thread_watchers DROP FOREIGN KEY IF EXISTS fk_watchers_user");
+                $pdo->exec("ALTER TABLE notifications DROP FOREIGN KEY IF EXISTS fk_notifications_user");
+                $pdo->exec("ALTER TABLE private_messages DROP FOREIGN KEY IF EXISTS fk_pm_sender");
+                $pdo->exec("ALTER TABLE private_messages DROP FOREIGN KEY IF EXISTS fk_pm_recipient");
+                $pdo->exec("ALTER TABLE email_verifications DROP FOREIGN KEY IF EXISTS fk_ev_user");
+                $pdo->exec("ALTER TABLE password_resets DROP FOREIGN KEY IF EXISTS fk_pr_user");
+            } finally {
+                $pdo->exec("SET FOREIGN_KEY_CHECKS = 1");
+            }
         } else {
-            $pdo->exec("DROP INDEX IF EXISTS idx_threads_category ON threads");
-            $pdo->exec("DROP INDEX IF EXISTS idx_threads_user ON threads");
-            $pdo->exec("DROP INDEX IF EXISTS idx_posts_thread ON posts");
-            $pdo->exec("DROP INDEX IF EXISTS idx_posts_user ON posts");
-            $pdo->exec("DROP INDEX IF EXISTS idx_uploads_thread ON uploads");
-            $pdo->exec("DROP INDEX IF EXISTS idx_uploads_post ON uploads");
-            $pdo->exec("DROP INDEX IF EXISTS idx_uploads_user ON uploads");
-            $pdo->exec("DROP INDEX IF EXISTS idx_watchers_thread ON thread_watchers");
-            $pdo->exec("DROP INDEX IF EXISTS idx_watchers_user ON thread_watchers");
-            $pdo->exec("DROP INDEX IF EXISTS idx_notifications_user ON notifications");
-            $pdo->exec("DROP INDEX IF EXISTS idx_pm_sender ON private_messages");
-            $pdo->exec("DROP INDEX IF EXISTS idx_pm_recipient ON private_messages");
-            $pdo->exec("DROP INDEX IF EXISTS idx_ev_user ON email_verifications");
-            $pdo->exec("DROP INDEX IF EXISTS idx_pr_user ON password_resets");
+            $pdo->exec("DROP INDEX IF EXISTS idx_threads_category");
+            $pdo->exec("DROP INDEX IF EXISTS idx_threads_user");
+            $pdo->exec("DROP INDEX IF EXISTS idx_posts_thread");
+            $pdo->exec("DROP INDEX IF EXISTS idx_posts_user");
+            $pdo->exec("DROP INDEX IF EXISTS idx_uploads_thread");
+            $pdo->exec("DROP INDEX IF EXISTS idx_uploads_post");
+            $pdo->exec("DROP INDEX IF EXISTS idx_uploads_user");
+            $pdo->exec("DROP INDEX IF EXISTS idx_watchers_thread");
+            $pdo->exec("DROP INDEX IF EXISTS idx_watchers_user");
+            $pdo->exec("DROP INDEX IF EXISTS idx_notifications_user");
+            $pdo->exec("DROP INDEX IF EXISTS idx_pm_sender");
+            $pdo->exec("DROP INDEX IF EXISTS idx_pm_recipient");
+            $pdo->exec("DROP INDEX IF EXISTS idx_ev_user");
+            $pdo->exec("DROP INDEX IF EXISTS idx_pr_user");
         }
     }
 }

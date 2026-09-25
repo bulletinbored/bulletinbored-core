@@ -6,9 +6,13 @@ if (is_dir($sessionDir) && is_writable($sessionDir)) {
 }
 session_start();
 
+date_default_timezone_set('UTC');
+
 require_once __DIR__ . '/src/csp.php';
+require_once __DIR__ . '/src/Security.php';
 $cspNonce = generate_csp_nonce();
 send_security_headers($cspNonce);
+$installerCsrf = generate_csrf_token();
 
 function is_installed() {
     $configPath = __DIR__ . '/config.json';
@@ -19,28 +23,13 @@ function is_installed() {
     $config = [];
     if (file_exists($configPath)) {
         $config = json_decode(file_get_contents($configPath), true);
+        if (!is_array($config)) { $config = []; }
     } else {
         @include $legacyPath;
+        if (!is_array($config)) { $config = []; }
     }
-    if (empty($config['db_driver'] ?? '')) {
-        return false;
-    }
-    try {
-        if (($config['db_driver'] ?? 'sqlite') === 'mysql') {
-            $pdo = new PDO(
-                "mysql:host={$config['db_host']};dbname={$config['db_name']};charset=utf8mb4",
-                $config['db_user'],
-                $config['db_pass']
-            );
-        } else {
-            $pdo = new PDO('sqlite:' . ($config['db_path'] ?? __DIR__ . '/data/database.sqlite'));
-        }
-        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-        $stmt = $pdo->query("SELECT COUNT(*) FROM users");
-        return $stmt->fetchColumn() > 0;
-    } catch (PDOException $e) {
-        return false;
-    }
+    // Fail closed: a config file with a driver means setup completed.
+    return !empty($config['db_driver']);
 }
 
 if (is_installed()) {
@@ -62,21 +51,27 @@ $error = '';
 $installed = false;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!validate_csrf_token((string)($_POST['csrf_token'] ?? ''))) {
+        $error = 'Invalid security token. Please reload the page and try again.';
+    }
+
     $siteName = trim($_POST['site_name'] ?? '');
     $adminUser = trim($_POST['admin_user'] ?? '');
     $adminPass = $_POST['admin_pass'] ?? '';
     $adminPassConfirm = $_POST['admin_pass_confirm'] ?? '';
     $adminEmail = trim($_POST['admin_email'] ?? '');
 
-    if (empty($siteName) || empty($adminUser) || empty($adminPass) || empty($adminEmail)) {
-        $error = 'All fields are required.';
-    } elseif ($adminPass !== $adminPassConfirm) {
-        $error = 'Passwords do not match.';
-    } else {
-        require_once __DIR__ . '/src/Helpers/AuthHelpers.php';
-        $passwordErrors = validate_password_strength($adminPass);
-        if (!empty($passwordErrors)) {
-            $error = 'Password must be at least 10 characters with lowercase, uppercase, and a number.';
+    if (empty($error)) {
+        if (empty($siteName) || empty($adminUser) || empty($adminPass) || empty($adminEmail)) {
+            $error = 'All fields are required.';
+        } elseif ($adminPass !== $adminPassConfirm) {
+            $error = 'Passwords do not match.';
+        } else {
+            require_once __DIR__ . '/src/Helpers/AuthHelpers.php';
+            $passwordErrors = validate_password_strength($adminPass);
+            if (!empty($passwordErrors)) {
+                $error = 'Password must be at least 10 characters with lowercase, uppercase, and a number.';
+            }
         }
     }
     if (empty($error) && !filter_var($adminEmail, FILTER_VALIDATE_EMAIL)) {
@@ -345,6 +340,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <?php endif; ?>
 
             <form method="POST" novalidate>
+                <input type="hidden" name="csrf_token" value="<?= escape($installerCsrf) ?>">
                 <div class="mb-3">
                     <label class="form-label" for="site_name">Site Name</label>
                     <input type="text" class="form-control" id="site_name" name="site_name" value="<?= escape($_POST['site_name'] ?? 'My Forum') ?>" required>

@@ -73,6 +73,11 @@ class Test
         $this->assert($desc, $value === false);
     }
 
+    public function assertNotFalse(string $desc, $value): void
+    {
+        $this->assert($desc, $value !== false);
+    }
+
     public function assertCount(string $desc, int $expected, array $array): void
     {
         $this->assertEquals($desc, $expected, count($array));
@@ -208,34 +213,36 @@ class TestSuite
         $this->tests[] = $test;
     }
 
-    public function addTestFactory(callable $factory): void
+    public function addTestFactory(callable $factory, ?string $name = null): void
     {
-        $this->tests[] = ['factory' => $factory];
+        $this->tests[] = ['factory' => $factory, 'name' => $name];
     }
 
     public function run(): void
     {
+        ob_start();
         echo "\n";
         echo str_repeat('#', 60) . "\n";
         echo "# TEST SUITE\n";
         echo str_repeat('#', 60) . "\n";
 
         foreach ($this->tests as $testOrFactory) {
-            if (is_array($testOrFactory) && isset($testOrFactory['factory'])) {
-                $test = $testOrFactory['factory']();
-            } else {
-                $test = $testOrFactory;
-            }
-
             try {
+                if (is_array($testOrFactory) && isset($testOrFactory['factory'])) {
+                    $test = $testOrFactory['factory']();
+                } else {
+                    $test = $testOrFactory;
+                }
+
                 $test->run();
                 $this->totalPassed += $test->getPassed();
                 $this->totalFailed += $test->getFailed();
                 $this->totalErrors += $test->getErrors();
             } catch (\Throwable $e) {
                 $this->totalErrors++;
+                $testName = isset($testOrFactory['name']) ? $testOrFactory['name'] : 'unknown';
                 echo "\n";
-                echo "  [!!] ERROR in {$test->getName()}: " . $e->getMessage() . "\n";
+                echo "  [!!] ERROR in {$testName}: " . $e->getMessage() . "\n";
                 echo "       File: " . $e->getFile() . ":" . $e->getLine() . "\n";
             }
         }
@@ -248,6 +255,8 @@ class TestSuite
         }
         echo "\n";
         echo str_repeat('#', 60) . "\n";
+
+        ob_end_flush();
 
         if ($this->totalFailed > 0 || $this->totalErrors > 0) {
             exit(1);
@@ -301,7 +310,7 @@ function register_test(string $functionName): void
     $suite = get_test_suite();
     $suite->addTestFactory(function() use ($functionName) {
         return $functionName();
-    });
+    }, $functionName);
 }
 
 /**

@@ -79,7 +79,15 @@ function handle_reply_post(): \Bulletin\Response|bool
         $pluginManager->runHook('post_after_create', $postId, $postData, $thread);
     }
 
-    notify_thread_reply($thread, $_SESSION['user_id'], $content);
+    notify_thread_reply($thread, (int)$_SESSION['user_id'], $content);
+    notify_mentioned_users(
+        $pdo,
+        $content,
+        $threadId,
+        $thread['title'] ?? '',
+        (string)($_SESSION['username'] ?? ''),
+        (int)$_SESSION['user_id']
+    );
 
     return redirect(url('thread', ['id' => $threadId, 'slug' => slugify($thread['title'] ?? '')]));
 }
@@ -97,6 +105,10 @@ function handle_edit_post(string $method, array $params = []): \Bulletin\Respons
     $postId = (int)($params['id'] ?? $_POST['post_id'] ?? $_GET['id'] ?? 0);
     if ($postId <= 0) {
         return redirect(url('home'));
+    }
+
+    if (!rate_limit('edit_post', 30, 3600, (string)($_SESSION['user_id'] ?? 0))) {
+        throw new \Bulletin\TooManyRequestsException('You are editing too fast. Please try again later.');
     }
 
     $postStmt = $pdo->prepare("SELECT * FROM posts WHERE id = ?");
@@ -170,6 +182,10 @@ function handle_delete_post(array $params = []): \Bulletin\Response|bool
         throw new \Bulletin\ForbiddenException('CSRF token invalid');
     }
 
+    if (!rate_limit('delete_post', 20, 3600, (string)($_SESSION['user_id'] ?? 0))) {
+        throw new \Bulletin\TooManyRequestsException('You are deleting too fast. Please try again later.');
+    }
+
     $postId = (int)($params['id'] ?? $_GET['id'] ?? 0);
     if ($postId <= 0) {
         return redirect(url('home'));
@@ -220,6 +236,10 @@ function handle_edit_thread(string $method, array $params = []): \Bulletin\Respo
     $threadId = (int)($params['id'] ?? $_GET['id'] ?? 0);
     if ($threadId <= 0) {
         return redirect(url('home'));
+    }
+
+    if (!rate_limit('edit_thread', 20, 3600, (string)($_SESSION['user_id'] ?? 0))) {
+        throw new \Bulletin\TooManyRequestsException('You are editing too fast. Please try again later.');
     }
 
     $threadStmt = $pdo->prepare("SELECT * FROM threads WHERE id = ?");
@@ -296,6 +316,10 @@ function handle_delete_thread(array $params = []): \Bulletin\Response|bool
 
     if (!csrf_validate_request()) {
         throw new \Bulletin\ForbiddenException('CSRF token invalid');
+    }
+
+    if (!rate_limit('delete_thread', 10, 3600, (string)($_SESSION['user_id'] ?? 0))) {
+        throw new \Bulletin\TooManyRequestsException('You are deleting threads too fast. Please try again later.');
     }
 
     $threadId = (int)($params['id'] ?? $_GET['id'] ?? 0);

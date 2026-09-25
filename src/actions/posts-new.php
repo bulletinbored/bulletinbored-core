@@ -87,6 +87,15 @@ function handle_new_thread(string $method): \Bulletin\Response|bool
             $pluginManager->runHook('thread_after_create', $threadId, $threadData);
         }
 
+        notify_mentioned_users(
+            $pdo,
+            $content,
+            (int)$threadId,
+            $title,
+            (string)($_SESSION['username'] ?? ''),
+            (int)$_SESSION['user_id']
+        );
+
         return redirect(url('thread', ['id' => $threadId, 'slug' => slugify($title)]));
     }
 

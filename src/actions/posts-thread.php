@@ -9,6 +9,9 @@ function handle_upload_image(): \Bulletin\Response|bool
     if (!csrf_validate_request()) {
         return \Bulletin\Response::json(['ok' => false, 'error' => 'CSRF token invalid'], 403);
     }
+    if (!rate_limit('upload_image', 20, 3600, (string)($_SESSION['user_id'] ?? 0))) {
+        return \Bulletin\Response::json(['ok' => false, 'error' => 'You are uploading too fast. Please try again later.'], 429);
+    }
     if (empty($_FILES['image']['tmp_name'])) {
         return \Bulletin\Response::json(['ok' => false, 'error' => 'No file uploaded'], 400);
     }
@@ -25,6 +28,37 @@ function handle_upload_image(): \Bulletin\Response|bool
         return \Bulletin\Response::json(['ok' => false, 'error' => 'Invalid image'], 400);
     }
 
+    $threadId = (int)($_POST['thread_id'] ?? 0);
+    $postId = (int)($_POST['post_id'] ?? 0);
+    if ($threadId <= 0 && $postId <= 0) {
+        return \Bulletin\Response::json(['ok' => false, 'error' => 'Invalid attachment context'], 400);
+    }
+
+    // Authorization check BEFORE moving file
+    $contextSql = "SELECT t.id, t.status FROM threads t WHERE t.id = ?";
+    $contextParams = [$threadId];
+    if ($threadId <= 0) {
+        // Verify post belongs to thread
+        $contextSql = "SELECT t.id, t.status FROM threads t JOIN posts p ON p.thread_id = t.id WHERE p.id = ?";
+        $contextParams = [$postId];
+    }
+
+    $contextStmt = $pdo->prepare($contextSql);
+    $contextStmt->execute($contextParams);
+    $context = $contextStmt->fetch();
+    if ($context === false || !can_view_thread((string)$context['status'])) {
+        return \Bulletin\Response::json(['ok' => false, 'error' => 'Thread not found'], 404);
+    }
+
+    // If post_id provided, verify it belongs to the thread
+    if ($postId > 0 && $threadId > 0) {
+        $postCheck = $pdo->prepare("SELECT id FROM posts WHERE id = ? AND thread_id = ?");
+        $postCheck->execute([$postId, $threadId]);
+        if ($postCheck->fetch() === false) {
+            return \Bulletin\Response::json(['ok' => false, 'error' => 'Post does not belong to thread'], 400);
+        }
+    }
+
     $uploadDir = __DIR__ . '/../../uploads/private';
     if (!is_dir($uploadDir)) {
         @mkdir($uploadDir, 0755, true);
@@ -34,18 +68,24 @@ function handle_upload_image(): \Bulletin\Response|bool
         return \Bulletin\Response::json(['ok' => false, 'error' => 'Move failed'], 500);
     }
 
-    $threadId = (int)($_POST['thread_id'] ?? 0);
-    $postId = (int)($_POST['post_id'] ?? 0);
-    $stmt = $pdo->prepare("INSERT INTO uploads (user_id, thread_id, post_id, filename, original_name, size, mime_type) VALUES (?, ?, ?, ?, ?, ?, ?)");
-    $stmt->execute([
-        $_SESSION['user_id'],
-        $threadId > 0 ? $threadId : null,
-        $postId > 0 ? $postId : null,
-        $info['safe_name'],
-        basename($_FILES['image']['name'] ?? 'image.' . $info['ext']),
-        filesize($dest),
-        $info['mime'],
-    ]);
+    try {
+        $stmt = $pdo->prepare("INSERT INTO uploads (user_id, thread_id, post_id, filename, original_name, size, mime_type) VALUES (?, ?, ?, ?, ?, ?, ?)");
+        $stmt->execute([
+            $_SESSION['user_id'],
+            $threadId > 0 ? $threadId : null,
+            $postId > 0 ? $postId : null,
+            $info['safe_name'],
+            basename($_FILES['image']['name'] ?? 'image.' . $info['ext']),
+            filesize($dest),
+            $info['mime'],
+        ]);
+    } catch (\Throwable $e) {
+        // Cleanup uploaded file if DB insert fails
+        if (file_exists($dest)) {
+            @unlink($dest);
+        }
+        return \Bulletin\Response::json(['ok' => false, 'error' => 'Database error'], 500);
+    }
 
     $privateUrl = base_url() . '/download/' . $pdo->lastInsertId();
     return \Bulletin\Response::json(['ok' => true, 'url' => $privateUrl, 'markdown' => '![](' . $privateUrl . ')']);
@@ -160,7 +200,11 @@ function handle_watch(): \Bulletin\Response|bool
     }
 
     if (!csrf_validate_request()) {
-        return redirect($_SERVER['HTTP_REFERER'] ?? url('home'));
+        return redirect(url('thread', ['id' => (int)($_POST['thread_id'] ?? 0)]));
+    }
+
+    if (!rate_limit('watch', 30, 3600, (string)($_SESSION['user_id'] ?? 0))) {
+        throw new \Bulletin\TooManyRequestsException('You are watching too many threads. Please try again later.');
     }
 
     $threadId = (int)($_POST['thread_id'] ?? 0);
@@ -187,8 +231,7 @@ function handle_watch(): \Bulletin\Response|bool
         $_SESSION['watched_threads'] = $watched;
     }
 
-    $referer = $_SERVER['HTTP_REFERER'] ?? url('thread', ['id' => $threadId]);
-    return redirect($referer);
+    return redirect(url('thread', ['id' => $threadId]));
 }
 
 function handle_unwatch(): \Bulletin\Response|bool
@@ -200,7 +243,11 @@ function handle_unwatch(): \Bulletin\Response|bool
     }
 
     if (!csrf_validate_request()) {
-        return redirect($_SERVER['HTTP_REFERER'] ?? url('home'));
+        return redirect(url('thread', ['id' => (int)($_POST['thread_id'] ?? 0)]));
+    }
+
+    if (!rate_limit('unwatch', 30, 3600, (string)($_SESSION['user_id'] ?? 0))) {
+        throw new \Bulletin\TooManyRequestsException('You are unwatching too many threads. Please try again later.');
     }
 
     $threadId = (int)($_POST['thread_id'] ?? 0);
@@ -225,6 +272,5 @@ function handle_unwatch(): \Bulletin\Response|bool
     $watched = array_filter($watched, fn($id) => $id !== $threadId);
     $_SESSION['watched_threads'] = array_values($watched);
 
-    $referer = $_SERVER['HTTP_REFERER'] ?? url('thread', ['id' => $threadId]);
-    return redirect($referer);
+    return redirect(url('thread', ['id' => $threadId]));
 }

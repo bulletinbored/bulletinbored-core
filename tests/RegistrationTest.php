@@ -444,11 +444,27 @@ function test_logout_destroys_session(): Test
 {
     $t = new Test('Logout - Session Destroyed');
 
+    $pdo = new PDO('sqlite::memory:');
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    $pdo->exec("
+        CREATE TABLE users (
+            id INTEGER PRIMARY KEY,
+            username TEXT,
+            password TEXT,
+            role TEXT DEFAULT 'user',
+            status TEXT DEFAULT 'active',
+            session_version INTEGER DEFAULT 1
+        );
+    ");
+    $pdo->prepare("INSERT INTO users (id, username, password, role, status, session_version) VALUES (42, 'testuser', 'hash', 'user', 'active', 1)")->execute();
+    App::getInstance()->pdo = $pdo;
+
     $_SESSION = [
         'user_id' => 42,
         'user_role' => 'user',
         'username' => 'testuser',
         'user_status' => 'active',
+        'session_version' => 1,
     ];
 
     $t->assertTrue('User logged in before logout', is_logged_in());
@@ -458,6 +474,7 @@ function test_logout_destroys_session(): Test
     $t->assertFalse('Session empty after logout', isset($_SESSION['user_id']));
     $t->assertFalse('Not logged in after logout', is_logged_in());
 
+    App::reset();
     return $t;
 }
 

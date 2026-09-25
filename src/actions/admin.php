@@ -109,6 +109,8 @@ function handle_admin_dashboard(): \Bulletin\Response|bool
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
         if (!csrf_validate_request()) {
             $adminError = 'Invalid CSRF token';
+        } elseif (!rate_limit('admin_dashboard_settings', 30, 3600, (string)($_SESSION['user_id'] ?? 0))) {
+            $adminError = 'You are changing settings too fast. Please try again later.';
         } else {
             $siteName = trim($_POST['site_name'] ?? $config['site_name']);
             $defaultLang = trim($_POST['default_lang'] ?? $config['default_lang'] ?? 'en');

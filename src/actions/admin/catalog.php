@@ -9,6 +9,8 @@ function handle_admin_catalog(string $method): \Bulletin\Response|bool
     if ($method === 'POST' && isset($_POST['csrf_token'])) {
         if (!csrf_validate_request()) {
             $adminCatalogError = 'Invalid CSRF token';
+        } elseif (!rate_limit('admin_catalog', 20, 3600, (string)($_SESSION['user_id'] ?? 0))) {
+            $adminCatalogError = 'You are performing too many catalog operations. Please try again later.';
         } elseif (isset($_POST['uninstall_from_catalog'])) {
             $name = strtolower(trim($_POST['name'] ?? ''));
             $type = strtolower(trim($_POST['type'] ?? ''));

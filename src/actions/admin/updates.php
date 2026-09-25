@@ -11,6 +11,8 @@ function handle_admin_updates(string $method): \Bulletin\Response|bool
     if ($method === 'POST' && isset($_POST['check_updates'])) {
         if (!csrf_validate_request()) {
             $updateError = 'Invalid CSRF token';
+        } elseif (!rate_limit('admin_updates_check', 20, 3600, (string)($_SESSION['user_id'] ?? 0))) {
+            $updateError = 'You are checking for updates too fast. Please try again later.';
         } else {
             $catalogMirrorBase = !empty($config['update_mirror']) ? rtrim($config['update_mirror'], '/') : 'https://extend.bulletinbored.net';
             $remoteCatalogRaw = @file_get_contents($catalogMirrorBase . '/catalog.json');
@@ -25,6 +27,8 @@ function handle_admin_updates(string $method): \Bulletin\Response|bool
     if ($method === 'POST' && isset($_POST['apply_update'])) {
         if (!csrf_validate_request()) {
             $updateError = 'Invalid CSRF token';
+        } elseif (!rate_limit('admin_updates_apply', 10, 3600, (string)($_SESSION['user_id'] ?? 0))) {
+            $updateError = 'You are applying updates too fast. Please try again later.';
         } else {
             $type = $_POST['type'] ?? '';
             $name = $_POST['name'] ?? '';

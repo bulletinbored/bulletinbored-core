@@ -84,12 +84,8 @@ function handle_download(array $params = []): \Bulletin\Response|bool
     }
 
     $threadStatus = $upload['thread_status'] ?? null;
-    if ($threadStatus === null) {
-        if (!is_logged_in()) {
-            throw new \Bulletin\ForbiddenException('Not authorized');
-        }
-    } elseif (!can_view_thread($threadStatus)) {
-        throw new \Bulletin\ForbiddenException('Not authorized');
+    if ($threadStatus === null || !can_view_thread($threadStatus)) {
+        throw new \Bulletin\NotFoundException('File not found');
     }
 
     $privatePath = __DIR__ . '/../../uploads/private/' . basename($upload['filename']);
@@ -113,7 +109,11 @@ function handle_download(array $params = []): \Bulletin\Response|bool
 
     header('Content-Type: ' . $mime);
     header('X-Content-Type-Options: nosniff');
-    header('Content-Disposition: ' . $disposition . '; filename="' . addslashes(basename($upload['original_name'])) . '"');
+    $safeName = preg_replace('/[\x00-\x1F\x7F\r\n]/', '', $upload['original_name'] ?? '');
+    $safeName = basename($safeName);
+    $quotedName = str_replace(['\\', '"'], '', $safeName);
+    $utf8Name = rawurlencode($safeName);
+    header('Content-Disposition: ' . $disposition . '; filename="' . $quotedName . '"; filename*=UTF-8\'\'' . $utf8Name);
     header('Content-Length: ' . (string)filesize($filePath));
     header('Cache-Control: private, max-age=3600');
     readfile($filePath);

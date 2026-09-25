@@ -9,6 +9,8 @@ function handle_admin_themes(string $method): \Bulletin\Response|bool
     if ($method === 'POST' && isset($_POST['csrf_token'])) {
         if (!csrf_validate_request()) {
             $adminThemeError = 'Invalid CSRF token';
+        } elseif (!rate_limit('admin_themes', 20, 3600, (string)($_SESSION['user_id'] ?? 0))) {
+            $adminThemeError = 'You are performing too many theme operations. Please try again later.';
         } else {
             if (isset($_POST['install_theme']) && !empty($_FILES['theme_zip']['tmp_name'])) {
                 $tmpPath = $_FILES['theme_zip']['tmp_name'];

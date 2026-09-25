@@ -9,6 +9,7 @@
 
 require_once __DIR__ . '/harness.php';
 require_once __DIR__ . '/../src/helpers.php';
+require_once __DIR__ . '/../lib/AuthZ.php';
 
 function test_upload_private_directory_exists(): Test
 {
@@ -368,6 +369,20 @@ function setup_schema_upload(PDO $pdo): void
             permissions TEXT DEFAULT '[]'
         )
     ");
+    
+    // Insert default roles with permissions
+    $pdo->prepare("INSERT OR IGNORE INTO roles (name, permissions) VALUES (?, ?)")->execute([
+        'user',
+        json_encode(['threads.create', 'posts.create'])
+    ]);
+    $pdo->prepare("INSERT OR IGNORE INTO roles (name, permissions) VALUES (?, ?)")->execute([
+        'moderator',
+        json_encode(['threads.approve', 'posts.edit', 'threads.delete', 'threads.lock', 'threads.sticky', 'threads.move', 'threads.split', 'threads.merge', 'threads.copy'])
+    ]);
+    $pdo->prepare("INSERT OR IGNORE INTO roles (name, permissions) VALUES (?, ?)")->execute([
+        'admin',
+        json_encode(['admin.access', 'threads.delete', 'users.ban', 'threads.approve', 'posts.edit', 'threads.lock', 'threads.sticky', 'threads.move', 'threads.split', 'threads.merge', 'threads.copy'])
+    ]);
 }
 
 function create_user_upload(PDO $pdo, string $username, string $role): int

@@ -26,6 +26,7 @@ function setupE2eDB(): PDO
             avatar TEXT,
             status TEXT DEFAULT 'active',
             suspension_time INTEGER DEFAULT 0,
+            session_version INTEGER DEFAULT 1,
             email_verified INTEGER DEFAULT 1,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
@@ -119,6 +120,7 @@ function test_e2e_register_login_create_thread_reply(): Test
 
     $_SESSION['user_id'] = $user['id'];
     $_SESSION['user_role'] = $user['role'];
+    $_SESSION['session_version'] = 1;
     $t->assert('Step 2: Session established', is_logged_in());
 
     $stmt = $pdo->prepare("INSERT INTO threads (category_id, user_id, title, content, status) VALUES (?, ?, ?, ?, 'visible')");
@@ -155,19 +157,21 @@ function test_e2e_thread_moderator_hides(): Test
     $authz = new AuthZ($pdo);
     App::getInstance()->authz = $authz;
 
+    // Create regular user
     $pdo->prepare("INSERT INTO users (id, username, password, email, role, email_verified) VALUES (10, 'regularuser', ?, 'user@test.com', 'user', 1)")
         ->execute([password_hash('UserP4ssword', PASSWORD_DEFAULT)]);
 
     $pdo->prepare("INSERT INTO threads (id, category_id, user_id, title, content, status) VALUES (100, 1, 10, 'User Thread', 'Content', 'visible')")->execute();
 
-    $_SESSION = ['user_id' => 10, 'user_role' => 'user'];
+    $_SESSION = ['user_id' => 10, 'user_role' => 'user', 'session_version' => 1];
     $t->assert('User can see visible thread', can_view_thread('visible'));
 
     $pdo->prepare("UPDATE threads SET status = 'hidden' WHERE id = 100")->execute();
 
     $t->assert('User cannot see hidden thread', !can_view_thread('hidden'));
 
-    $_SESSION = ['user_id' => 2, 'user_role' => 'moderator'];
+    // Use existing moderator user (id=2 created by setupE2eDB)
+    $_SESSION = ['user_id' => 2, 'user_role' => 'moderator', 'session_version' => 1];
     $t->assert('Moderator can see hidden thread', can_view_thread('hidden'));
 
     $_SESSION = [];

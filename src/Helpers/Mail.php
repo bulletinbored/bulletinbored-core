@@ -22,10 +22,12 @@ function send_email($to, $subject, $body) {
     $mailFrom = $config['mail_from'] ?? '';
     $mailFromName = $config['mail_from_name'] ?? '';
 
-    if ($mailFrom === '' || preg_match('/[\r\n]/', $mailFrom)) {
+    $filteredFrom = filter_var($mailFrom, FILTER_VALIDATE_EMAIL);
+    if ($mailFrom === '' || $filteredFrom === false) {
         error_log("send_email: invalid mail_from address");
         return false;
     }
+    $mailFrom = $filteredFrom;
     if (preg_match('/[\r\n]/', $mailFromName)) {
         error_log("send_email: invalid mail_from_name");
         return false;
@@ -95,10 +97,12 @@ function send_email($to, $subject, $body) {
         if ($secure === 'tls') {
             $sendCommand($fp, 'STARTTLS');
             $readResponse($fp);
-            if (stream_socket_enable_crypto($fp, true, STREAM_CRYPTO_METHOD_TLS_CLIENT)) {
-                $sendCommand($fp, 'EHLO ' . (php_uname('n') ?: 'localhost'));
-                $readResponse($fp);
+            if (!stream_socket_enable_crypto($fp, true, STREAM_CRYPTO_METHOD_TLS_CLIENT)) {
+                fclose($fp);
+                error_log("SMTP STARTTLS failed");
+                return false;
             }
+            $sendCommand($fp, 'EHLO ' . (php_uname('n') ?: 'localhost'));
         }
 
         if ($username !== '' && $password !== '') {
@@ -110,7 +114,7 @@ function send_email($to, $subject, $body) {
             $readResponse($fp);
         }
 
-        $sendCommand($fp, 'MAIL FROM:<' . $config['mail_from'] . '>');
+        $sendCommand($fp, 'MAIL FROM:<' . $filteredFrom . '>');
         $readResponse($fp);
         $sendCommand($fp, 'RCPT TO:<' . $to . '>');
         $readResponse($fp);

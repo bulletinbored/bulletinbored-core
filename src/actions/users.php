@@ -290,6 +290,11 @@ function handle_edit_profile(string $method): \Bulletin\Response|bool
             return redirect(url('edit_profile'));
         }
 
+        if (!rate_limit('edit_profile', 20, 3600, (string)($_SESSION['user_id'] ?? 0))) {
+            $_SESSION['profile_error'] = 'You are updating your profile too fast. Please try again later.';
+            return redirect(url('edit_profile'));
+        }
+
         if (!empty($_FILES['avatar']['name'])) {
             $avatarDir = __DIR__ . '/../../uploads/avatars/';
             if (!is_dir($avatarDir)) {
@@ -409,6 +414,11 @@ function handle_remove_avatar(string $method): \Bulletin\Response|bool
     if ($method === 'POST') {
         if (!csrf_validate_request()) {
             $_SESSION['avatar_upload_error'] = 'CSRF token invalid';
+            return redirect(url('edit_profile'));
+        }
+
+        if (!rate_limit('remove_avatar', 20, 3600, (string)($_SESSION['user_id'] ?? 0))) {
+            $_SESSION['avatar_upload_error'] = 'You are removing avatars too fast. Please try again later.';
             return redirect(url('edit_profile'));
         }
 

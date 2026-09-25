@@ -8,6 +8,10 @@ function handle_admin_settings_post(): ?string
         $_SESSION['settings_error'] = 'CSRF token invalid';
         return redirect(url('admin_settings'));
     }
+    if (!rate_limit('admin_settings', 30, 3600, (string)($_SESSION['user_id'] ?? 0))) {
+        $_SESSION['settings_error'] = 'You are changing settings too fast. Please try again later.';
+        return redirect(url('admin_settings'));
+    }
 
     $siteName = trim($_POST['site_name'] ?? $config['site_name']);
     $siteTagline = trim($_POST['site_tagline'] ?? $config['site_tagline']);
@@ -61,6 +65,9 @@ function handle_admin_upload_site_image(): \Bulletin\Response|bool
     if (!csrf_validate_request()) {
         return \Bulletin\Response::json(['ok' => false, 'error' => 'CSRF token invalid'], 403);
     }
+    if (!rate_limit('admin_upload_site_image', 20, 3600, (string)($_SESSION['user_id'] ?? 0))) {
+        return \Bulletin\Response::json(['ok' => false, 'error' => 'You are uploading too many site images. Please try again later.'], 429);
+    }
     if (empty($_FILES['site_image']['tmp_name'])) {
         return \Bulletin\Response::json(['ok' => false, 'error' => 'No file uploaded'], 400);
     }
@@ -111,6 +118,10 @@ function handle_admin_smtp_post(): ?string
 
     if (!csrf_validate_request()) {
         return 'CSRF token invalid';
+    }
+    if (!rate_limit('admin_smtp', 30, 3600, (string)($_SESSION['user_id'] ?? 0))) {
+        $_SESSION['smtp_test_error'] = 'You are performing too many SMTP operations. Please try again later.';
+        return redirect(url('admin_smtp'));
     }
 
     if (isset($_POST['send_smtp_test'])) {
