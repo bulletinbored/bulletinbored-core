@@ -99,6 +99,14 @@ class PackageInstaller
     public function safeExtractZip(ZipArchive $zip, string $dest): bool
     {
         $dest = rtrim(str_replace('\\', '/', $dest), '/');
+        // Resolve ".." through the existing parent so a caller passing e.g.
+        // "<root>/lib/../plugins/.install-tmp-x" is canonicalised even if the
+        // intermediate does not exist on Linux (where realpath() otherwise
+        // fails and extraction is rejected).
+        $parentReal = realpath(dirname($dest));
+        if ($parentReal !== false) {
+            $dest = rtrim(str_replace('\\', '/', $parentReal), '/') . '/' . basename($dest);
+        }
         if (!is_dir($dest)) {
             @mkdir($dest, 0755, true);
         }

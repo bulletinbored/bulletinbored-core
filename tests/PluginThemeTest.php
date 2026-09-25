@@ -673,6 +673,10 @@ function test_safe_extract_handles_dotdot_dest(): Test
 
     $base = sys_get_temp_dir() . '/bb_se_' . uniqid();
     mkdir($base, 0755, true);
+    // The packages directory exists in production; the ".." is in the path
+    // UpdateManager builds ("<root>/lib/../plugins").
+    mkdir($base . '/lib', 0755, true);
+    mkdir($base . '/plugins', 0755, true);
     $zipPath = $base . '/p.zip';
     $zip = new ZipArchive();
     $zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE);
@@ -681,15 +685,16 @@ function test_safe_extract_handles_dotdot_dest(): Test
     $zip->close();
 
     // Reproduces the update flow, which passes "<root>/lib/../plugins".
-    $destWithDots = $base . '/sub/../extract';
-    $inst = new PackageInstaller($base, 'plugin_verify_files');
+    $packagesDir = $base . '/lib/../plugins';
+    $destWithDots = $packagesDir . '/.install-tmp-test';
+    $inst = new PackageInstaller($packagesDir, 'plugin_verify_files');
     $zip = new ZipArchive();
     $zip->open($zipPath);
     $ok = $inst->safeExtractZip($zip, $destWithDots);
     $zip->close();
 
     $t->assertTrue('Extraction succeeds with ".." in the destination path', $ok);
-    $t->assertTrue('Nested file extracted', is_file($base . '/extract/a/b.txt'));
+    $t->assertTrue('Nested file extracted', is_file($base . '/plugins/.install-tmp-test/a/b.txt'));
 
     $it = new RecursiveIteratorIterator(
         new RecursiveDirectoryIterator($base, RecursiveDirectoryIterator::SKIP_DOTS),
