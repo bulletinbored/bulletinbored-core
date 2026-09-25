@@ -74,6 +74,7 @@ class PackageInstaller
         }
 
         $this->flattenNestedDir($tmpDir);
+        $this->stripRepoOnlyFiles($tmpDir);
 
         if ($verifyCallback !== null) {
             $verifyResult = $verifyCallback($tmpDir);
@@ -105,7 +106,12 @@ class PackageInstaller
         if ($realDest === false) {
             return false;
         }
-        $realDest = str_replace('\\', '/', $realDest);
+        // Canonicalise $dest as well: callers may pass a path containing ".."
+        // (e.g. "<root>/lib/../plugins"). Without this, the prefix checks below
+        // compare a canonical path (`$realDest`) against a non-canonical
+        // `$target`, so every entry is rejected as "Invalid ZIP entries".
+        $dest = str_replace('\\', '/', $realDest);
+        $realDest = $dest;
 
         for ($i = 0; $i < $zip->numFiles; $i++) {
             $name = $zip->getNameIndex($i);
@@ -181,7 +187,14 @@ class PackageInstaller
             $actual = [];
             foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS)) as $item) {
                 if ($item->isFile()) {
-                    $actual[] = ltrim(str_replace('\\', '/', substr($item->getPathname(), strlen($dir) + 1)), '/');
+                    $relative = ltrim(str_replace('\\', '/', substr($item->getPathname(), strlen($dir) + 1)), '/');
+                    // GitHub source archives (and many repos) contain CI/test
+                    // metadata that is not part of the distributable package.
+                    // It is not expected in the manifest "files" list.
+                    if (self::isRepoOnlyPath($relative)) {
+                        continue;
+                    }
+                    $actual[] = $relative;
                 }
             }
 
@@ -280,6 +293,41 @@ class PackageInstaller
             is_dir($item) ? $this->deleteDir($item) : unlink($item);
         }
         rmdir($dir);
+    }
+
+    /**
+     * Paths that belong to a source repository but not to a distributed
+     * plugin/theme package (CI config, tests, VCS metadata). They are
+     * ignored by the manifest "files" integrity check and stripped from the
+     * deployed package.
+     */
+    public static function isRepoOnlyPath(string $relative): bool
+    {
+        $relative = ltrim(str_replace('\\', '/', $relative), '/');
+        return (bool)preg_match(
+            '#^(?:\.git/|\.github/|tests/|\.gitignore$|\.gitattributes$|\.editorconfig$|composer\.(?:json|lock)$|phpunit\.xml(?:\.dist)?$|\.travis\.yml$)#i',
+            $relative
+        );
+    }
+
+    /**
+     * Remove repo-only paths (tests/, .github/, VCS metadata, ...) from an
+     * extracted package so they are not deployed with the plugin/theme.
+     */
+    public function stripRepoOnlyFiles(string $dir): void
+    {
+        foreach (['.git', '.github', 'tests'] as $child) {
+            $path = rtrim($dir, '/') . '/' . $child;
+            if (is_dir($path)) {
+                $this->deleteDir($path);
+            }
+        }
+        foreach (['.gitignore', '.gitattributes', '.editorconfig', 'composer.json', 'composer.lock', 'phpunit.xml', 'phpunit.xml.dist', '.travis.yml'] as $file) {
+            $path = rtrim($dir, '/') . '/' . $file;
+            if (is_file($path)) {
+                @unlink($path);
+            }
+        }
     }
 
     private function verifyFilesEnabled(): bool

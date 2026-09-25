@@ -240,6 +240,7 @@ class UpdateManager
         $result = $installer->install($zipPath, $targetDir, $verifyCallback);
 
         if (!$result['success']) {
+            error_log('BB EXTENSION INSTALL FAIL (' . $type . ' ' . $name . '): ' . ($result['message'] ?? 'unknown'));
             if (is_dir($backupDir)) {
                 @rename($backupDir, $targetDir);
             } else {

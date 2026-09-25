@@ -628,10 +628,87 @@ function test_plugin_disable_cascades_to_dependents(): Test
     return $t;
 }
 
+function test_package_repo_only_files_ignored(): Test
+{
+    $t = new Test('Package - Repo-only Files Ignored By Integrity Check');
+
+    require_once __DIR__ . '/../lib/PackageInstaller.php';
+
+    $dir = sys_get_temp_dir() . '/bb_pkg_ro_' . uniqid();
+    mkdir($dir . '/tests', 0755, true);
+    mkdir($dir . '/.github/workflows', 0755, true);
+    file_put_contents($dir . '/manifest.json', json_encode(['name' => 'x', 'version' => '1.0.0', 'files' => ['x.php', 'manifest.json']]));
+    file_put_contents($dir . '/x.php', '<?php');
+    file_put_contents($dir . '/tests/t.php', '<?php');
+    file_put_contents($dir . '/.github/workflows/ci.yml', 'name: ci');
+    file_put_contents($dir . '/.gitignore', 'vendor/');
+
+    $inst = new PackageInstaller($dir, 'plugin_verify_files');
+    $t->assertTrue('Repo-only extras do not fail verification', !empty($inst->verifyInstalledFiles($dir)['success']));
+
+    file_put_contents($dir . '/evil.php', '<?php // undeclared');
+    $t->assertFalse('Arbitrary undeclared file still fails', !empty($inst->verifyInstalledFiles($dir)['success']));
+
+    $it = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::CHILD_FIRST
+    );
+    foreach ($it as $file) {
+        $file->isDir() ? @rmdir($file->getRealPath()) : @unlink($file->getRealPath());
+    }
+    @rmdir($dir);
+
+    return $t;
+}
+
+function test_safe_extract_handles_dotdot_dest(): Test
+{
+    $t = new Test('Package - safeExtractZip handles non-normalised dest path');
+
+    require_once __DIR__ . '/../lib/PackageInstaller.php';
+    if (!class_exists('ZipArchive')) {
+        $t->assert('Skipped: ZipArchive unavailable', true);
+        return $t;
+    }
+
+    $base = sys_get_temp_dir() . '/bb_se_' . uniqid();
+    mkdir($base, 0755, true);
+    $zipPath = $base . '/p.zip';
+    $zip = new ZipArchive();
+    $zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+    $zip->addFromString('root.txt', 'y');
+    $zip->addFromString('a/b.txt', 'x');
+    $zip->close();
+
+    // Reproduces the update flow, which passes "<root>/lib/../plugins".
+    $destWithDots = $base . '/sub/../extract';
+    $inst = new PackageInstaller($base, 'plugin_verify_files');
+    $zip = new ZipArchive();
+    $zip->open($zipPath);
+    $ok = $inst->safeExtractZip($zip, $destWithDots);
+    $zip->close();
+
+    $t->assertTrue('Extraction succeeds with ".." in the destination path', $ok);
+    $t->assertTrue('Nested file extracted', is_file($base . '/extract/a/b.txt'));
+
+    $it = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($base, RecursiveDirectoryIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::CHILD_FIRST
+    );
+    foreach ($it as $file) {
+        $file->isDir() ? @rmdir($file->getRealPath()) : @unlink($file->getRealPath());
+    }
+    @rmdir($base);
+
+    return $t;
+}
+
 register_tests(
     'test_plugin_enable_disable',
     'test_plugin_missing_declared_file',
     'test_plugin_extra_undeclared_file',
+    'test_package_repo_only_files_ignored',
+    'test_safe_extract_handles_dotdot_dest',
     'test_plugin_dependency_missing',
     'test_plugin_dependency_cycle',
     'test_plugin_install_fails_safely',
