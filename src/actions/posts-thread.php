@@ -59,7 +59,9 @@ function handle_upload_image(): \Bulletin\Response|bool
         }
     }
 
-    $uploadDir = __DIR__ . '/../../uploads/private';
+    $uploadDir = function_exists('ensure_private_uploads_dir')
+        ? ensure_private_uploads_dir()
+        : __DIR__ . '/../../uploads/private';
     if (!is_dir($uploadDir)) {
         @mkdir($uploadDir, 0755, true);
     }

@@ -4,6 +4,34 @@
  * File upload validation and management.
  */
 
+/**
+ * Ensure the private uploads directory exists and carries a deny-all .htaccess
+ * (defense in depth for Apache; nginx/IIS are covered by the shipped server
+ * configs). This is invoked on every request from setup.php, and from the
+ * upload handler before writing, so the protection exists on any deployment —
+ * the directory itself is not tracked in git.
+ *
+ * @return string The private uploads directory path.
+ */
+function ensure_private_uploads_dir(): string
+{
+    $dir = __DIR__ . '/../../uploads/private';
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0755, true);
+    }
+    $htaccess = $dir . '/.htaccess';
+    if (is_dir($dir) && !file_exists($htaccess)) {
+        @file_put_contents(
+            $htaccess,
+            "# Deny all direct access to private uploads. These files are served\n"
+            . "# only by the authenticated /download handler.\n"
+            . "<IfModule mod_authz_core.c>\n    Require all denied\n</IfModule>\n"
+            . "<IfModule !mod_authz_core.c>\n    Deny from all\n</IfModule>\n"
+        );
+    }
+    return $dir;
+}
+
 function validate_upload(string $tmpPath, string $origName, array $allowed, int $maxSize): ?array
 {
     if ($tmpPath === '' || !is_uploaded_file($tmpPath)) {

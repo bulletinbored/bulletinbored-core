@@ -174,8 +174,17 @@ function print_source_coverage(bool $xdebugCoverage, bool $pcovCoverage = false)
         echo str_repeat('-', 60) . "\n";
         printf("  Line coverage: %.1f%% (%d/%d executable lines)\n", $totalExecutable ? 100 * $totalCovered / $totalExecutable : 0.0, $totalCovered, $totalExecutable);
     } elseif ($pcovCoverage && function_exists('\pcov\collect')) {
-        \pcov\stop();
-        $data = \pcov\collect(\pcov\all);
+        // Coverage collection is informational: never let it fail the run.
+        $data = [];
+        try {
+            \pcov\stop();
+            $data = \pcov\collect(\pcov\all);
+        } catch (\Throwable $e) {
+            $data = [];
+        }
+        if (!is_array($data)) {
+            $data = [];
+        }
         $totalCovered = 0;
         foreach ($srcFiles as $real => $rel) {
             $covered = 0;

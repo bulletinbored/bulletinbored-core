@@ -15,10 +15,13 @@ function test_upload_private_directory_exists(): Test
 {
     $t = new Test('Upload - Private directory exists');
 
+    // The directory is runtime state (gitignored), so the app must create it.
+    if (function_exists('ensure_private_uploads_dir')) {
+        ensure_private_uploads_dir();
+    }
     $privateDir = __DIR__ . '/../uploads/private';
-    $exists = is_dir($privateDir);
 
-    $t->assertTrue('Private uploads directory exists', $exists);
+    $t->assertTrue('ensure_private_uploads_dir() creates the directory', is_dir($privateDir));
 
     return $t;
 }
@@ -27,6 +30,9 @@ function test_upload_private_directory_denies_direct_access(): Test
 {
     $t = new Test('Upload - Private directory has .htaccess');
 
+    if (function_exists('ensure_private_uploads_dir')) {
+        ensure_private_uploads_dir();
+    }
     $htaccessPath = __DIR__ . '/../uploads/private/.htaccess';
     $exists = file_exists($htaccessPath);
 
@@ -34,7 +40,7 @@ function test_upload_private_directory_denies_direct_access(): Test
 
     if ($exists) {
         $content = file_get_contents($htaccessPath);
-        $deniesAll = strpos($content, 'deny') !== false || strpos($content, 'Require all denied') !== false;
+        $deniesAll = stripos($content, 'deny') !== false || strpos($content, 'Require all denied') !== false;
         $t->assertTrue('.htaccess denies all access', $deniesAll);
     }
 

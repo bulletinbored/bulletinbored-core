@@ -10,12 +10,19 @@
  * Returns the active PDO connection in $pdo (global).
  */
 
-foreach (['data', 'plugins', 'uploads', 'uploads/avatars'] as $d) {
+foreach (['data', 'plugins', 'uploads', 'uploads/avatars', 'uploads/private'] as $d) {
     $dir = __DIR__ . '/../' . $d;
     if (!is_dir($dir)) {
         mkdir($dir, 0755, true);
     }
 }
+
+// Ensure the private uploads directory carries a deny-all .htaccess. The
+// directory is not tracked in git, so this guarantees the protection exists on
+// every deployment (defence in depth for Apache; nginx/IIS use the shipped
+// server configs).
+require_once __DIR__ . '/Helpers/Upload.php';
+ensure_private_uploads_dir();
 
 $dbPath = $config['db_path'];
 $dbDriver = $config['db_driver'] ?? 'sqlite';
