@@ -14,12 +14,9 @@ function handle_admin_updates(string $method): \Bulletin\Response|bool
         } elseif (!rate_limit('admin_updates_check', 20, 3600, (string)($_SESSION['user_id'] ?? 0))) {
             $updateError = 'You are checking for updates too fast. Please try again later.';
         } else {
-            $catalogMirrorBase = !empty($config['update_mirror']) ? rtrim($config['update_mirror'], '/') : 'https://extend.bulletinbored.net';
-            $remoteCatalogRaw = @file_get_contents($catalogMirrorBase . '/catalog.json');
-            $remoteCatalog = is_string($remoteCatalogRaw) ? json_decode($remoteCatalogRaw, true) : null;
-            $catalog = is_array($remoteCatalog)
-                ? $remoteCatalog
-                : (file_exists(__DIR__.'/../../../data/catalog.json') ? json_decode(file_get_contents(__DIR__.'/../../../data/catalog.json'), true) : []);
+            // Explicit check: force-refresh the catalog (which is also cached to
+            // data/catalog.json) so newly catalogued extensions are seen.
+            $catalog = $updateManager->getCatalog(true);
             $updateResults = $updateManager->checkAll($config['version'] ?? '1.0.0', $pluginManager, $themeManager, $catalog);
         }
     }

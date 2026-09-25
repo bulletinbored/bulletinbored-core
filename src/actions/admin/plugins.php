@@ -2,7 +2,7 @@
 
 function handle_admin_plugins(string $method): \Bulletin\Response|bool
 {
-    global $config, $pluginManager;
+    global $config, $pluginManager, $updateManager;
 
     $adminPluginError = '';
     $adminPluginSuccess = '';
@@ -32,12 +32,8 @@ function handle_admin_plugins(string $method): \Bulletin\Response|bool
                 $tag = $_POST['tag'] ?? null;
                 $name = strtolower($_POST['plugin_name'] ?? '');
                 if (!empty($config['allow_catalog_only'])) {
-                    $catalogMirrorBase = !empty($config['update_mirror']) ? rtrim($config['update_mirror'], '/') : 'https://extend.bulletinbored.net';
-                    $remoteCatalogRaw = @file_get_contents($catalogMirrorBase . '/catalog.json');
-                    $remoteCatalog = is_string($remoteCatalogRaw) ? json_decode($remoteCatalogRaw, true) : null;
-                    $catalog = is_array($remoteCatalog) ? $remoteCatalog : (json_decode(file_get_contents(__DIR__ . '/../../../data/catalog.json'), true) ?: []);
-                    $catalogItem = array_filter($catalog, fn($i) => strtolower($i['name'] ?? '') === $name && strtolower($i['type'] ?? '') === 'plugin');
-                    $catalogItem = array_values($catalogItem);
+                    $catalog = isset($updateManager) ? $updateManager->getCatalog() : (json_decode((string)@file_get_contents(__DIR__ . '/../../../data/catalog.json'), true) ?: []);
+                    $catalogItem = array_values(array_filter($catalog, fn($i) => strtolower($i['name'] ?? '') === $name && strtolower($i['type'] ?? '') === 'plugin'));
                     if (empty($catalogItem)) {
                         $adminPluginError = 'Catalog-only mode: this entry is not present in the catalog.';
                         goto skip_catalog_install;

@@ -9,6 +9,7 @@ class UpdateManager
     private string $manifestPath;
     private array $manifest = [];
     private ?string $updateServer;
+    private ?string $updateMirror;
     private UpdateFetcher $fetcher;
     private UpdateBackup $backup;
 
@@ -16,6 +17,7 @@ class UpdateManager
     {
         $this->manifestPath = $manifestPath;
         $this->updateServer = $updateServer;
+        $this->updateMirror = $updateMirror !== null ? rtrim($updateMirror, '/') : null;
         $this->loadManifest();
 
         $dataDir = dirname($manifestPath);
@@ -557,23 +559,78 @@ class UpdateManager
         }
     }
 
-    public function applyExtensionUpdate(string $type, string $name, string $tag, ?string $repoUrl = null): bool
+    /**
+     * Return the extension catalog, refreshing it from the mirror when the
+     * local cache (data/catalog.json) is missing or older than $ttl seconds.
+     * Falls back to the local cache when the mirror is unreachable.
+     */
+    public function getCatalog(bool $forceRefresh = false, int $ttl = 3600): array
     {
-        if (!$repoUrl) {
-            $catalogPath = __DIR__ . '/../data/catalog.json';
-            if (file_exists($catalogPath)) {
-                $catalog = json_decode(file_get_contents($catalogPath), true);
-                $key = strtolower($name);
-                foreach ($catalog as $item) {
-                    if (strtolower($item['name'] ?? '') === $key && strtolower($item['type'] ?? '') === $type) {
-                        $repoUrl = $item['repo'] ?? null;
-                        break;
+        $localPath = __DIR__ . '/../data/catalog.json';
+        $local = [];
+        if (file_exists($localPath)) {
+            $decoded = json_decode((string)file_get_contents($localPath), true);
+            if (is_array($decoded)) {
+                $local = $decoded;
+            }
+        }
+
+        $isFresh = file_exists($localPath) && (time() - (int)@filemtime($localPath)) < $ttl;
+        if (!$forceRefresh && $isFresh && !empty($local)) {
+            return $local;
+        }
+
+        if (!empty($this->updateMirror)) {
+            $json = $this->fetcher->httpGet($this->updateMirror . '/catalog.json', 10);
+            if ($json !== null) {
+                $remote = json_decode($json, true);
+                if (is_array($remote)) {
+                    $dir = dirname($localPath);
+                    if (!is_dir($dir)) {
+                        @mkdir($dir, 0755, true);
                     }
+                    @file_put_contents($localPath, json_encode($remote, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+                    return $remote;
                 }
             }
         }
 
-        if (!$repoUrl || !preg_match('#github\.com/([^/]+)/([^/]+)$#i', $repoUrl, $m)) {
+        return $local;
+    }
+
+    public function applyExtensionUpdate(string $type, string $name, string $tag, ?string $repoUrl = null): bool
+    {
+        $key = strtolower($name);
+
+        // Resolve the repository from the (auto-refreshed) catalog. The local
+        // data/catalog.json was previously used alone and could be stale, which
+        // made updates for newly catalogued extensions fail.
+        if (!$repoUrl) {
+            foreach ($this->getCatalog() as $item) {
+                if (strtolower($item['name'] ?? '') === $key && strtolower($item['type'] ?? '') === $type) {
+                    $repoUrl = $item['repo'] ?? null;
+                    break;
+                }
+            }
+        }
+
+        // Fall back to the repository recorded at install time: a plugin/theme
+        // may be installed from a repo without being present in the catalog
+        // (e.g. sitemapbored), which previously made every update fail.
+        if (!$repoUrl) {
+            $installedPath = __DIR__ . '/../data/installed.json';
+            if (file_exists($installedPath)) {
+                $installed = json_decode(file_get_contents($installedPath), true);
+                $group = $type === 'theme' ? 'themes' : 'plugins';
+                $entry = $installed[$group][$name] ?? $installed[$group][strtolower($name)] ?? null;
+                if (is_array($entry) && !empty($entry['repo'])) {
+                    $repoUrl = $entry['repo'];
+                }
+            }
+        }
+
+        if (!$repoUrl || !preg_match('#github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$#i', $repoUrl, $m)) {
+            error_log('BB EXTENSION UPDATE: no repository resolved for ' . $type . ' "' . $name . '" (checked mirror catalog, local catalog, installed.json)');
             return false;
         }
 
@@ -581,6 +638,7 @@ class UpdateManager
         $tmpZip = tempnam(sys_get_temp_dir(), 'bbext') . '.zip';
         $data = $this->fetcher->httpGet($zipUrl, 30);
         if ($data === null) {
+            error_log('BB EXTENSION UPDATE: download failed for ' . $name . ' tag ' . $tag . ' (' . $zipUrl . ')');
             return false;
         }
         file_put_contents($tmpZip, $data);
