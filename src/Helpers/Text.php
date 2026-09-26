@@ -18,7 +18,7 @@ function clean_text($data) {
 }
 
 function render_site_name(string $name): string {
-    return preg_match('/[一-鿿]/u', $name) ? $name : ucfirst($name);
+    return $name;
 }
 
 function marked_parse($text) {
