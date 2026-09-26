@@ -36,6 +36,9 @@ body {
     font-size: .95rem;
     padding-top: var(--fb-navbar-h);
     overflow-x: hidden;
+    /* Do not let the browser auto-adjust the scroll position when the layout
+       changes (navbar hide/show), otherwise it fights our scroll logic. */
+    overflow-anchor: none;
 }
 
 a { color: var(--fb-brand); text-decoration: none; }
@@ -908,7 +911,12 @@ hr { border-color: var(--fb-border); opacity: 1; }
         top: 0;
         transition: top .3s cubic-bezier(.4,0,.2,1);
     }
-    body.tabbar-pinned { padding-top: 56px; }
+    /* Keep the body padding unchanged while the tab bar is pinned. Reducing it
+       shifted the whole document by --fb-navbar-h on every toggle, which made
+       mobile browsers re-adjust the scroll position and caused the logo band to
+       flicker. The content now simply scrolls under the pinned tab bar, like
+       with any fixed header, with no layout shift. */
+    body.tabbar-pinned { overflow-anchor: none; }
 
     /* Center the brand on mobile (icons live in the tab bar below) */
     .navbar-forum .navbar-brand {

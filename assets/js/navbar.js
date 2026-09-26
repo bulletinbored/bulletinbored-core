@@ -3,39 +3,46 @@
     const tabbar = document.querySelector('.mobile-tabbar');
     if (!nav) return;
 
+    const TOP_REVEAL = 80; // Always show the navbar above this offset.
+    const DELTA = 8;       // Ignore micro scroll jitter (px) to avoid flicker.
+
     let lastY = window.scrollY;
     let ticking = false;
-    let scrollingDown = false;
+    let navHidden = false;
+
+    function setHidden(hidden) {
+        if (hidden === navHidden) return;
+        navHidden = hidden;
+        nav.classList.toggle('nav-hidden', hidden);
+        if (tabbar) tabbar.classList.toggle('tabbar-top', hidden);
+        document.body.classList.toggle('tabbar-pinned', hidden);
+    }
 
     function update() {
         const y = window.scrollY;
 
         if (window.matchMedia('(max-width: 991.98px)').matches) {
-            // Hide navbar when scrolling down (past 80px), show on scroll up.
-            if (y > 80 && y > lastY) {
-                if (!scrollingDown) {
-                    nav.classList.add('nav-hidden');
-                    if (tabbar) tabbar.classList.add('tabbar-top');
-                    document.body.classList.add('tabbar-pinned');
-                    scrollingDown = true;
-                }
-            } else if (y < lastY) {
-                if (scrollingDown) {
-                    nav.classList.remove('nav-hidden');
-                    if (tabbar) tabbar.classList.remove('tabbar-top');
-                    document.body.classList.remove('tabbar-pinned');
-                    scrollingDown = false;
+            if (y <= TOP_REVEAL) {
+                // Near the top the navbar is always visible.
+                setHidden(false);
+                lastY = y;
+            } else {
+                const delta = y - lastY;
+                // Only react once the accumulated movement exceeds the dead-zone.
+                if (delta > DELTA) {
+                    setHidden(true);
+                    lastY = y;
+                } else if (delta < -DELTA) {
+                    setHidden(false);
+                    lastY = y;
                 }
             }
         } else {
-            nav.classList.remove('nav-hidden');
-            if (tabbar) tabbar.classList.remove('tabbar-top');
-            document.body.classList.remove('tabbar-pinned');
-            scrollingDown = false;
+            setHidden(false);
+            lastY = y;
         }
 
         nav.classList.toggle('scrolled', y > 20);
-        lastY = y;
         ticking = false;
     }
 

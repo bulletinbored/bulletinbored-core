@@ -282,7 +282,8 @@ function render_footer() {
     </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" nonce="<?= htmlspecialchars(csp_nonce(), ENT_QUOTES, 'UTF-8') ?>"></script>
-    <script src="<?= htmlspecialchars(base_url() . '/assets/js/navbar.js', ENT_QUOTES, 'UTF-8') ?>" nonce="<?= htmlspecialchars(csp_nonce(), ENT_QUOTES, 'UTF-8') ?>"></script>
+    <?php $navbarJs = __DIR__ . '/../assets/js/navbar.js'; ?>
+    <script src="<?= htmlspecialchars(base_url() . '/assets/js/navbar.js?v=' . (@filemtime($navbarJs) ?: '1'), ENT_QUOTES, 'UTF-8') ?>" nonce="<?= htmlspecialchars(csp_nonce(), ENT_QUOTES, 'UTF-8') ?>"></script>
     <script src="<?= htmlspecialchars(base_url() . '/assets/js/core-helpers.js', ENT_QUOTES, 'UTF-8') ?>" nonce="<?= htmlspecialchars(csp_nonce(), ENT_QUOTES, 'UTF-8') ?>"></script>
     <script src="<?= htmlspecialchars(base_url() . '/assets/js/mobile-panel.js', ENT_QUOTES, 'UTF-8') ?>" nonce="<?= htmlspecialchars(csp_nonce(), ENT_QUOTES, 'UTF-8') ?>"></script>
 </body>
