@@ -178,7 +178,7 @@ class ThemeManager
     public function installFromZip(string $zipPath): array
     {
         $themeName = $this->detectThemeNameFromZip($zipPath);
-        if ($themeName === null) {
+        if ($themeName === null || !$this->isValidPackageName($themeName)) {
             return ['success' => false, 'message' => 'Cannot detect theme name from ZIP'];
         }
 
@@ -189,7 +189,8 @@ class ThemeManager
         }
 
         $result = $this->installer->install($zipPath, $finalDir, function ($tmpDir) {
-            return $this->verifyInstalledFiles($tmpDir);
+            $check = $this->verifyInstalledFiles($tmpDir);
+            return empty($check['success']) ? $check : null;
         });
 
         if ($result['success']) {
@@ -198,6 +199,72 @@ class ThemeManager
         }
 
         return $result;
+    }
+
+    /**
+     * Update an installed theme from a ZIP. Moves the current version aside so
+     * a failed install can be rolled back (same model as PluginManager).
+     */
+    public function updateFromZip(string $name, string $zipPath): array
+    {
+        $key = strtolower($name);
+        if (!$this->isValidPackageName($key)) {
+            @unlink($zipPath);
+            return ['success' => false, 'message' => 'Invalid theme name'];
+        }
+
+        $this->discover();
+        if (!isset($this->themes[$key])) {
+            @unlink($zipPath);
+            return ['success' => false, 'message' => 'Theme not found'];
+        }
+
+        $targetDir = rtrim($this->themesDir, '/') . '/' . $key;
+
+        $backupDir = null;
+        if (is_dir($targetDir)) {
+            $backupDir = rtrim($this->themesDir, '/') . '/_old_' . $key . '_' . uniqid();
+            if (!@rename($targetDir, $backupDir)) {
+                @unlink($zipPath);
+                return ['success' => false, 'message' => 'Failed to back up existing theme before update'];
+            }
+        }
+
+        $result = $this->installer->install($zipPath, $targetDir, function ($tmpDir) {
+            $check = $this->verifyInstalledFiles($tmpDir);
+            return empty($check['success']) ? $check : null;
+        });
+
+        if (!$result['success']) {
+            if (is_dir($targetDir)) {
+                $this->installer->deleteDir($targetDir);
+            }
+            if ($backupDir !== null && is_dir($backupDir)) {
+                @rename($backupDir, $targetDir);
+            }
+            return $result;
+        }
+
+        if ($backupDir !== null && is_dir($backupDir)) {
+            $this->installer->deleteDir($backupDir);
+        }
+
+        $this->themes = [];
+        $this->discover();
+
+        return [
+            'success' => true,
+            'message' => 'Theme updated',
+            'manifest' => $this->themes[$key] ?? null,
+        ];
+    }
+
+    /**
+     * Package names must map directly to a folder name under themes/.
+     */
+    private function isValidPackageName(string $name): bool
+    {
+        return (bool)preg_match('/^[a-z0-9][a-z0-9_-]*$/', $name);
     }
 
     /**
@@ -356,13 +423,31 @@ class ThemeManager
         $repoName = basename(str_replace(['\\', '.git'], ['', ''], $repo));
         $targetDir = $dest . ($expectedName ?: $repoName);
 
+        // Never delete a working theme before the replacement has been
+        // downloaded, extracted and validated. Move it aside and restore it
+        // if anything fails.
+        $backupDir = null;
         if (is_dir($targetDir)) {
-            $this->deleteDir($targetDir);
+            $backupDir = rtrim($this->themesDir, '/') . '/_old_' . ($expectedName ?: $repoName) . '_' . uniqid();
+            if (!@rename($targetDir, $backupDir)) {
+                return ['success' => false, 'message' => 'Failed to back up existing theme before reinstall'];
+            }
         }
+
+        $restoreBackup = function () use (&$backupDir, $targetDir) {
+            if (is_dir($targetDir)) {
+                $this->installer->deleteDir($targetDir);
+            }
+            if ($backupDir !== null && is_dir($backupDir)) {
+                @rename($backupDir, $targetDir);
+                $backupDir = null;
+            }
+        };
 
         require_once __DIR__ . '/repo_install.php';
         $result = install_repo_package($repoUrl, $targetDir, $tag, $expectedName ?: $repoName);
         if (!$result['success']) {
+            $restoreBackup();
             return $result;
         }
 
@@ -408,10 +493,12 @@ class ThemeManager
         }
 
         if (!isset($this->themes[$name])) {
-            if (is_dir($targetDir)) {
-                $this->deleteDir($targetDir);
-            }
+            $restoreBackup();
             return ['success' => false, 'message' => 'Installed package is not a valid theme. Ensure the repository contains a valid style.css and optional manifest.json.'];
+        }
+
+        if ($backupDir !== null && is_dir($backupDir)) {
+            $this->installer->deleteDir($backupDir);
         }
 
         return ['success' => true, 'message' => 'Theme installed from repo', 'manifest' => $this->themes[$name]];

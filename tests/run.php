@@ -20,13 +20,17 @@ $listOnly = false;
 $coverage = false;
 
 foreach ($argv as $arg) {
+    // argv[0] is the script path, which may be relative and use either slash
+    // style (notably "tests\run.php" on Windows). Never treat it as a filter.
+    $isRunner = $arg === __FILE__ || basename(str_replace('\\', '/', $arg)) === 'run.php';
+
     if ($arg === '--verbose' || $arg === '-v') {
         $verbose = true;
     } elseif ($arg === '--list') {
         $listOnly = true;
     } elseif ($arg === '--coverage') {
         $coverage = true;
-    } elseif ($arg !== __FILE__ && $arg !== 'run.php' && $arg !== 'tests/run.php') {
+    } elseif (!$isRunner) {
         $filter = $arg;
     }
 }

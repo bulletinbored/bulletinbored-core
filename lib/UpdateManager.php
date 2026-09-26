@@ -202,6 +202,10 @@ class UpdateManager
             return false;
         }
 
+        // The admin form submits "plugins"/"themes"; normalise to the singular
+        // values used by the extension pipeline.
+        $type = rtrim(strtolower($type), 's');
+
         if ($type === 'plugin' || $type === 'theme') {
             return $this->applyExtensionUpdateFromZip($type, $name, $zipPath);
         }
@@ -217,47 +221,33 @@ class UpdateManager
             return false;
         }
 
+        require_once __DIR__ . '/PluginManager.php';
+        require_once __DIR__ . '/ThemeManager.php';
+
+        $root = rtrim(__DIR__ . '/../', '/');
+        $dataDir = dirname($this->manifestPath);
+
+        // Delegate to the manager that owns the package lifecycle, so backup,
+        // manifest validation, installed.json, lifecycle hooks (on_update) and
+        // rollback all follow exactly one code path instead of the simplified
+        // pipeline this method used to implement.
         if ($type === 'plugin') {
-            $packagesDir = rtrim(__DIR__ . '/../plugins', '/') . '/';
+            $manager = new PluginManager($root . '/plugins', $dataDir . '/plugins.json');
+            $result = $manager->updateFromZip($name, $zipPath);
+            $group = 'plugins';
         } else {
-            $packagesDir = rtrim(__DIR__ . '/../themes', '/') . '/';
+            $manager = new ThemeManager($root . '/themes', $dataDir . '/themes.json', 'freshbored');
+            $result = $manager->updateFromZip($name, $zipPath);
+            $group = 'themes';
         }
 
-        $targetDir = $packagesDir . $name;
-        $backupDir = $packagesDir . '_old_' . $name . '_' . uniqid();
-
-        if (is_dir($targetDir)) {
-            if (!@rename($targetDir, $backupDir)) {
-                return false;
-            }
-        }
-
-        $verifyConfigKey = $type === 'plugin' ? 'plugin_verify_files' : 'theme_verify_files';
-        $installer = new PackageInstaller($packagesDir, $verifyConfigKey);
-
-        $verifyCallback = function (string $tmpDir) use ($type) {
-            return $this->verifyExtractedPackage($type, $tmpDir);
-        };
-
-        $result = $installer->install($zipPath, $targetDir, $verifyCallback);
-
-        if (!$result['success']) {
-            error_log('BB EXTENSION INSTALL FAIL (' . $type . ' ' . $name . '): ' . ($result['message'] ?? 'unknown'));
-            if (is_dir($backupDir)) {
-                @rename($backupDir, $targetDir);
-            } else {
-                $this->backup->deleteRecursive($targetDir);
-            }
+        if (empty($result['success'])) {
+            error_log('BB EXTENSION UPDATE FAIL (' . $type . ' ' . $name . '): ' . ($result['message'] ?? 'unknown'));
             return false;
         }
 
-        if (is_dir($backupDir)) {
-            $this->backup->deleteRecursive($backupDir);
-        }
-
-        $version = $this->detectVersionFromPackage($targetDir);
-        $this->syncVersionMetadata($targetDir, $version);
-        $this->setVersion($type . 's', $name, $version);
+        $version = $result['manifest']['version'] ?? '1.0.0';
+        $this->setVersion($group, $name, $version);
         $this->fetcher->clearCache();
         return true;
     }
@@ -412,26 +402,6 @@ class UpdateManager
 
         $this->fetcher->clearCache();
         return true;
-    }
-
-    private function detectVersionFromPackage(string $targetDir): string
-    {
-        $manifestFile = $targetDir . '/manifest.json';
-        if (file_exists($manifestFile)) {
-            $data = json_decode(file_get_contents($manifestFile), true);
-            if (is_array($data) && !empty($data['version'])) {
-                return $data['version'];
-            }
-        }
-
-        foreach (glob($targetDir . '/*.php') as $phpFile) {
-            $content = file_get_contents($phpFile);
-            if (preg_match('/Version:\s*([\d\.]+)/i', $content, $m)) {
-                return $m[1];
-            }
-        }
-
-        return '1.0.0';
     }
 
     public function applyCoreUpdate(string $tag): bool
@@ -644,29 +614,6 @@ class UpdateManager
         file_put_contents($tmpZip, $data);
 
         return $this->applyExtensionUpdateFromZip($type, $name, $tmpZip);
-    }
-
-    private function syncVersionMetadata(string $targetDir, string $tag): void
-    {
-        $version = ltrim($tag, 'v');
-        $manifestFile = $targetDir . '/manifest.json';
-        if (file_exists($manifestFile)) {
-            $pm = json_decode(file_get_contents($manifestFile), true);
-            if (is_array($pm)) {
-                $pm['version'] = $version;
-                file_put_contents($manifestFile, json_encode($pm, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-            }
-        } else {
-            file_put_contents($manifestFile, json_encode(['version' => $version], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-        }
-        foreach (glob($targetDir . '/*.php') as $phpFile) {
-            $content = file_get_contents($phpFile);
-            if (preg_match('/Version:\s*([\d\.]+)/i', $content)) {
-                $content = preg_replace('/(Version:\s*)[\d\.]+/i', '$1' . $version, $content);
-                file_put_contents($phpFile, $content);
-                break;
-            }
-        }
     }
 
     private function removeInstallerScripts(string $root): void

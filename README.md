@@ -4,8 +4,12 @@ Minimal, extensible forum software with zero dependencies. Upload files and run 
 
 ## Requirements
 
-- **PHP 8.1+** with PDO extension (pdo_sqlite or pdo_mysql)
+- **PHP 8.1+** with the PDO extension (`pdo_sqlite` or `pdo_mysql`)
+- **mbstring** extension (UTF-8 string handling)
+- **zip** extension (`ZipArchive`) — required to install or update plugins, themes, and language packs
 - **Web server** — Apache, Nginx, IIS, LiteSpeed, or PHP built-in server
+
+`curl` is optional: when it is missing, package downloads fall back to `file_get_contents()` (which requires `allow_url_fopen`).
 
 ## Installation
 
@@ -71,6 +75,21 @@ After installation completes, **delete the installer files** from your server:
 - `install3.php`
 
 Leaving them in place is a security risk.
+
+## Production checklist
+
+- **Delete the installer files** (`install.php`, `install2.php`, `install3.php`, `api/install.php`) after setup.
+- **`display_errors = Off`** and `expose_php = Off` in `php.ini` (the `doctor` command warns if they are on).
+- **HTTPS**: enable `force_https` / `cookie_secure`; behind a proxy set `X-Forwarded-Proto`.
+- **Confirm sensitive paths return 403**: `data/`, `uploads/private/`, `config.json`, `bb.php`, `router.php`. The shipped `.htaccess`, `nginx.conf`, `web.config` and `router.php` handle this — keep the rules if you customise them.
+- **Change the admin password** if it was auto-generated during a manual install (see below).
+- **Keep `data/`, `uploads/`, `uploads/avatars/`, `uploads/private/` writable** by the web server user.
+- **Back up** `config.json` and the database; `data/` also holds sessions, logs and update metadata.
+- **Keep `plugin_verify_files` / `theme_verify_files` enabled** and trust only extension sources you have reviewed.
+
+On a manual install without `admin_pass` in `config.json`, the first request generates
+a temporary admin password and writes it to the PHP error log — change it immediately
+after the first login.
 
 ## Manual installation
 
@@ -167,3 +186,9 @@ trust in its source. Defense-in-depth is provided by Zip Slip protection on ever
 package extraction, JSON-only (non-executable) language files, HTML sanitization under
 a nonce-based CSP, and the `plugin_verify_files` / `theme_verify_files` integrity checks
 (enabled by default).
+
+Package rollback is **filesystem-only**. When a plugin or theme install/update
+fails, bulletinbored restores the previous files and `installed.json` metadata,
+but it cannot undo arbitrary database changes an `on_install` / `on_update`
+hook may already have performed. Plugin authors should keep migrations
+idempotent or provide their own rollback logic.

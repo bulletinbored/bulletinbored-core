@@ -13,11 +13,59 @@
  *
  * INTEGRITY AUDIT: This migration performs an integrity check BEFORE adding
  * any constraints. If orphan records exist (referenced IDs that don't exist),
- * the migration fails with a clear error message and does NOT leave the
- * database in a partially migrated state.
+ * the migration fails with a clear error message before any constraint is
+ * created.
+ *
+ * ATOMICITY NOTE: MySQL DDL is not transactional, so this migration cannot be
+ * fully atomic. It is, however, both idempotent (constraints that already exist
+ * are skipped) and self-healing: if an ALTER fails midway, every constraint
+ * created during this run is dropped again before the error is rethrown, so no
+ * partial state is left behind. A re-run also completes constraints left over
+ * from an older partial run.
  */
 class AddForeignKeys
 {
+    /**
+     * Ordered FK definitions:
+     * [table, constraint, column, refTable, refColumn, onDelete, onUpdate].
+     */
+    private function foreignKeySpecs(): array
+    {
+        return [
+            ['threads', 'fk_threads_category', 'category_id', 'categories', 'id', 'SET NULL', 'CASCADE'],
+            ['threads', 'fk_threads_user', 'user_id', 'users', 'id', 'SET NULL', 'CASCADE'],
+            ['posts', 'fk_posts_thread', 'thread_id', 'threads', 'id', 'CASCADE', 'CASCADE'],
+            ['posts', 'fk_posts_user', 'user_id', 'users', 'id', 'SET NULL', 'CASCADE'],
+            ['uploads', 'fk_uploads_thread', 'thread_id', 'threads', 'id', 'CASCADE', 'CASCADE'],
+            ['uploads', 'fk_uploads_post', 'post_id', 'posts', 'id', 'CASCADE', 'CASCADE'],
+            ['uploads', 'fk_uploads_user', 'user_id', 'users', 'id', 'SET NULL', 'CASCADE'],
+            ['thread_watchers', 'fk_watchers_thread', 'thread_id', 'threads', 'id', 'CASCADE', 'CASCADE'],
+            ['thread_watchers', 'fk_watchers_user', 'user_id', 'users', 'id', 'CASCADE', 'CASCADE'],
+            ['notifications', 'fk_notifications_user', 'user_id', 'users', 'id', 'CASCADE', 'CASCADE'],
+            ['private_messages', 'fk_pm_sender', 'sender_id', 'users', 'id', 'CASCADE', 'CASCADE'],
+            ['private_messages', 'fk_pm_recipient', 'recipient_id', 'users', 'id', 'CASCADE', 'CASCADE'],
+            ['email_verifications', 'fk_ev_user', 'user_id', 'users', 'id', 'CASCADE', 'CASCADE'],
+            ['password_resets', 'fk_pr_user', 'user_id', 'users', 'id', 'CASCADE', 'CASCADE'],
+        ];
+    }
+
+    /**
+     * Constraint names already present in the current schema. Used to make the
+     * migration idempotent and to drive a safe down().
+     */
+    private function existingConstraintNames(PDO $pdo): array
+    {
+        $names = [];
+        $stmt = $pdo->query(
+            "SELECT CONSTRAINT_NAME FROM information_schema.TABLE_CONSTRAINTS
+             WHERE CONSTRAINT_SCHEMA = DATABASE()"
+        );
+        foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $name) {
+            $names[(string)$name] = true;
+        }
+        return $names;
+    }
+
     private function checkOrphansAndFail(PDO $pdo, string $table, string $fkCol, string $refTable, string $refCol): void
     {
         $sql = "SELECT COUNT(*) FROM {$table} t
@@ -65,75 +113,35 @@ class AddForeignKeys
             try {
                 $pdo->exec("SET FOREIGN_KEY_CHECKS = 0");
 
-                $pdo->exec("ALTER TABLE threads
-                    ADD CONSTRAINT fk_threads_category
-                    FOREIGN KEY (category_id) REFERENCES categories(id)
-                    ON DELETE SET NULL ON UPDATE CASCADE");
+                $existing = $this->existingConstraintNames($pdo);
+                $created = [];
+                foreach ($this->foreignKeySpecs() as $spec) {
+                    [$table, $constraint, $column, $refTable, $refColumn, $onDelete, $onUpdate] = $spec;
 
-                $pdo->exec("ALTER TABLE threads
-                    ADD CONSTRAINT fk_threads_user
-                    FOREIGN KEY (user_id) REFERENCES users(id)
-                    ON DELETE SET NULL ON UPDATE CASCADE");
+                    // Idempotent: a previous partial run may already have
+                    // created some of these constraints.
+                    if (isset($existing[$constraint])) {
+                        continue;
+                    }
 
-                $pdo->exec("ALTER TABLE posts
-                    ADD CONSTRAINT fk_posts_thread
-                    FOREIGN KEY (thread_id) REFERENCES threads(id)
-                    ON DELETE CASCADE ON UPDATE CASCADE");
-
-                $pdo->exec("ALTER TABLE posts
-                    ADD CONSTRAINT fk_posts_user
-                    FOREIGN KEY (user_id) REFERENCES users(id)
-                    ON DELETE SET NULL ON UPDATE CASCADE");
-
-                $pdo->exec("ALTER TABLE uploads
-                    ADD CONSTRAINT fk_uploads_thread
-                    FOREIGN KEY (thread_id) REFERENCES threads(id)
-                    ON DELETE CASCADE ON UPDATE CASCADE");
-
-                $pdo->exec("ALTER TABLE uploads
-                    ADD CONSTRAINT fk_uploads_post
-                    FOREIGN KEY (post_id) REFERENCES posts(id)
-                    ON DELETE CASCADE ON UPDATE CASCADE");
-
-                $pdo->exec("ALTER TABLE uploads
-                    ADD CONSTRAINT fk_uploads_user
-                    FOREIGN KEY (user_id) REFERENCES users(id)
-                    ON DELETE SET NULL ON UPDATE CASCADE");
-
-                $pdo->exec("ALTER TABLE thread_watchers
-                    ADD CONSTRAINT fk_watchers_thread
-                    FOREIGN KEY (thread_id) REFERENCES threads(id)
-                    ON DELETE CASCADE ON UPDATE CASCADE");
-
-                $pdo->exec("ALTER TABLE thread_watchers
-                    ADD CONSTRAINT fk_watchers_user
-                    FOREIGN KEY (user_id) REFERENCES users(id)
-                    ON DELETE CASCADE ON UPDATE CASCADE");
-
-                $pdo->exec("ALTER TABLE notifications
-                    ADD CONSTRAINT fk_notifications_user
-                    FOREIGN KEY (user_id) REFERENCES users(id)
-                    ON DELETE CASCADE ON UPDATE CASCADE");
-
-                $pdo->exec("ALTER TABLE private_messages
-                    ADD CONSTRAINT fk_pm_sender
-                    FOREIGN KEY (sender_id) REFERENCES users(id)
-                    ON DELETE CASCADE ON UPDATE CASCADE");
-
-                $pdo->exec("ALTER TABLE private_messages
-                    ADD CONSTRAINT fk_pm_recipient
-                    FOREIGN KEY (recipient_id) REFERENCES users(id)
-                    ON DELETE CASCADE ON UPDATE CASCADE");
-
-                $pdo->exec("ALTER TABLE email_verifications
-                    ADD CONSTRAINT fk_ev_user
-                    FOREIGN KEY (user_id) REFERENCES users(id)
-                    ON DELETE CASCADE ON UPDATE CASCADE");
-
-                $pdo->exec("ALTER TABLE password_resets
-                    ADD CONSTRAINT fk_pr_user
-                    FOREIGN KEY (user_id) REFERENCES users(id)
-                    ON DELETE CASCADE ON UPDATE CASCADE");
+                    $pdo->exec("ALTER TABLE {$table}
+                        ADD CONSTRAINT {$constraint}
+                        FOREIGN KEY ({$column}) REFERENCES {$refTable}({$refColumn})
+                        ON DELETE {$onDelete} ON UPDATE {$onUpdate}");
+                    $created[] = [$table, $constraint];
+                }
+            } catch (\Throwable $e) {
+                // MySQL DDL is not transactional. Undo the constraints added
+                // during this run so the migration does not leave a partial
+                // state behind.
+                foreach ($created ?? [] as [$table, $constraint]) {
+                    try {
+                        $pdo->exec("ALTER TABLE {$table} DROP FOREIGN KEY {$constraint}");
+                    } catch (\Throwable $ignore) {
+                        // Best effort; the original error is rethrown below.
+                    }
+                }
+                throw $e;
             } finally {
                 $pdo->exec("SET FOREIGN_KEY_CHECKS = 1");
             }
@@ -165,20 +173,14 @@ class AddForeignKeys
             try {
                 $pdo->exec("SET FOREIGN_KEY_CHECKS = 0");
 
-                $pdo->exec("ALTER TABLE threads DROP FOREIGN KEY IF EXISTS fk_threads_category");
-                $pdo->exec("ALTER TABLE threads DROP FOREIGN KEY IF EXISTS fk_threads_user");
-                $pdo->exec("ALTER TABLE posts DROP FOREIGN KEY IF EXISTS fk_posts_thread");
-                $pdo->exec("ALTER TABLE posts DROP FOREIGN KEY IF EXISTS fk_posts_user");
-                $pdo->exec("ALTER TABLE uploads DROP FOREIGN KEY IF EXISTS fk_uploads_thread");
-                $pdo->exec("ALTER TABLE uploads DROP FOREIGN KEY IF EXISTS fk_uploads_post");
-                $pdo->exec("ALTER TABLE uploads DROP FOREIGN KEY IF EXISTS fk_uploads_user");
-                $pdo->exec("ALTER TABLE thread_watchers DROP FOREIGN KEY IF EXISTS fk_watchers_thread");
-                $pdo->exec("ALTER TABLE thread_watchers DROP FOREIGN KEY IF EXISTS fk_watchers_user");
-                $pdo->exec("ALTER TABLE notifications DROP FOREIGN KEY IF EXISTS fk_notifications_user");
-                $pdo->exec("ALTER TABLE private_messages DROP FOREIGN KEY IF EXISTS fk_pm_sender");
-                $pdo->exec("ALTER TABLE private_messages DROP FOREIGN KEY IF EXISTS fk_pm_recipient");
-                $pdo->exec("ALTER TABLE email_verifications DROP FOREIGN KEY IF EXISTS fk_ev_user");
-                $pdo->exec("ALTER TABLE password_resets DROP FOREIGN KEY IF EXISTS fk_pr_user");
+                $existing = $this->existingConstraintNames($pdo);
+                foreach ($this->foreignKeySpecs() as $spec) {
+                    [$table, $constraint] = $spec;
+                    if (!isset($existing[$constraint])) {
+                        continue;
+                    }
+                    $pdo->exec("ALTER TABLE {$table} DROP FOREIGN KEY {$constraint}");
+                }
             } finally {
                 $pdo->exec("SET FOREIGN_KEY_CHECKS = 1");
             }

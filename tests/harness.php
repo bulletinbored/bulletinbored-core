@@ -302,7 +302,7 @@ function get_test_suite(): TestSuite
 /**
  * Register a test function to be executed by the runner.
  * Usage in test files:
- *   function test_foo(): Test { ... }
+ *   function my_test(): Test { ... }
  *   register_test('test_foo');
  */
 function register_test(string $functionName): void

@@ -296,6 +296,90 @@ function test_plugin_install_fails_safely(): Test
     return $t;
 }
 
+function test_plugin_repo_install_preserves_existing_on_failure(): Test
+{
+    $t = new Test('Plugin - Repo Reinstall Preserves Existing On Failure');
+
+    $tmpDir = sys_get_temp_dir() . '/bb_plugin_test_' . uniqid();
+    $manifestFile = $tmpDir . '/plugins.json';
+    mkdir($tmpDir, 0755, true);
+    file_put_contents($manifestFile, json_encode([]));
+
+    // The repo URL resolves to the folder name 'nonexistent-repo'. The old
+    // code deleted that folder before downloading, so a failed download lost
+    // the working install.
+    createTestPlugin($tmpDir, 'nonexistent-repo');
+
+    $pm = new PluginManager($tmpDir, $manifestFile);
+    $pm->discover();
+
+    $before = $pm->getByName('nonexistent-repo');
+    $t->assert('Plugin exists before failed reinstall', $before !== null);
+
+    $result = $pm->installFromRepo('https://github.com/invalid/nonexistent-repo');
+    $t->assert('Install from invalid repo fails', !$result['success']);
+
+    clearstatcache();
+    $t->assert('Plugin directory restored after failure', is_dir($tmpDir . '/nonexistent-repo'));
+
+    $pm->discover();
+    $after = $pm->getByName('nonexistent-repo');
+    $t->assert('Plugin still discoverable after failed reinstall', $after !== null);
+    $t->assert('No backup directory left behind', count(glob($tmpDir . '/_old_*')) === 0);
+
+    if (is_dir($tmpDir)) {
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($tmpDir, RecursiveDirectoryIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::CHILD_FIRST
+        );
+        foreach ($iterator as $file) {
+            $file->isDir() ? rmdir($file->getRealPath()) : unlink($file->getRealPath());
+        }
+        rmdir($tmpDir);
+    }
+
+    return $t;
+}
+
+function test_theme_repo_install_preserves_existing_on_failure(): Test
+{
+    $t = new Test('Theme - Repo Reinstall Preserves Existing On Failure');
+
+    $tmpDir = sys_get_temp_dir() . '/bb_theme_test_' . uniqid();
+    $manifestFile = $tmpDir . '/themes.json';
+    mkdir($tmpDir, 0755, true);
+    file_put_contents($manifestFile, json_encode([]));
+
+    createTestTheme($tmpDir, 'nonexistent-repo');
+    file_put_contents($tmpDir . '/nonexistent-repo/manifest.json', json_encode([
+        'name' => 'nonexistent-repo',
+        'version' => '1.0.0',
+    ]));
+
+    $tm = new ThemeManager($tmpDir, $manifestFile, 'freshbored');
+
+    $result = $tm->installFromRepo('https://github.com/invalid/nonexistent-repo');
+    $t->assert('Install from invalid repo fails', !$result['success']);
+
+    clearstatcache();
+    $t->assert('Theme directory restored after failure', is_dir($tmpDir . '/nonexistent-repo'));
+    $t->assert('Theme style.css still present', file_exists($tmpDir . '/nonexistent-repo/style.css'));
+    $t->assert('No backup directory left behind', count(glob($tmpDir . '/_old_*')) === 0);
+
+    if (is_dir($tmpDir)) {
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($tmpDir, RecursiveDirectoryIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::CHILD_FIRST
+        );
+        foreach ($iterator as $file) {
+            $file->isDir() ? rmdir($file->getRealPath()) : unlink($file->getRealPath());
+        }
+        rmdir($tmpDir);
+    }
+
+    return $t;
+}
+
 function test_plugin_uninstall(): Test
 {
     $t = new Test('Plugin - Uninstall Removes Plugin');
@@ -423,6 +507,102 @@ function test_theme_install_from_zip(): Test
     $ref->setAccessible(true);
     $detectedName = $ref->invoke($tm, $zipPath);
     $t->assert('Theme name detected from ZIP', $detectedName === 'newtheme');
+
+    if (is_dir($tmpDir)) {
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($tmpDir, RecursiveDirectoryIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::CHILD_FIRST
+        );
+        foreach ($iterator as $file) {
+            $file->isDir() ? rmdir($file->getRealPath()) : unlink($file->getRealPath());
+        }
+        rmdir($tmpDir);
+    }
+
+    return $t;
+}
+
+function test_theme_update_from_zip_replaces_and_cleans_backup(): Test
+{
+    $t = new Test('Theme - updateFromZip replaces and removes backup');
+
+    if (!class_exists('ZipArchive')) {
+        $t->assert('Skipped: ZipArchive unavailable', true);
+        return $t;
+    }
+
+    $tmpDir = sys_get_temp_dir() . '/bb_theme_test_' . uniqid();
+    $manifestFile = $tmpDir . '/themes.json';
+    mkdir($tmpDir, 0755, true);
+    file_put_contents($manifestFile, json_encode([]));
+
+    createTestTheme($tmpDir, 'updatetheme');
+    file_put_contents($tmpDir . '/updatetheme/manifest.json', json_encode([
+        'name' => 'updatetheme',
+        'version' => '1.0.0',
+    ]));
+
+    $tm = new ThemeManager($tmpDir, $manifestFile, 'freshbored');
+
+    $zipPath = $tmpDir . '/updatetheme_v2.zip';
+    $zip = new ZipArchive();
+    $zip->open($zipPath, ZipArchive::CREATE);
+    $zip->addFromString('updatetheme/style.css', '/* Theme: updatetheme v2 */');
+    $zip->addFromString('updatetheme/manifest.json', json_encode(['name' => 'updatetheme', 'version' => '2.0.0']));
+    $zip->close();
+
+    $result = $tm->updateFromZip('updatetheme', $zipPath);
+    $t->assertTrue('Theme update succeeds', !empty($result['success']));
+
+    clearstatcache();
+    $tm->discover();
+    $t->assertEquals('Theme version updated to 2.0.0', '2.0.0', $tm->getAll()['updatetheme']['version'] ?? null);
+    $t->assert('Backup directory removed on success', count(glob($tmpDir . '/_old_*')) === 0);
+
+    if (is_dir($tmpDir)) {
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($tmpDir, RecursiveDirectoryIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::CHILD_FIRST
+        );
+        foreach ($iterator as $file) {
+            $file->isDir() ? rmdir($file->getRealPath()) : unlink($file->getRealPath());
+        }
+        rmdir($tmpDir);
+    }
+
+    return $t;
+}
+
+function test_theme_update_from_zip_rolls_back_on_failure(): Test
+{
+    $t = new Test('Theme - updateFromZip restores previous version on failure');
+
+    $tmpDir = sys_get_temp_dir() . '/bb_theme_test_' . uniqid();
+    $manifestFile = $tmpDir . '/themes.json';
+    mkdir($tmpDir, 0755, true);
+    file_put_contents($manifestFile, json_encode([]));
+
+    createTestTheme($tmpDir, 'rollbacktheme');
+    file_put_contents($tmpDir . '/rollbacktheme/manifest.json', json_encode([
+        'name' => 'rollbacktheme',
+        'version' => '1.0.0',
+    ]));
+
+    $tm = new ThemeManager($tmpDir, $manifestFile, 'freshbored');
+
+    $badZip = $tmpDir . '/broken.zip';
+    file_put_contents($badZip, 'this is not a valid zip archive');
+
+    $result = $tm->updateFromZip('rollbacktheme', $badZip);
+    $t->assertFalse('Theme update fails', !empty($result['success']));
+
+    clearstatcache();
+    $t->assert('Original theme directory restored', is_dir($tmpDir . '/rollbacktheme'));
+    $t->assert('Original style.css still present', file_exists($tmpDir . '/rollbacktheme/style.css'));
+
+    $manifest = json_decode((string)@file_get_contents($tmpDir . '/rollbacktheme/manifest.json'), true);
+    $t->assertEquals('Original version restored', '1.0.0', $manifest['version'] ?? null);
+    $t->assert('No backup directory left behind', count(glob($tmpDir . '/_old_*')) === 0);
 
     if (is_dir($tmpDir)) {
         $iterator = new RecursiveIteratorIterator(
@@ -717,10 +897,14 @@ register_tests(
     'test_plugin_dependency_missing',
     'test_plugin_dependency_cycle',
     'test_plugin_install_fails_safely',
+    'test_plugin_repo_install_preserves_existing_on_failure',
+    'test_theme_repo_install_preserves_existing_on_failure',
     'test_plugin_uninstall',
     'test_theme_activate',
     'test_theme_css_loads',
     'test_theme_install_from_zip',
+    'test_theme_update_from_zip_replaces_and_cleans_backup',
+    'test_theme_update_from_zip_rolls_back_on_failure',
     'test_theme_delete',
     'test_theme_cannot_delete_default',
     'test_plugin_settings',

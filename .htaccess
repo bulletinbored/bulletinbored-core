@@ -12,6 +12,11 @@
     # Protect private uploads - deny direct access
     RewriteRule ^uploads/private(?:/|$) - [F,L]
 
+    # Protect the data directory - deny direct access (SQLite DB, sessions,
+    # logs, caches). data/.htaccess also denies everything; this is
+    # defence-in-depth so the protection does not depend on that file.
+    RewriteRule ^data(?:/|$) - [F,L]
+
     # Block direct access to sensitive files (DB credentials, CLI, dev router)
     RewriteRule ^(?:config\.json|config\.php|bb\.php|router\.php)$ - [F,L]
 
@@ -31,6 +36,7 @@
 # filename — so RedirectMatch is the correct directive here.)
 <IfModule mod_alias.c>
     RedirectMatch 403 (?i)/uploads/private/
+    RedirectMatch 403 (?i)/data(/|$)
 </IfModule>
 
 # Without mod_rewrite the pretty URLs (/login, /register, ...) cannot work.

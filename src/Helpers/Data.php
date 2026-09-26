@@ -22,7 +22,15 @@ function forum_statistics() {
 }
 
 function thread_sort_options() {
-    return ['latest' => t('sort_latest'), 'replies' => t('sort_replies'), 'views' => t('sort_views'), 'newest' => t('sort_newest'), 'oldest' => t('sort_oldest')];
+    $options = ['latest' => t('sort_latest'), 'replies' => t('sort_replies'), 'views' => t('sort_views'), 'newest' => t('sort_newest'), 'oldest' => t('sort_oldest')];
+
+    // Plugins may add their own sort options (e.g. updownbored's "Votes").
+    $pluginManager = App::getInstance()->pluginManager;
+    if ($pluginManager !== null) {
+        $options = $pluginManager->filter('thread_sort_options', $options);
+    }
+
+    return $options;
 }
 
 function fetch_threads(array $opts = []) {
@@ -68,6 +76,13 @@ function fetch_threads(array $opts = []) {
         'oldest' => 't.created_at ASC, t.id ASC',
         default => 't.updated_at DESC, t.id DESC',
     };
+
+    // Let plugins provide the ordering clause for their own sort keys
+    // (e.g. updownbored's "votes" sorts by summed post vote score).
+    $pluginManager = App::getInstance()->pluginManager;
+    if ($pluginManager !== null) {
+        $orderBy = $pluginManager->filter('thread_order_by', $orderBy, $sort);
+    }
 
     $stmt = $pdo->prepare("
         SELECT t.*, u.username AS author, u.avatar AS author_avatar,

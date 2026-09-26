@@ -225,20 +225,51 @@ trait PluginPackages
         return $removed;
     }
 
+    /**
+     * Package names must map directly to a folder/file name under plugins/.
+     */
+    private function isValidPackageName(string $name): bool
+    {
+        return (bool)preg_match('/^[a-z0-9][a-z0-9_-]*$/', $name);
+    }
+
     public function installFromRepo(string $repoUrl, ?string $tag = null, ?string $expectedName = null): array
     {
         $dest = rtrim($this->pluginsDir, '/') . '/';
         $repo = trim($repoUrl, '/');
         $repoName = basename(str_replace(['\\', '.git'], ['', ''], $repo));
-        $targetDir = $dest . ($expectedName ?: $repoName);
+        $name = $expectedName ?: $repoName;
+        $targetDir = $dest . $name;
 
-        if (is_dir($targetDir)) {
-            $this->installer->deleteDir($targetDir);
+        if (!$this->isValidPackageName(strtolower($name))) {
+            return ['success' => false, 'message' => 'Invalid plugin name'];
         }
 
+        // Never delete a working install before the replacement has been
+        // downloaded, extracted and validated. Move it aside and restore it
+        // if anything fails (same model as installFromZip()).
+        $backupDir = null;
+        if (is_dir($targetDir)) {
+            $backupDir = rtrim($this->pluginsDir, '/') . '/_old_' . $name . '_' . uniqid();
+            if (!@rename($targetDir, $backupDir)) {
+                return ['success' => false, 'message' => 'Failed to back up existing plugin before reinstall'];
+            }
+        }
+
+        $restoreBackup = function () use (&$backupDir, $targetDir) {
+            if (is_dir($targetDir)) {
+                $this->installer->deleteDir($targetDir);
+            }
+            if ($backupDir !== null && is_dir($backupDir)) {
+                @rename($backupDir, $targetDir);
+                $backupDir = null;
+            }
+        };
+
         require_once __DIR__ . '/../repo_install.php';
-        $result = install_repo_package($repoUrl, $targetDir, $tag, $expectedName ?: $repoName);
+        $result = install_repo_package($repoUrl, $targetDir, $tag, $name);
         if (!$result['success']) {
+            $restoreBackup();
             return $result;
         }
 
@@ -248,7 +279,7 @@ trait PluginPackages
         for ($i = 0; $i < 10; $i++) {
             $this->plugins = [];
             $this->discover();
-            $manifest = $this->getByName($expectedName ?: $repoName);
+            $manifest = $this->getByName($name);
             if ($manifest && !empty($manifest['file']) && file_exists($manifest['file'])) {
                 break;
             }
@@ -257,10 +288,12 @@ trait PluginPackages
         }
 
         if (!$manifest || empty($manifest['file']) || !file_exists($manifest['file'])) {
-            if (is_dir($targetDir)) {
-                $this->installer->deleteDir($targetDir);
-            }
+            $restoreBackup();
             return ['success' => false, 'message' => 'Installed package is not a valid plugin. Ensure the repository contains a valid manifest.json and bootstrap file.'];
+        }
+
+        if ($backupDir !== null && is_dir($backupDir)) {
+            $this->installer->deleteDir($backupDir);
         }
 
         return ['success' => true, 'message' => 'Plugin installed from repo', 'manifest' => $manifest];
@@ -289,6 +322,11 @@ trait PluginPackages
                 return ['success' => false, 'message' => 'Could not determine plugin name from ZIP manifest'];
             }
             $expectedName = $name;
+        }
+
+        if (!$this->isValidPackageName(strtolower($expectedName))) {
+            @unlink($zipPath);
+            return ['success' => false, 'message' => 'Invalid plugin name'];
         }
 
         $targetDir = rtrim($this->pluginsDir, '/') . '/' . $expectedName;
@@ -381,6 +419,11 @@ trait PluginPackages
     public function updateFromZip(string $name, string $zipPath): array
     {
         $key = strtolower($name);
+        if (!$this->isValidPackageName($key)) {
+            @unlink($zipPath);
+            return ['success' => false, 'message' => 'Invalid plugin name'];
+        }
+
         $this->plugins = $this->getAll();
         if (!isset($this->plugins[$key])) {
             @unlink($zipPath);

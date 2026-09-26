@@ -175,7 +175,8 @@ register_tests(
     'test_plugin_dependency_cycle_and_missing',
     'test_plugin_verify_extracted_manifest',
     'test_plugin_lifecycle_on_install_failure_rolls_back',
-    'test_plugin_lifecycle_on_update_failure_rolls_back'
+    'test_plugin_lifecycle_on_update_failure_rolls_back',
+    'test_plugin_lifecycle_on_update_runs_hook'
 );
 
 function test_plugin_manager_validate_manifest(): Test
@@ -507,6 +508,49 @@ function test_plugin_lifecycle_on_update_failure_rolls_back(): Test
 
     $installed = json_decode((string)@file_get_contents($installedFile), true);
     $t->assertEquals('installed.json rolled back to 1.0.0', '1.0.0', $installed['plugins']['onupdateplug']['version'] ?? null);
+
+    pm_test_rmtree($base);
+    return $t;
+}
+
+function test_plugin_lifecycle_on_update_runs_hook(): Test
+{
+    $t = new Test('PluginManager - on_update hook runs during update');
+
+    if (!class_exists('ZipArchive')) {
+        $t->assert('Skipped: ZipArchive unavailable', true);
+        return $t;
+    }
+
+    $GLOBALS['bb_onupdatehook_ran'] = false;
+    if (!function_exists('onupdatehook_on_update')) {
+        function onupdatehook_on_update() { $GLOBALS['bb_onupdatehook_ran'] = true; }
+    }
+
+    $base = pm_test_tmp_dir('onupdateok');
+    $pluginsDir = $base . '/plugins';
+    @mkdir($pluginsDir, 0755, true);
+    $pm = new PluginManager($pluginsDir, $base . '/plugins.json');
+
+    $v1 = $base . '/onupdatehook_v1.zip';
+    pm_test_make_zip($v1, [
+        'manifest.json' => json_encode(['name' => 'onupdatehook', 'version' => '1.0.0', 'bootstrap' => 'onupdatehook.php']),
+        'onupdatehook.php' => "<?php\n",
+    ]);
+    $pm->installFromZip($v1);
+
+    $v2 = $base . '/onupdatehook_v2.zip';
+    pm_test_make_zip($v2, [
+        'manifest.json' => json_encode(['name' => 'onupdatehook', 'version' => '2.0.0', 'bootstrap' => 'onupdatehook.php']),
+        'onupdatehook.php' => "<?php\n",
+    ]);
+    $result = $pm->updateFromZip('onupdatehook', $v2);
+
+    $t->assertTrue('Update succeeds', !empty($result['success']));
+    $t->assertTrue('on_update hook executed', $GLOBALS['bb_onupdatehook_ran'] === true);
+
+    $manifest = json_decode((string)@file_get_contents($pluginsDir . '/onupdatehook/manifest.json'), true);
+    $t->assertEquals('Files updated to 2.0.0', '2.0.0', $manifest['version'] ?? null);
 
     pm_test_rmtree($base);
     return $t;
