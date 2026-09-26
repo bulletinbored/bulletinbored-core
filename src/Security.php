@@ -124,7 +124,7 @@ function rate_limit_sensitive_actions(): array
         'admin_dashboard_settings', 'admin_settings', 'admin_smtp', 'admin_upload_site_image',
         'admin_catalog', 'admin_langs', 'admin_moderate', 'admin_front_moderate',
         'admin_split_thread', 'admin_merge_thread', 'admin_plugins', 'admin_themes',
-        'admin_updates_apply', 'admin_updates_check', 'admin_install',
+        'admin_updates_apply', 'admin_updates_apply_all', 'admin_updates_check', 'admin_install',
     ];
 }
 

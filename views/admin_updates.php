@@ -77,7 +77,13 @@
 
                 <?php if (!empty($pluginUpdates) || !empty($themeUpdates) || ($updateStatus['core']['update_available'] ?? false)): ?>
                     <div class="mt-4">
-                        <h6><?= t('available_updates') ?></h6>
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="mb-0"><?= t('available_updates') ?></h6>
+                            <form method="POST" class="d-inline">
+                                <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                                <button type="submit" name="apply_all_updates" value="1" class="btn btn-sm btn-success" onclick="return confirm('<?= escape(t('update_all_confirm')) ?>');"><i class="fas fa-download me-1"></i><?= t('update_all') ?></button>
+                            </form>
+                        </div>
                         <div class="table-responsive">
                             <table class="table table-sm table-striped">
                                 <thead>
