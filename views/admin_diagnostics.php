@@ -65,6 +65,29 @@
 
     <div class="card shadow mb-4">
         <div class="card-header">
+            <h5 class="card-title mb-0"><i class="fas fa-shield-halved me-2"></i><?= t('php_settings') ?></h5>
+        </div>
+        <div class="card-body">
+            <table class="table table-bordered">
+                <thead>
+                    <tr><th><?= t('check') ?></th><th><?= t('status') ?></th></tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><?= t('display_errors_setting') ?></td>
+                        <td><?= $diag['display_errors'] ? '<span class="badge bg-warning text-dark">On</span>' : '<span class="badge bg-success">Off</span>' ?></td>
+                    </tr>
+                    <tr>
+                        <td><?= t('expose_php_setting') ?></td>
+                        <td><?= $diag['expose_php'] ? '<span class="badge bg-warning text-dark">On</span>' : '<span class="badge bg-success">Off</span>' ?></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card shadow mb-4">
+        <div class="card-header">
             <h5 class="card-title mb-0"><i class="fas fa-clipboard-list me-2"></i><?= t('recommendations') ?></h5>
         </div>
         <div class="card-body">

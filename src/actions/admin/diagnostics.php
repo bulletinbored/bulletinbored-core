@@ -7,6 +7,8 @@ function handle_admin_diagnostics_get(): \Bulletin\Response|bool
     $diag = [];
 
     $diag['php_version'] = PHP_VERSION;
+    $diag['display_errors'] = (bool) ini_get('display_errors');
+    $diag['expose_php'] = (bool) ini_get('expose_php');
 
     $diag['zip'] = extension_loaded('zip');
     $diag['curl'] = extension_loaded('curl');
@@ -67,6 +69,12 @@ function handle_admin_diagnostics_get(): \Bulletin\Response|bool
         $recommendations[] = 'Git is available — installs will use it directly.';
     } elseif ($diag['can_install']) {
         $recommendations[] = t('all_requirements_met');
+    }
+    if ($diag['display_errors']) {
+        $recommendations[] = t('rec_display_errors');
+    }
+    if ($diag['expose_php']) {
+        $recommendations[] = t('rec_expose_php');
     }
 
     include __DIR__ . '/../../../views/admin_diagnostics.php';
