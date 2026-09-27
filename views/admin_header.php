@@ -72,6 +72,11 @@ function render_admin_header($title = 'Admin Panel') {
                 <li><a href="<?= url('admin_plugins') ?>" class="<?= $active('admin_plugins') ?>"><i class="fas fa-puzzle-piece"></i> <span><?= t('plugins') ?></span></a></li>
                 <li><a href="<?= url('admin_themes') ?>" class="<?= $active('admin_themes') ?>"><i class="fas fa-palette"></i> <span><?= t('themes') ?></span></a></li>
                 <li><a href="<?= url('admin_langs') ?>" class="<?= $active('admin_langs') ?>"><i class="fas fa-language"></i> <span><?= t('languages') ?></span></a></li>
+                <?php
+                if (!empty($GLOBALS['pluginManager']) && method_exists($GLOBALS['pluginManager'], 'runHook')) {
+                    $GLOBALS['pluginManager']->runHook('admin_sidebar_items');
+                }
+                ?>
             </ul>
             <hr class="sidebar-divider">
 
