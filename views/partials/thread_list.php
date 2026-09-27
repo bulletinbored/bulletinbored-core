@@ -39,6 +39,16 @@ $totalPages  = (int)($totalPages ?? 1);
             $replyCount = (int)($item['reply_count'] ?? 0);
             $viewCount  = (int)($item['view_count'] ?? 0);
             $lastAuthor = $item['last_author'] ?? '';
+            $lastPostId = (int)($item['last_post_id'] ?? 0);
+            // The last post is, by definition, the final row of the last page
+            // (posts are ordered oldest -> newest), so its page is derived from
+            // the visible reply count.
+            $lastPostPage = max(1, (int)ceil($replyCount / POSTS_PER_PAGE));
+            $lastPostArgs = ['id' => $item['id'], 'slug' => slugify($item['title'] ?? '')];
+            if ($lastPostPage > 1) {
+                $lastPostArgs['post_page'] = $lastPostPage;
+            }
+            $lastPostUrl = url('thread', $lastPostArgs) . '#post-' . $lastPostId;
         ?>
             <article class="discussion">
                 <a class="discussion-avatar" href="<?= url('profile', ['user' => $item['author'] ?? '']) ?>" tabindex="-1" aria-hidden="true">
@@ -82,7 +92,7 @@ $totalPages  = (int)($totalPages ?? 1);
                                 <a class="last-activity-user" href="<?= url('profile', ['user' => $lastAuthor]) ?>"><?= escape($lastAuthor) ?></a>
                                 <span class="dot">·</span>
                                 <time datetime="<?= escape($item['last_post_at'] ?? '') ?>"><?= time_ago($item['last_post_at'] ?? '') ?></time>
-                                <a class="last-activity-excerpt" href="<?= $itemUrl ?>#post-<?= (int)($item['last_post_id'] ?? 0) ?>">
+                                <a class="last-activity-excerpt" href="<?= $lastPostUrl ?>">
                                     <?= escape(excerpt($item['last_post_content'] ?? '')) ?>
                                 </a>
                             </div>

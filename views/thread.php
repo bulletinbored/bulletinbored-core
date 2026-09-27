@@ -457,23 +457,64 @@ render_header($thread['title'] ?? 'Thread', ['info' => $sidebarInfo]);
 <?php render_footer(); ?>
 <script src="<?= htmlspecialchars(base_url() . '/assets/js/thread-mod.js', ENT_QUOTES, 'UTF-8') ?>" nonce="<?= htmlspecialchars(csp_nonce(), ENT_QUOTES, 'UTF-8') ?>"></script>
 <script nonce="<?= htmlspecialchars(csp_nonce(), ENT_QUOTES, 'UTF-8') ?>">
-    // Prevent the reply editor from grabbing focus / scrolling to bottom on load.
+    // The reply editor (editbored) calls .focus() during init; focusing the
+    // form at the bottom of the page drags the viewport down. We (1) strip the
+    // scroll side-effect from focus while the page is settling, and (2) when
+    // the URL has no post anchor, pin the viewport to the first post using a
+    // genuinely instant scroll. Note: window.scrollTo({behavior:'auto'}) is NOT
+    // instant here -- it follows the CSS `html { scroll-behavior: smooth }`,
+    // which is exactly what produced the down-then-up animation. The smooth
+    // behaviour is disabled inline around the scroll instead. Anchor links and
+    // any later user interaction are left untouched.
     (function () {
-        function defocusReply() {
+        var docEl = document.documentElement;
+        var hasHash = !!window.location.hash;
+        var originalFocus = HTMLElement.prototype.focus;
+        var patched = true;
+
+        function inReplyBox(el) {
             var box = document.querySelector('.reply-box');
-            if (!box) return;
-            var active = document.activeElement;
-            if (active && box.contains(active)) {
-                active.blur();
-                if (document.activeElement && box.contains(document.activeElement)) {
-                    document.activeElement.blur();
-                }
+            return !!(box && el && box.contains(el));
+        }
+
+        function scrollTopInstant() {
+            var previous = docEl.style.scrollBehavior;
+            docEl.style.scrollBehavior = 'auto';
+            window.scrollTo(0, 0);
+            docEl.style.scrollBehavior = previous;
+        }
+
+        function restoreFocus() {
+            if (!patched) return;
+            patched = false;
+            HTMLElement.prototype.focus = originalFocus;
+        }
+
+        // Neutralise the editor's programmatic autofocus scroll for the whole
+        // settling phase, whether or not the URL has an anchor.
+        HTMLElement.prototype.focus = function (opts) {
+            var options = opts || {};
+            options.preventScroll = true;
+            return originalFocus.call(this, options);
+        };
+
+        document.addEventListener('focusin', function (e) {
+            if (!patched || !inReplyBox(e.target)) return;
+            e.target.blur();
+            if (!hasHash) scrollTopInstant();
+        }, true);
+
+        function settle() {
+            restoreFocus();
+            if (!hasHash) {
+                if (inReplyBox(document.activeElement)) document.activeElement.blur();
+                scrollTopInstant();
             }
         }
-        if (document.readyState === 'complete') {
-            defocusReply();
-        } else {
-            window.addEventListener('load', defocusReply);
-        }
+
+        window.addEventListener('load', settle);
+        window.addEventListener('pageshow', settle);
+        document.addEventListener('pointerdown', restoreFocus, true);
+        document.addEventListener('keydown', restoreFocus, true);
     })();
 </script>

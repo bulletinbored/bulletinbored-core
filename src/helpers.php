@@ -17,6 +17,15 @@ require_once __DIR__ . '/Helpers/Avatar.php';
 require_once __DIR__ . '/Helpers/Data.php';
 
 /**
+ * Number of posts shown per page inside a thread.
+ * Kept in one place so pagination maths (e.g. the "last activity" link)
+ * can never drift from the query in actions/posts-thread.php.
+ */
+if (!defined('POSTS_PER_PAGE')) {
+    define('POSTS_PER_PAGE', 15);
+}
+
+/**
  * Generate a redirect response.
  */
 function redirect(string $url, int $status = 302): \Bulletin\Response {

@@ -149,7 +149,7 @@ function handle_thread_view(array $params = []): \Bulletin\Response|bool
     }
 
     $postPage = max(1, (int)($_GET['post_page'] ?? 1));
-    $perPage = 15;
+    $perPage = POSTS_PER_PAGE;
     $offset = ($postPage - 1) * $perPage;
 
     $totalStmt = $pdo->prepare("
