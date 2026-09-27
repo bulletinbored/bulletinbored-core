@@ -12,18 +12,19 @@ class UpdateManager
     private ?string $updateMirror;
     private UpdateFetcher $fetcher;
     private UpdateBackup $backup;
+    private string $rootDir;
 
-    public function __construct(string $manifestPath, ?string $updateServer = null, ?string $githubToken = null, ?string $updateMirror = null)
+    public function __construct(string $manifestPath, ?string $updateServer = null, ?string $githubToken = null, ?string $updateMirror = null, ?string $rootDir = null)
     {
         $this->manifestPath = $manifestPath;
         $this->updateServer = $updateServer;
         $this->updateMirror = $updateMirror !== null ? rtrim($updateMirror, '/') : null;
+        $this->rootDir = rtrim($rootDir ?? __DIR__ . '/../', '/');
         $this->loadManifest();
 
         $dataDir = dirname($manifestPath);
-        $rootDir = rtrim(__DIR__ . '/../', '/');
         $this->fetcher = new UpdateFetcher($dataDir, $updateServer, $githubToken, $updateMirror);
-        $this->backup = new UpdateBackup($dataDir, $rootDir);
+        $this->backup = new UpdateBackup($dataDir, $this->rootDir);
     }
 
     private function loadManifest(): void
@@ -162,7 +163,7 @@ class UpdateManager
         }
 
         $needed = $requiredBytes > 0 ? $requiredBytes : (50 * 1024 * 1024);
-        $root = rtrim(__DIR__ . '/../', '/');
+        $root = $this->rootDir;
         $freeSpace = @disk_free_space($root);
         if ($freeSpace !== false && $freeSpace < $needed) {
             $errors[] = sprintf(
@@ -224,7 +225,7 @@ class UpdateManager
         require_once __DIR__ . '/PluginManager.php';
         require_once __DIR__ . '/ThemeManager.php';
 
-        $root = rtrim(__DIR__ . '/../', '/');
+        $root = $this->rootDir;
         $dataDir = dirname($this->manifestPath);
 
         // Delegate to the manager that owns the package lifecycle, so backup,

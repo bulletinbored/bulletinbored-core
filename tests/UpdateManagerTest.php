@@ -8,6 +8,8 @@ require_once __DIR__ . '/harness.php';
 require_once __DIR__ . '/../src/bootstrap.php';
 require_once __DIR__ . '/../lib/repo_install.php';
 require_once __DIR__ . '/../lib/PluginManager.php';
+require_once __DIR__ . '/../lib/ThemeManager.php';
+require_once __DIR__ . '/../lib/UpdateManager.php';
 
 function test_zip_slip_traversal_blocked(): Test
 {
@@ -488,6 +490,175 @@ function test_zip_entries_safe_blocks_traversal(): Test
     return $t;
 }
 
+function umTmpDir(string $prefix): string
+{
+    $base = sys_get_temp_dir() . '/bb_um_' . $prefix . '_' . uniqid('', true);
+    mkdir($base, 0755, true);
+    return $base;
+}
+
+function umCleanup(string $dir): void
+{
+    if (!is_dir($dir)) {
+        return;
+    }
+    $it = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::CHILD_FIRST
+    );
+    foreach ($it as $f) {
+        $f->isDir() ? @rmdir($f->getRealPath()) : @unlink($f->getRealPath());
+    }
+    @rmdir($dir);
+}
+
+function umZip(array $entries, string $path): void
+{
+    $zip = new ZipArchive();
+    $zip->open($path, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+    foreach ($entries as $name => $content) {
+        $zip->addFromString($name, $content);
+    }
+    $zip->close();
+}
+
+function umWritePlugin(string $root, string $name, string $version): void
+{
+    $dir = $root . '/plugins/' . $name;
+    if (!is_dir($dir)) {
+        mkdir($dir, 0755, true);
+    }
+    file_put_contents($dir . '/manifest.json', json_encode(['name' => $name, 'version' => $version]));
+    file_put_contents($dir . '/' . $name . '.php', "<?php\nfunction {$name}_init() {}\n");
+}
+
+function umWriteTheme(string $root, string $name): void
+{
+    $dir = $root . '/themes/' . $name;
+    if (!is_dir($dir)) {
+        mkdir($dir, 0755, true);
+    }
+    file_put_contents($dir . '/style.css', '/* ' . $name . ' */ body { color: #111; }');
+    file_put_contents($dir . '/manifest.json', json_encode(['name' => $name, 'version' => '1.0.0']));
+}
+
+/**
+ * The UpdateManager must delegate plugin updates to PluginManager::updateFromZip()
+ * and persist the new version reported by the manager's manifest.
+ */
+function test_update_manager_plugin_update_success(): Test
+{
+    $t = new Test('UpdateManager - Plugin Update Delegates And Records Version');
+
+    $tmp = umTmpDir('plugin_ok');
+    $data = $tmp . '/data';
+    mkdir($data, 0755, true);
+    umWritePlugin($tmp, 'umplug', '1.0.0');
+    file_put_contents($data . '/updates.json', json_encode([]));
+
+    $um = new UpdateManager($data . '/updates.json', null, null, null, $tmp);
+
+    $zip = $tmp . '/v2.zip';
+    umZip([
+        'manifest.json' => json_encode(['name' => 'umplug', 'version' => '2.0.0']),
+        'umplug.php' => "<?php\nfunction umplug_init() {}\n",
+    ], $zip);
+
+    $ok = $um->applyUpdate('plugins', 'umplug', $zip);
+    $t->assertTrue('applyUpdate returns true', $ok);
+    $t->assertEquals('Tracked version updated', '2.0.0', $um->getVersion('plugins', 'umplug'));
+
+    $manifest = json_decode(file_get_contents($tmp . '/plugins/umplug/manifest.json'), true);
+    $t->assertEquals('On-disk manifest updated by the manager', '2.0.0', $manifest['version']);
+
+    $t->assertCount('No backup directory left behind', 0, glob($tmp . '/plugins/_old_*'));
+
+    umCleanup($tmp);
+    return $t;
+}
+
+/**
+ * When PluginManager::on_update() throws, UpdateManager must report failure and
+ * the previous plugin files *and* installed.json record must be restored.
+ */
+function test_update_manager_plugin_update_rolls_back_on_on_update_failure(): Test
+{
+    $t = new Test('UpdateManager - Plugin Update Rolled Back When on_update Fails');
+
+    $tmp = umTmpDir('plugin_rb');
+    $data = $tmp . '/data';
+    mkdir($data, 0755, true);
+    umWritePlugin($tmp, 'umplugfail', '1.0.0');
+    file_put_contents($tmp . '/plugins/umplugfail/SENTINEL.txt', 'original');
+    file_put_contents($data . '/installed.json', json_encode([
+        'plugins' => [
+            'umplugfail' => ['name' => 'umplugfail', 'version' => '1.0.0', 'installed_at' => '2020-01-01T00:00:00+00:00'],
+        ],
+        'themes' => [],
+    ]));
+    file_put_contents($data . '/updates.json', json_encode([]));
+
+    if (!function_exists('umplugfail_on_update')) {
+        function umplugfail_on_update()
+        {
+            throw new RuntimeException('on_update boom');
+        }
+    }
+
+    $um = new UpdateManager($data . '/updates.json', null, null, null, $tmp);
+
+    $zip = $tmp . '/v2.zip';
+    umZip([
+        'manifest.json' => json_encode(['name' => 'umplugfail', 'version' => '2.0.0']),
+        'umplugfail.php' => "<?php\nfunction umplugfail_init() {}\n",
+    ], $zip);
+
+    $ok = $um->applyUpdate('plugins', 'umplugfail', $zip);
+    $t->assertFalse('applyUpdate returns false', $ok);
+
+    $t->assertTrue('Original file restored', file_exists($tmp . '/plugins/umplugfail/SENTINEL.txt'));
+    $t->assertEquals('Original file content unchanged', 'original', file_get_contents($tmp . '/plugins/umplugfail/SENTINEL.txt'));
+
+    $manifest = json_decode(file_get_contents($tmp . '/plugins/umplugfail/manifest.json'), true);
+    $t->assertEquals('Old manifest version restored', '1.0.0', $manifest['version']);
+
+    $record = json_decode(file_get_contents($data . '/installed.json'), true);
+    $t->assertEquals('installed.json record rolled back', '1.0.0', $record['plugins']['umplugfail']['version'] ?? null);
+
+    $t->assertCount('No backup directory left behind', 0, glob($tmp . '/plugins/_old_*'));
+
+    umCleanup($tmp);
+    return $t;
+}
+
+/**
+ * A bad theme package must fail through ThemeManager::updateFromZip() and leave
+ * the previously installed theme (and no backup) in place.
+ */
+function test_update_manager_theme_update_rolls_back_on_bad_package(): Test
+{
+    $t = new Test('UpdateManager - Theme Update Rolled Back On Invalid Package');
+
+    $tmp = umTmpDir('theme_rb');
+    $data = $tmp . '/data';
+    mkdir($data, 0755, true);
+    umWriteTheme($tmp, 'umtheme');
+    file_put_contents($data . '/updates.json', json_encode([]));
+
+    $um = new UpdateManager($data . '/updates.json', null, null, null, $tmp);
+
+    $bad = $tmp . '/bad.zip';
+    file_put_contents($bad, 'this is not a zip file');
+
+    $ok = $um->applyUpdate('themes', 'umtheme', $bad);
+    $t->assertFalse('applyUpdate returns false', $ok);
+    $t->assertTrue('Existing theme still present', file_exists($tmp . '/themes/umtheme/style.css'));
+    $t->assertCount('No backup directory left behind', 0, glob($tmp . '/themes/_old_*'));
+
+    umCleanup($tmp);
+    return $t;
+}
+
 register_tests(
     'test_zip_slip_traversal_blocked',
     'test_zip_absolute_path_blocked',
@@ -501,5 +672,8 @@ register_tests(
     'test_preflight_php_version_check',
     'test_backup_creates_copy',
     'test_restore_from_backup',
-    'test_zip_entries_safe_blocks_traversal'
+    'test_zip_entries_safe_blocks_traversal',
+    'test_update_manager_plugin_update_success',
+    'test_update_manager_plugin_update_rolls_back_on_on_update_failure',
+    'test_update_manager_theme_update_rolls_back_on_bad_package'
 );

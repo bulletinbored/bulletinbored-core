@@ -233,70 +233,100 @@ trait PluginPackages
         return (bool)preg_match('/^[a-z0-9][a-z0-9_-]*$/', $name);
     }
 
+    /**
+     * Download a repository package into the given staging directory, returning
+     * ['success' => bool, 'message' => string]. Kept as a method (rather than
+     * calling install_repo_package() inline) so tests can substitute a local
+     * fixture without network or git.
+     */
+    protected function fetchRepoPackage(string $repoUrl, string $stagingDir, ?string $tag, string $name): array
+    {
+        require_once __DIR__ . '/../repo_install.php';
+        return install_repo_package($repoUrl, $stagingDir, $tag, $name);
+    }
+
     public function installFromRepo(string $repoUrl, ?string $tag = null, ?string $expectedName = null): array
     {
-        $dest = rtrim($this->pluginsDir, '/') . '/';
         $repo = trim($repoUrl, '/');
         $repoName = basename(str_replace(['\\', '.git'], ['', ''], $repo));
         $name = $expectedName ?: $repoName;
-        $targetDir = $dest . $name;
 
         if (!$this->isValidPackageName(strtolower($name))) {
             return ['success' => false, 'message' => 'Invalid plugin name'];
         }
 
-        // Never delete a working install before the replacement has been
-        // downloaded, extracted and validated. Move it aside and restore it
-        // if anything fails (same model as installFromZip()).
+        // Download into a staging directory first, then commit through exactly
+        // the same pipeline as installFromZip(): package validation, backup,
+        // recordInstalled, hooks, on_install/on_update and rollback. Nothing is
+        // removed from the live install until the replacement is fully
+        // downloaded, extracted and validated.
+        $stagingParent = rtrim($this->pluginsDir, '/') . '/.repo-tmp-' . bin2hex(random_bytes(6));
+        $stagingDir = $stagingParent . '/' . $name;
+        if (!@mkdir($stagingParent, 0755, true)) {
+            return ['success' => false, 'message' => 'Cannot create temporary directory for repository install'];
+        }
+
+        $result = $this->fetchRepoPackage($repoUrl, $stagingDir, $tag, $name);
+        if (!$result['success']) {
+            $this->installer->deleteDir($stagingParent);
+            return $result;
+        }
+
+        $this->installer->flattenNestedDir($stagingDir);
+        $this->installer->stripRepoOnlyFiles($stagingDir);
+
+        // Same integrity check PackageInstaller runs for ZIP installs.
+        $app = App::getInstance();
+        $verifyFiles = !isset($app->config['plugin_verify_files']) || $app->config['plugin_verify_files'] !== false;
+        if ($verifyFiles) {
+            $check = $this->installer->verifyInstalledFiles($stagingDir);
+            if (empty($check['success'])) {
+                $this->installer->deleteDir($stagingParent);
+                return $check;
+            }
+        }
+
+        // Apply the same manifest/version validation a ZIP package must pass.
+        $verify = $this->verifyExtractedPackage($stagingDir);
+        if ($verify !== null) {
+            $this->installer->deleteDir($stagingParent);
+            return $verify;
+        }
+
+        $targetDir = rtrim($this->pluginsDir, '/') . '/' . $name;
+        $replacing = is_dir($targetDir);
         $backupDir = null;
-        if (is_dir($targetDir)) {
+        if ($replacing) {
             $backupDir = rtrim($this->pluginsDir, '/') . '/_old_' . $name . '_' . uniqid();
             if (!@rename($targetDir, $backupDir)) {
+                $this->installer->deleteDir($stagingParent);
                 return ['success' => false, 'message' => 'Failed to back up existing plugin before reinstall'];
             }
         }
 
-        $restoreBackup = function () use (&$backupDir, $targetDir) {
-            if (is_dir($targetDir)) {
-                $this->installer->deleteDir($targetDir);
-            }
+        if (!@rename($stagingDir, $targetDir)) {
             if ($backupDir !== null && is_dir($backupDir)) {
                 @rename($backupDir, $targetDir);
-                $backupDir = null;
             }
-        };
-
-        require_once __DIR__ . '/../repo_install.php';
-        $result = install_repo_package($repoUrl, $targetDir, $tag, $name);
-        if (!$result['success']) {
-            $restoreBackup();
-            return $result;
+            $this->installer->deleteDir($stagingParent);
+            return ['success' => false, 'message' => 'Failed to move package to final location'];
         }
+        $this->installer->deleteDir($stagingParent);
 
-        $this->installer->flattenNestedDir($targetDir);
-
-        $manifest = null;
-        for ($i = 0; $i < 10; $i++) {
-            $this->plugins = [];
-            $this->discover();
-            $manifest = $this->getByName($name);
-            if ($manifest && !empty($manifest['file']) && file_exists($manifest['file'])) {
-                break;
+        // Reinstalling over an existing plugin is an update: run the same
+        // update hooks (plugin_updated/on_update) the ZIP update pipeline runs.
+        $afterSuccess = $replacing ? function (array $manifest) use ($name) {
+            $this->runHook('plugin_updated', $name, $manifest);
+            if (!$this->callLifecycle($manifest, 'on_update')) {
+                throw new \RuntimeException('on_update failed');
             }
-            clearstatcache();
-            usleep(200000);
-        }
+        } : null;
 
-        if (!$manifest || empty($manifest['file']) || !file_exists($manifest['file'])) {
-            $restoreBackup();
-            return ['success' => false, 'message' => 'Installed package is not a valid plugin. Ensure the repository contains a valid manifest.json and bootstrap file.'];
+        $finalized = $this->finalizeInstall($targetDir, $backupDir, $name, $replacing, $afterSuccess, 'the repository');
+        if (!empty($finalized['success'])) {
+            $finalized['message'] = 'Plugin installed from repo';
         }
-
-        if ($backupDir !== null && is_dir($backupDir)) {
-            $this->installer->deleteDir($backupDir);
-        }
-
-        return ['success' => true, 'message' => 'Plugin installed from repo', 'manifest' => $manifest];
+        return $finalized;
     }
 
     /**
@@ -354,6 +384,25 @@ trait PluginPackages
             return $result;
         }
 
+        return $this->finalizeInstall($targetDir, $backupDir, $expectedName, $replacing, $afterSuccess);
+    }
+
+    /**
+     * Shared final step of the install/update pipeline. The new files are
+     * expected to already be at $targetDir and, when replacing, the previous
+     * version at $backupDir. It discovers the plugin, records it, runs the
+     * lifecycle hooks (on_install for fresh installs, the caller's
+     * update-specific callback for updates) and rolls everything back — files,
+     * metadata and backup — if any step fails.
+     *
+     * Used by both installFromZip() and installFromRepo() so a package gets
+     * exactly the same guarantees no matter how it was obtained.
+     *
+     * @param string $sourceLabel Human-readable origin used in error messages
+     * @return array {success, message, manifest?}
+     */
+    private function finalizeInstall(string $targetDir, ?string $backupDir, string $expectedName, bool $replacing, ?callable $afterSuccess = null, string $sourceLabel = 'the ZIP'): array
+    {
         $this->plugins = [];
         $this->discover();
         $manifest = $this->getByName($expectedName);
@@ -367,7 +416,7 @@ trait PluginPackages
             if ($backupDir !== null && is_dir($backupDir)) {
                 @rename($backupDir, $targetDir);
             }
-            return ['success' => false, 'message' => 'Installed package is not a valid plugin. Ensure the ZIP contains a valid manifest.json and bootstrap file.'];
+            return ['success' => false, 'message' => "Installed package is not a valid plugin. Ensure {$sourceLabel} contains a valid manifest.json and bootstrap file."];
         }
 
         // Snapshot the previous installed.json record so a late failure can
@@ -409,6 +458,9 @@ trait PluginPackages
         if ($backupDir !== null && is_dir($backupDir)) {
             $this->installer->deleteDir($backupDir);
         }
+
+        $this->plugins = [];
+        $this->discover();
 
         return ['success' => true, 'message' => $replacing ? 'Plugin updated' : 'Plugin installed', 'manifest' => $manifest];
     }

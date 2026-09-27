@@ -418,82 +418,90 @@ class ThemeManager
 
     public function installFromRepo(string $repoUrl, ?string $tag = null, ?string $expectedName = null): array
     {
-        $dest = rtrim($this->themesDir, '/') . '/';
         $repo = trim($repoUrl, '/');
         $repoName = basename(str_replace(['\\', '.git'], ['', ''], $repo));
-        $targetDir = $dest . ($expectedName ?: $repoName);
+        $name = $expectedName ?: $repoName;
 
-        // Never delete a working theme before the replacement has been
-        // downloaded, extracted and validated. Move it aside and restore it
-        // if anything fails.
+        if (!$this->isValidPackageName(strtolower($name))) {
+            return ['success' => false, 'message' => 'Invalid theme name'];
+        }
+
+        // Download into a staging directory first, then commit through the
+        // same validation/rollback model as installFromZip()/updateFromZip().
+        // Nothing is removed from the live install until the replacement is
+        // fully downloaded, extracted and validated.
+        $stagingParent = rtrim($this->themesDir, '/') . '/.repo-tmp-' . bin2hex(random_bytes(6));
+        $stagingDir = $stagingParent . '/' . $name;
+        if (!@mkdir($stagingParent, 0755, true)) {
+            return ['success' => false, 'message' => 'Cannot create temporary directory for repository install'];
+        }
+
+        require_once __DIR__ . '/repo_install.php';
+        $result = install_repo_package($repoUrl, $stagingDir, $tag, $name);
+        if (!$result['success']) {
+            $this->installer->deleteDir($stagingParent);
+            return $result;
+        }
+
+        $this->installer->flattenNestedDir($stagingDir);
+        $this->installer->stripRepoOnlyFiles($stagingDir);
+
+        // Same integrity check the ZIP pipeline runs through PackageInstaller.
+        if ($this->verifyFilesEnabled()) {
+            $check = $this->installer->verifyInstalledFiles($stagingDir);
+            if (empty($check['success'])) {
+                $this->installer->deleteDir($stagingParent);
+                return $check;
+            }
+        }
+
+        $targetDir = rtrim($this->themesDir, '/') . '/' . $name;
         $backupDir = null;
         if (is_dir($targetDir)) {
-            $backupDir = rtrim($this->themesDir, '/') . '/_old_' . ($expectedName ?: $repoName) . '_' . uniqid();
+            $backupDir = rtrim($this->themesDir, '/') . '/_old_' . $name . '_' . uniqid();
             if (!@rename($targetDir, $backupDir)) {
+                $this->installer->deleteDir($stagingParent);
                 return ['success' => false, 'message' => 'Failed to back up existing theme before reinstall'];
             }
         }
 
-        $restoreBackup = function () use (&$backupDir, $targetDir) {
-            if (is_dir($targetDir)) {
-                $this->installer->deleteDir($targetDir);
-            }
+        if (!@rename($stagingDir, $targetDir)) {
             if ($backupDir !== null && is_dir($backupDir)) {
                 @rename($backupDir, $targetDir);
-                $backupDir = null;
             }
-        };
-
-        require_once __DIR__ . '/repo_install.php';
-        $result = install_repo_package($repoUrl, $targetDir, $tag, $expectedName ?: $repoName);
-        if (!$result['success']) {
-            $restoreBackup();
-            return $result;
+            $this->installer->deleteDir($stagingParent);
+            return ['success' => false, 'message' => 'Failed to move package to final location'];
         }
+        $this->installer->deleteDir($stagingParent);
 
-        $hasRootAsset = file_exists($targetDir . '/style.css') || file_exists($targetDir . '/manifest.json');
-        if (is_dir($targetDir) && !$hasRootAsset) {
-            $nested = null;
-            foreach (glob($targetDir . '/*', GLOB_ONLYDIR) as $dir) {
-                if (file_exists($dir . '/style.css') || file_exists($dir . '/manifest.json')) {
-                    $nested = $dir;
-                    break;
-                }
-            }
-            if ($nested !== null && is_dir($nested)) {
-                foreach (glob($nested . '/*') as $item) {
-                    $base = basename($item);
-                    $destItem = $targetDir . '/' . $base;
-                    if (file_exists($destItem)) {
-                        continue;
-                    }
-                    rename($item, $destItem);
-                }
-                @rmdir($nested);
-            }
-        }
-
-        $name = $expectedName ?: $repoName;
+        $resolvedName = $name;
         for ($i = 0; $i < 10; $i++) {
             $this->themes = [];
             $this->discover();
-            if (!isset($this->themes[$name])) {
+            if (!isset($this->themes[$resolvedName])) {
                 foreach ($this->themes as $themeName => $theme) {
                     if ($theme['dir'] === $targetDir) {
-                        $name = $themeName;
+                        $resolvedName = $themeName;
                         break;
                     }
                 }
             }
-            if (isset($this->themes[$name])) {
+            if (isset($this->themes[$resolvedName])) {
                 break;
             }
             clearstatcache();
             usleep(200000);
         }
 
-        if (!isset($this->themes[$name])) {
-            $restoreBackup();
+        if (!isset($this->themes[$resolvedName])) {
+            // Invalid package: drop the new files and restore the previous
+            // version if this was a reinstall over an existing theme.
+            if (is_dir($targetDir)) {
+                $this->installer->deleteDir($targetDir);
+            }
+            if ($backupDir !== null && is_dir($backupDir)) {
+                @rename($backupDir, $targetDir);
+            }
             return ['success' => false, 'message' => 'Installed package is not a valid theme. Ensure the repository contains a valid style.css and optional manifest.json.'];
         }
 
@@ -501,6 +509,7 @@ class ThemeManager
             $this->installer->deleteDir($backupDir);
         }
 
-        return ['success' => true, 'message' => 'Theme installed from repo', 'manifest' => $this->themes[$name]];
+        return ['success' => true, 'message' => 'Theme installed from repo', 'manifest' => $this->themes[$resolvedName]];
     }
 }
+

@@ -175,9 +175,17 @@ function download_file(string $url, string $dest, ?int &$httpCode = null): bool
     }
 
     if (ini_get('allow_url_fopen')) {
+        // Mirror the cURL branch: never silently weaken TLS. These are PHP's
+        // defaults for HTTPS, but stating them explicitly keeps the fallback
+        // honest if the environment changes.
+        $ssl = [
+            'verify_peer' => true,
+            'verify_peer_name' => true,
+            'allow_self_signed' => false,
+        ];
         $ctx = stream_context_create([
             'http' => ['timeout' => 120, 'user_agent' => 'Mozilla/5.0 (compatible; ForumInstaller/1.0)'],
-            'https' => ['timeout' => 120, 'user_agent' => 'Mozilla/5.0 (compatible; ForumInstaller/1.0)'],
+            'https' => array_merge($ssl, ['timeout' => 120, 'user_agent' => 'Mozilla/5.0 (compatible; ForumInstaller/1.0)']),
         ]);
         $data = @file_get_contents($url, false, $ctx);
         if ($data === false) {

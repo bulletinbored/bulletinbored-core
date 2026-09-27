@@ -54,6 +54,48 @@ function createTestTheme(string $dir, string $name, array $manifest = []): strin
     return $themeDir;
 }
 
+/**
+ * PluginManager subclass that serves a "repository" from a local fixture
+ * directory, so the install-from-repo pipeline can be exercised end-to-end
+ * without network access or git.
+ */
+class FakeRepoPluginManager extends PluginManager
+{
+    private string $fixtureDir = '';
+
+    public function setRepoFixture(string $dir): void
+    {
+        $this->fixtureDir = $dir;
+    }
+
+    protected function fetchRepoPackage(string $repoUrl, string $stagingDir, ?string $tag, string $name): array
+    {
+        if ($this->fixtureDir === '' || !is_dir($this->fixtureDir)) {
+            return ['success' => false, 'message' => 'No fixture configured'];
+        }
+        if (!is_dir($stagingDir)) {
+            @mkdir($stagingDir, 0755, true);
+        }
+        foreach (glob($this->fixtureDir . '/*') as $item) {
+            $dest = $stagingDir . '/' . basename($item);
+            if (is_dir($item)) {
+                @mkdir($dest, 0755, true);
+                $it = new RecursiveIteratorIterator(
+                    new RecursiveDirectoryIterator($item, RecursiveDirectoryIterator::SKIP_DOTS),
+                    RecursiveIteratorIterator::SELF_FIRST
+                );
+                foreach ($it as $f) {
+                    $target = $dest . '/' . $it->getSubPathname();
+                    $f->isDir() ? @mkdir($target, 0755, true) : copy($f->getPathname(), $target);
+                }
+            } else {
+                copy($item, $dest);
+            }
+        }
+        return ['success' => true, 'message' => 'Fixture copied'];
+    }
+}
+
 function test_plugin_enable_disable(): Test
 {
     $t = new Test('Plugin - Enable/Disable Without Breaking Core');
@@ -365,6 +407,81 @@ function test_theme_repo_install_preserves_existing_on_failure(): Test
     $t->assert('Theme directory restored after failure', is_dir($tmpDir . '/nonexistent-repo'));
     $t->assert('Theme style.css still present', file_exists($tmpDir . '/nonexistent-repo/style.css'));
     $t->assert('No backup directory left behind', count(glob($tmpDir . '/_old_*')) === 0);
+
+    if (is_dir($tmpDir)) {
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($tmpDir, RecursiveDirectoryIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::CHILD_FIRST
+        );
+        foreach ($iterator as $file) {
+            $file->isDir() ? rmdir($file->getRealPath()) : unlink($file->getRealPath());
+        }
+        rmdir($tmpDir);
+    }
+
+    return $t;
+}
+
+/**
+ * Full repository update path: install v1, reinstall v2 with a failing
+ * on_update(), and verify the previous plugin files, manifest and
+ * installed.json record are all restored with no leftover backup/staging.
+ */
+function test_plugin_repo_update_rolls_back_on_on_update_failure(): Test
+{
+    $t = new Test('Plugin - Repo Reinstall Rolled Back When on_update Fails');
+
+    $tmpDir = sys_get_temp_dir() . '/bb_plugin_reporb_' . uniqid();
+    $pluginsDir = $tmpDir . '/plugins';
+    $manifestFile = $tmpDir . '/plugins.json';
+    mkdir($pluginsDir, 0755, true);
+    file_put_contents($manifestFile, json_encode([]));
+
+    $v1 = $tmpDir . '/fixture-v1';
+    mkdir($v1, 0755, true);
+    file_put_contents($v1 . '/manifest.json', json_encode(['name' => 'umrepro', 'version' => '1.0.0']));
+    file_put_contents($v1 . '/umrepro.php', "<?php\nfunction umrepro_init() {}\n");
+    file_put_contents($v1 . '/SENTINEL.txt', 'v1-content');
+
+    $pm = new FakeRepoPluginManager($pluginsDir, $manifestFile);
+    $pm->setRepoFixture($v1);
+
+    $first = $pm->installFromRepo('https://example.invalid/umrepro', null, 'umrepro');
+    $t->assertTrue('Initial repository install succeeds', $first['success']);
+    $t->assertEquals('v1 version installed', '1.0.0', $pm->getVersion('umrepro'));
+
+    $installedV1 = json_decode(file_get_contents($tmpDir . '/installed.json'), true);
+    $t->assertEquals('installed.json records v1', '1.0.0', $installedV1['plugins']['umrepro']['version'] ?? null);
+
+    $v2 = $tmpDir . '/fixture-v2';
+    mkdir($v2, 0755, true);
+    file_put_contents($v2 . '/manifest.json', json_encode(['name' => 'umrepro', 'version' => '2.0.0']));
+    file_put_contents($v2 . '/umrepro.php', "<?php\nfunction umrepro_init() { echo 'v2'; }\n");
+    file_put_contents($v2 . '/NEW.txt', 'v2-new');
+
+    if (!function_exists('umrepro_on_update')) {
+        function umrepro_on_update()
+        {
+            throw new RuntimeException('on_update boom');
+        }
+    }
+
+    $pm->setRepoFixture($v2);
+    $second = $pm->installFromRepo('https://example.invalid/umrepro', null, 'umrepro');
+
+    $t->assertFalse('Reinstall reports failure', $second['success']);
+    $t->assertTrue('Old sentinel file restored', file_exists($pluginsDir . '/umrepro/SENTINEL.txt'));
+    $t->assertEquals('Old sentinel content unchanged', 'v1-content', file_get_contents($pluginsDir . '/umrepro/SENTINEL.txt'));
+    $t->assertFalse('New file not left behind', file_exists($pluginsDir . '/umrepro/NEW.txt'));
+
+    $manifest = json_decode(file_get_contents($pluginsDir . '/umrepro/manifest.json'), true);
+    $t->assertEquals('Old manifest version restored', '1.0.0', $manifest['version']);
+
+    $installed = json_decode(file_get_contents($tmpDir . '/installed.json'), true);
+    $t->assertEquals('installed.json rolled back to v1', '1.0.0', $installed['plugins']['umrepro']['version'] ?? null);
+
+    $t->assertCount('No backup directory left behind', 0, glob($pluginsDir . '/_old_*'));
+    $t->assertCount('No staging directory left behind', 0, glob($pluginsDir . '/.repo-tmp-*'));
 
     if (is_dir($tmpDir)) {
         $iterator = new RecursiveIteratorIterator(
@@ -898,6 +1015,7 @@ register_tests(
     'test_plugin_dependency_cycle',
     'test_plugin_install_fails_safely',
     'test_plugin_repo_install_preserves_existing_on_failure',
+    'test_plugin_repo_update_rolls_back_on_on_update_failure',
     'test_theme_repo_install_preserves_existing_on_failure',
     'test_plugin_uninstall',
     'test_theme_activate',
