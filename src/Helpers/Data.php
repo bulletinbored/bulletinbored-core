@@ -6,7 +6,17 @@
 
 function sidebar_categories() {
     $pdo = App::getInstance()->pdo;
-    $stmt = $pdo->query("SELECT * FROM categories ORDER BY position ASC, name ASC");
+    // Attach the number of discussions per category, using the same visible
+    // statuses as the thread listing so the sidebar count matches what the
+    // category page actually shows.
+    $stmt = $pdo->query("
+        SELECT c.*,
+               (SELECT COUNT(*) FROM threads t
+                 WHERE t.category_id = c.id
+                   AND t.status IN ('visible', 'sticky', 'locked')) AS thread_count
+        FROM categories c
+        ORDER BY c.position ASC, c.name ASC
+    ");
     return $stmt->fetchAll();
 }
 
