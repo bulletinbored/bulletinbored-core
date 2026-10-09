@@ -167,6 +167,17 @@
                                 <input class="form-check-input" type="checkbox" name="allow_catalog_only" value="1" id="catalogOnlySwitch" <?= ($config['allow_catalog_only'] ?? true) ? 'checked' : '' ?>>
                             </div>
                         </div>
+                        <hr class="my-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <label class="form-label mb-0"><?= t('anonymous_statistics') ?></label>
+                                <div class="form-text mb-0"><?= t('anonymous_statistics_hint') ?></div>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input type="hidden" name="telemetry" value="0">
+                                <input class="form-check-input" type="checkbox" name="telemetry" value="1" id="telemetrySwitch" <?= ($config['telemetry'] ?? true) ? 'checked' : '' ?>>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

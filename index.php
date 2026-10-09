@@ -39,6 +39,16 @@ $updateManager = new UpdateManager(
     !empty($config['update_mirror']) ? $config['update_mirror'] : null
 );
 
+// Anonymous active-installation heartbeat (opt-out via config "telemetry").
+// Guarded internally to at most one ping per day and never allowed to throw.
+require_once __DIR__ . '/lib/Telemetry.php';
+$telemetry = new Telemetry(__DIR__ . '/data', $config, __DIR__ . '/config.json');
+try {
+    $telemetry->maybePing(count($pluginManager->getAll()), count($themeManager->getAll()));
+} catch (\Throwable $e) {
+    // Telemetry must never affect request handling.
+}
+
 $activeTheme = $themeManager->getActive();
 $themeApiVersion = $activeTheme ? $themeManager->getVersion($activeTheme) : '1.0.0';
 $themeCssUrl = $themeManager->getCssUrl();

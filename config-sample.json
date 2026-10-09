@@ -32,5 +32,7 @@
     "plugin_verify_files": true,
     "theme_verify_files": true,
     "allow_catalog_only": true,
+    "telemetry": true,
+    "telemetry_url": "https://bulletinbored.net/heartbeat.php",
     "trusted_proxies": ["127.0.0.1", "::1"]
 }

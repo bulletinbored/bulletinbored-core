@@ -15,6 +15,7 @@ send_security_headers($cspNonce);
 $installerCsrf = generate_csrf_token();
 
 require_once __DIR__ . '/lib/PluginManager.php';
+require_once __DIR__ . '/lib/Telemetry.php';
 
 function build_htaccess() {
     // Path-agnostic rewrite rules: derive the base from REQUEST_URI so they
@@ -160,6 +161,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install']) && !valida
                 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
             }
 
+            // Fresh-install guard: when no config.json exists yet, finding an
+            // already-populated database means this is a reinstall over old
+            // data. Reusing it would create a "fresh" forum that still shows the
+            // previous threads/users. Refuse with an actionable message that
+            // also covers the migration case.
+            try {
+                $hasUsersTable = $pdo->query("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")->fetchColumn();
+                if ($hasUsersTable && (int)$pdo->query("SELECT COUNT(*) FROM users")->fetchColumn() > 0) {
+                    throw new RuntimeException(
+                        'This database already contains forum data, so a fresh installation cannot use it. '
+                        . 'To move an existing forum to this server, copy its config.json together with the database '
+                        . '(or install fresh and then replace the database file at ' . $dbPath . '). '
+                        . 'To start over, delete that database file (or choose a different database path) and try again.'
+                    );
+                }
+            } catch (PDOException $e) {
+                // Unreadable database: let the normal error handling below report it.
+            }
+
             // INSERT IGNORE is MySQL-only; SQLite uses INSERT OR IGNORE.
             $insertIgnoreSql = $dbDriver === 'mysql' ? 'INSERT IGNORE' : 'INSERT OR IGNORE';
 
@@ -201,7 +221,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install']) && !valida
             $pdo->prepare("INSERT INTO categories (name, description, position) SELECT 'General', 'General discussion', 1 WHERE NOT EXISTS (SELECT 1 FROM categories WHERE name = 'General')")->execute();
         } else {
             $pdo->exec("
-                CREATE TABLE users (
+                CREATE TABLE IF NOT EXISTS users (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     username TEXT UNIQUE NOT NULL,
                     password TEXT NOT NULL,
@@ -213,14 +233,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install']) && !valida
                     email_verified INTEGER DEFAULT 0,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 );
-                CREATE TABLE categories (
+                CREATE TABLE IF NOT EXISTS categories (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     name TEXT NOT NULL UNIQUE,
                     description TEXT,
                     position INTEGER DEFAULT 0,
                     allowed_roles TEXT DEFAULT NULL
                 );
-                CREATE TABLE threads (
+                CREATE TABLE IF NOT EXISTS threads (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     category_id INTEGER,
                     user_id INTEGER,
@@ -231,7 +251,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install']) && !valida
                     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     views INTEGER DEFAULT 0
                 );
-                CREATE TABLE posts (
+                CREATE TABLE IF NOT EXISTS posts (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     thread_id INTEGER,
                     user_id INTEGER,
@@ -239,7 +259,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install']) && !valida
                     status TEXT DEFAULT 'visible',
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 );
-                CREATE TABLE uploads (
+                CREATE TABLE IF NOT EXISTS uploads (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     thread_id INTEGER,
                     post_id INTEGER,
@@ -250,14 +270,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install']) && !valida
                     mime_type TEXT,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 );
-                CREATE TABLE thread_watchers (
+                CREATE TABLE IF NOT EXISTS thread_watchers (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     thread_id INTEGER NOT NULL,
                     user_id INTEGER NOT NULL,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     UNIQUE(thread_id, user_id)
                 );
-                CREATE TABLE notifications (
+                CREATE TABLE IF NOT EXISTS notifications (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id INTEGER NOT NULL,
                     type VARCHAR(50) DEFAULT 'info',
@@ -267,7 +287,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install']) && !valida
                     is_read INTEGER DEFAULT 0,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 );
-                CREATE TABLE private_messages (
+                CREATE TABLE IF NOT EXISTS private_messages (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     sender_id INTEGER NOT NULL,
                     recipient_id INTEGER NOT NULL,
@@ -276,13 +296,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install']) && !valida
                     is_read INTEGER DEFAULT 0,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 );
-                CREATE TABLE roles (
+                CREATE TABLE IF NOT EXISTS roles (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     name TEXT NOT NULL UNIQUE,
                     permissions TEXT DEFAULT '[]',
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 );
-                CREATE TABLE email_verifications (
+                CREATE TABLE IF NOT EXISTS email_verifications (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id INTEGER NOT NULL,
                     token TEXT NOT NULL,
@@ -291,7 +311,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install']) && !valida
                     used INTEGER DEFAULT 0,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 );
-                CREATE TABLE password_resets (
+                CREATE TABLE IF NOT EXISTS password_resets (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id INTEGER NOT NULL,
                     token TEXT NOT NULL,
@@ -368,6 +388,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install']) && !valida
             'update_manifest' => __DIR__ . '/data/updates.json',
             'update_server' => 'https://github.com/bulletinbored/bulletinbored-core',
             'update_mirror' => 'https://extend.bulletinbored.net',
+            'install_id' => Telemetry::generateInstallId(),
+            'telemetry' => true,
+            'telemetry_url' => 'https://bulletinbored.net/heartbeat.php',
         ];
 
         if (file_put_contents(__DIR__ . '/config.json', json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE), LOCK_EX) === false) {
@@ -759,6 +782,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install']) && !valida
                             </div>
                         </label>
                     <?php endforeach; ?>
+
+                    <p class="text-muted small mt-3 mb-0">
+                        This installation sends an anonymous daily heartbeat (a random ID, core version and PHP version — no content, users or personal data) so the project can count active installations. You can turn it off any time in Admin &rarr; Settings.
+                    </p>
 
                     <div class="d-flex justify-content-between align-items-center mt-4">
                         <a href="install2.php" class="btn btn-outline-soft">

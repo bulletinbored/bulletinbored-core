@@ -410,6 +410,8 @@
     "days": "Days",
     "allow_catalog_only": "Allow catalog-only mode",
     "allow_catalog_only_hint": "When enabled, only plugins/themes with official: true from the catalog can be installed",
+    "anonymous_statistics": "Send anonymous statistics",
+    "anonymous_statistics_hint": "Send a daily anonymous heartbeat (random ID, version, PHP version) to help count active installations. No content or personal data is sent.",
     "catalog_settings": "Catalog Settings",
     "plugin_verify_files": "Verify plugin/theme files on install",
     "plugin_verify_files_hint": "Check that installed files match the manifest; skip to disable",

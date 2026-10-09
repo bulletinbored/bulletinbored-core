@@ -99,12 +99,44 @@ function resolve_sqlite_path(?string $path): ?string {
     return $normalized;
 }
 
+/**
+ * True when the connected database already contains a populated forum
+ * (a users table with at least one row). Used to stop a "fresh install" from
+ * silently reusing an existing forum's data instead of starting empty.
+ */
+function database_has_data(PDO $pdo, string $driver): bool {
+    try {
+        if ($driver === 'mysql') {
+            $stmt = $pdo->query("SELECT 1 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'users'");
+        } else {
+            $stmt = $pdo->query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'users'");
+        }
+        if ($stmt === false || $stmt->fetchColumn() === false) {
+            return false;
+        }
+        return (int)$pdo->query('SELECT COUNT(*) FROM users')->fetchColumn() > 0;
+    } catch (PDOException $e) {
+        return false;
+    }
+}
+
+/**
+ * Error shown when the installer would be reusing an existing forum database.
+ * Explains both the migration path and how to start over, so a "fresh install"
+ * that finds old data is never completed by accident.
+ */
+function existing_database_error(): string {
+    return 'This database already contains forum data, so a fresh installation cannot use it. '
+        . 'To move an existing forum to this server, copy its config.json together with the database '
+        . '(or install fresh and then replace the database file). '
+        . 'To start over, delete the database (or point the installer at an empty one) and try again.';
+}
+
 if (is_installed()) {
     log_security_event('installer_access_denied', ['script' => 'install.php']);
     http_response_code(403);
     die('<h1>Already Installed</h1><p>bulletinbored is already installed. Delete <code>config.json</code> to reinstall.</p>');
 }
-
 $error = '';
 $success = '';
 $dbDriver = $_POST['db_driver'] ?? 'sqlite';
@@ -164,16 +196,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
             }
 
-            $_SESSION['install_db_driver'] = $dbDriver;
-            $_SESSION['install_db_host'] = $dbHost;
-            $_SESSION['install_db_name'] = $dbName;
-            $_SESSION['install_db_user'] = $dbUser;
-            $_SESSION['install_db_pass'] = $dbPass;
-            $_SESSION['install_db_path'] = $dbPath;
+            if (database_has_data($pdo, $dbDriver)) {
+                $error = existing_database_error();
+            } else {
+                $_SESSION['install_db_driver'] = $dbDriver;
+                $_SESSION['install_db_host'] = $dbHost;
+                $_SESSION['install_db_name'] = $dbName;
+                $_SESSION['install_db_user'] = $dbUser;
+                $_SESSION['install_db_pass'] = $dbPass;
+                $_SESSION['install_db_path'] = $dbPath;
 
-            session_regenerate_id(true);
-            header('Location: install2.php');
-            exit;
+                session_regenerate_id(true);
+                header('Location: install2.php');
+                exit;
+            }
         } catch (PDOException $e) {
             $error = 'Connection failed. Please check the database settings and try again.';
         }

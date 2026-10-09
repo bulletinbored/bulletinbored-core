@@ -24,6 +24,7 @@ function handle_admin_settings_post(): ?string
     $attachmentsEnabled = !empty($_POST['attachments_enabled']) ? 1 : 0;
     $allowCatalogOnly = !empty($_POST['allow_catalog_only']) ? 1 : 0;
     $pluginVerifyFiles = !empty($_POST['plugin_verify_files']) ? 1 : 0;
+    $telemetry = !empty($_POST['telemetry']) ? 1 : 0;
 
     $config['site_name'] = $siteName;
     $config['site_tagline'] = $siteTagline;
@@ -36,6 +37,7 @@ function handle_admin_settings_post(): ?string
     $config['attachments_enabled'] = $attachmentsEnabled;
     $config['allow_catalog_only'] = $allowCatalogOnly;
     $config['plugin_verify_files'] = $pluginVerifyFiles;
+    $config['telemetry'] = $telemetry;
 
     if (isset($_POST['remove_logo'])) {
         $config['site_logo'] = '';
