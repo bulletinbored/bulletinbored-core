@@ -28,11 +28,14 @@ function test_validate_input_trims(): Test
     return $t;
 }
 
-function test_clean_text_escapes(): Test
+function test_clean_text_raw(): Test
 {
-    $t = new Test('Text - clean_text()');
-    $t->assertEquals('Trims and escapes', 'Hello', clean_text('  Hello  '));
-    $t->assertEquals('Escapes HTML', '&lt;b&gt;', clean_text('<b>'));
+    $t = new Test('Text - clean_text() stores raw, escaped on output');
+    $t->assertEquals('Trims whitespace', 'Hello', clean_text('  Hello  '));
+    $t->assertEquals('Keeps HTML raw', '<b>', clean_text('<b>'));
+    $t->assertEquals('Keeps apostrophes raw', "It's", clean_text("It's"));
+    // Escaping must happen exactly once, on output.
+    $t->assertEquals('Escaped on output', 'It&#039;s', escape(clean_text("It's")));
     return $t;
 }
 
@@ -198,7 +201,7 @@ function test_thread_sort_options(): Test
 register_tests(
     'test_escape_escapes_html',
     'test_validate_input_trims',
-    'test_clean_text_escapes',
+    'test_clean_text_raw',
     'test_time_ago',
     'test_compact_number',
     'test_excerpt',

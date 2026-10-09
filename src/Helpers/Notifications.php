@@ -61,9 +61,9 @@ function notify_thread_reply($thread, int $authorId, string $content): void
 
     foreach ($ids as $uid) {
         $body = t('reply_notification_body', [
-            'username' => $byId[$uid]['username'] ?? '',
-            'author' => $authorName,
-            'title' => $title,
+            'username' => escape($byId[$uid]['username'] ?? ''),
+            'author' => escape($authorName),
+            'title' => escape($title),
             'link' => $link,
         ]);
         try {
@@ -130,9 +130,9 @@ function notify_mentioned_users($pdo, $content, $threadId, $threadTitle, $author
             continue;
         }
         $body = t('mentioned_body', [
-            'username' => $user['username'] ?? $username,
-            'author' => $authorName,
-            'title' => $threadTitle,
+            'username' => escape($user['username'] ?? $username),
+            'author' => escape($authorName),
+            'title' => escape($threadTitle),
             'link' => $threadLink,
         ]);
         try {

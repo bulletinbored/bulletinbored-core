@@ -119,9 +119,10 @@ function test_input_validation(): Test
 {
     $t = new Test('Auth - Input Validation');
 
-    // Test: clean_text trims and escapes HTML
+    // Test: clean_text trims and keeps text raw (HTML is escaped on output)
     $t->assertEquals('clean_text trims whitespace', 'Hello', clean_text('  Hello  '));
-    $t->assertEquals('clean_text escapes HTML', 'It&#039;s', clean_text("It's"));
+    $t->assertEquals('clean_text keeps text raw', "It's", clean_text("It's"));
+    $t->assertEquals('clean_text output is escaped once', 'It&#039;s', escape(clean_text("It's")));
 
     // Test: validate_input trims and stripslashes
     $input = '  Hello <b>World</b>  ';

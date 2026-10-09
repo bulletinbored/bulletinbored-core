@@ -13,8 +13,16 @@ function validate_input($data) {
     return trim(stripslashes($data));
 }
 
+/**
+ * Trim a raw single-line text value (e.g. a thread title) for storage.
+ *
+ * Intentionally does NOT HTML-escape. Values are stored exactly as the user
+ * typed them and escaped only on output (like usernames via validate_input()).
+ * Escaping here as well caused double encoding: "we're" was stored as
+ * "we&#039;re" and then displayed literally as "we&#039;re".
+ */
 function clean_text($data) {
-    return htmlspecialchars(trim($data), ENT_QUOTES, 'UTF-8');
+    return trim($data);
 }
 
 function render_site_name(string $name): string {

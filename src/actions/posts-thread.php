@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . '/../../lib/DbQuery.php';
+
 function handle_upload_image(): \Bulletin\Response|bool
 {
     $pdo = App::getInstance()->pdo;
