@@ -13,6 +13,7 @@
  */
 
 require_once __DIR__ . '/harness.php';
+require_once __DIR__ . '/../lib/DbQuery.php';
 
 function createPDO(?string $driver = null): PDO
 {
@@ -528,6 +529,51 @@ function with_driver(string $driver, callable $fn): Test
     }
 }
 
+function test_thread_watchers_watch_unwatch(): Test
+{
+    $t = new Test('Database Matrix - Thread watch idempotency (' . getDriverLabel() . ')');
+
+    $pdo = createPDO();
+    $driver = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+
+    $pdo->exec("DROP TABLE IF EXISTS thread_watchers");
+    if ($driver === 'mysql') {
+        $charset = "CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci";
+        $pdo->exec("CREATE TABLE thread_watchers (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            thread_id INT NOT NULL,
+            user_id INT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY unique_watch (thread_id, user_id)
+        ) $charset");
+    } else {
+        $pdo->exec("CREATE TABLE thread_watchers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            thread_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(thread_id, user_id)
+        )");
+    }
+
+    // Watching is what handle_watch() performs: insertIgnore must work on every
+    // driver and must not throw or duplicate on a second watch.
+    $db = new DbQuery($pdo);
+    $db->table('thread_watchers')->insertIgnore(['thread_id' => 1, 'user_id' => 1]);
+    $db->table('thread_watchers')->insertIgnore(['thread_id' => 1, 'user_id' => 1]);
+
+    $t->assertEquals('Second watch is idempotent (single row)', 1,
+        (int)$pdo->query("SELECT COUNT(*) FROM thread_watchers WHERE thread_id = 1 AND user_id = 1")->fetchColumn());
+
+    $pdo->prepare("DELETE FROM thread_watchers WHERE thread_id = ? AND user_id = ?")->execute([1, 1]);
+    $t->assertEquals('Unwatch removes the row', 0,
+        (int)$pdo->query("SELECT COUNT(*) FROM thread_watchers WHERE thread_id = 1 AND user_id = 1")->fetchColumn());
+
+    $pdo->exec("DROP TABLE IF EXISTS thread_watchers");
+
+    return $t;
+}
+
 function register_database_matrix_tests(): void
 {
     $driver = $_ENV['DB_DRIVER'] ?? getenv('DB_DRIVER') ?? 'sqlite';
@@ -553,6 +599,7 @@ function register_database_matrix_tests(): void
             'test_authz_integration',
             'test_thread_listing_latest_join',
             'test_vote_upsert',
+            'test_thread_watchers_watch_unwatch',
         ];
 
         foreach ($tests as $testName) {

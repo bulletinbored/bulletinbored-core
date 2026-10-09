@@ -223,8 +223,14 @@ function handle_watch(): \Bulletin\Response|bool
     }
 
     try {
-        $pdo->prepare("INSERT OR IGNORE INTO thread_watchers (thread_id, user_id) VALUES (?, ?)")
-            ->execute([$threadId, $_SESSION['user_id']]);
+        // DbQuery::insertIgnore selects the correct syntax per driver
+        // (INSERT IGNORE on MySQL, INSERT OR IGNORE on SQLite), so watching a
+        // thread is actually persisted on both backends — the previous
+        // hardcoded "INSERT OR IGNORE" silently failed on MySQL.
+        (new DbQuery($pdo))->table('thread_watchers')->insertIgnore([
+            'thread_id' => $threadId,
+            'user_id' => (int)$_SESSION['user_id'],
+        ]);
     } catch (PDOException $e) {}
 
     $watched = $_SESSION['watched_threads'] ?? [];
