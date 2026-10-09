@@ -61,7 +61,10 @@ class Telemetry
 
     public function isEnabled(): bool
     {
-        return !empty($this->config['telemetry']);
+        // Opt-out: telemetry is on unless explicitly disabled. Defaulting to
+        // true also covers installations upgraded from a release that did not
+        // have the "telemetry" key yet.
+        return (bool)($this->config['telemetry'] ?? true);
     }
 
     public function endpoint(): string
@@ -70,7 +73,7 @@ class Telemetry
         if (is_string($url) && trim($url) !== '') {
             return trim($url);
         }
-        return 'https://bulletinbored.net/heartbeat.php';
+        return 'https://www.bulletinbored.net/heartbeat.php';
     }
 
     /**
@@ -189,6 +192,11 @@ class Telemetry
                     CURLOPT_USERAGENT => 'bulletinbored-telemetry/1.0',
                     CURLOPT_SSL_VERIFYPEER => true,
                     CURLOPT_SSL_VERIFYHOST => 2,
+                    // The collector canonicalises to www via a 301; follow it and
+                    // keep the method as POST across the redirect.
+                    CURLOPT_FOLLOWLOCATION => true,
+                    CURLOPT_MAXREDIRS => 3,
+                    CURLOPT_POSTREDIR => CURL_REDIR_POST_301 | CURL_REDIR_POST_302 | CURL_REDIR_POST_303,
                 ]);
                 curl_exec($ch);
                 $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -203,6 +211,8 @@ class Telemetry
                     'content' => $json,
                     'timeout' => 2,
                     'ignore_errors' => true,
+                    'follow_location' => 1,
+                    'max_redirects' => 3,
                 ],
             ]);
             $result = @file_get_contents($url, false, $context);

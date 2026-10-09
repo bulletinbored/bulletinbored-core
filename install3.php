@@ -390,7 +390,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install']) && !valida
             'update_mirror' => 'https://extend.bulletinbored.net',
             'install_id' => Telemetry::generateInstallId(),
             'telemetry' => true,
-            'telemetry_url' => 'https://bulletinbored.net/heartbeat.php',
+            'telemetry_url' => 'https://www.bulletinbored.net/heartbeat.php',
         ];
 
         if (file_put_contents(__DIR__ . '/config.json', json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE), LOCK_EX) === false) {

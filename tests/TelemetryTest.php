@@ -153,11 +153,30 @@ function test_telemetry_persists_missing_install_id(): Test
     return $t;
 }
 
+function test_telemetry_defaults_on_when_key_missing(): Test
+{
+    $t = new Test('Telemetry - opt-out defaults to enabled, canonical endpoint');
+
+    $dir = telemetry_tmp_dir();
+    $telemetry = new Telemetry($dir, ['install_id' => 'abc'], null, fn() => true);
+
+    $t->assertTrue('enabled when telemetry key absent', $telemetry->isEnabled());
+    $t->assertEquals(
+        'default endpoint uses www host',
+        'https://www.bulletinbored.net/heartbeat.php',
+        $telemetry->endpoint()
+    );
+
+    telemetry_rm_dir($dir);
+    return $t;
+}
+
 register_tests(
     'test_telemetry_generates_valid_uuid',
     'test_telemetry_payload_shape',
     'test_telemetry_disabled_sends_nothing',
     'test_telemetry_pings_once_per_day',
     'test_telemetry_failure_backoff',
-    'test_telemetry_persists_missing_install_id'
+    'test_telemetry_persists_missing_install_id',
+    'test_telemetry_defaults_on_when_key_missing'
 );
