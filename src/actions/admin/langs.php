@@ -18,8 +18,7 @@ function handle_admin_langs(string $method)
         }
     }
     if (!function_exists('saveLangMeta')) {
-        function saveLangMeta(string $code, string $sha): void {
-            global $langMetaPath;
+        function saveLangMeta(string $code, string $sha, string $langMetaPath): void {
             $path = $langMetaPath ?: __DIR__ . '/../../../data/lang-meta.json';
             $meta = loadLangMeta($path);
             $meta[$code] = ['sha' => $sha, 'updated' => date('c')];
@@ -102,58 +101,68 @@ function handle_admin_langs(string $method)
                 ob_start();
                 $prevDisplayErrors = ini_get('display_errors');
                 @ini_set('display_errors', '0');
-                $parsed = parse_url($downloadUrl);
-                $allowed = false;
-                if (
-                    $parsed
-                    && ($parsed['scheme'] ?? '') === 'https'
-                    && !str_contains($parsed['path'], '..')
-                ) {
+
+                try {
+                    $parsed = parse_url($downloadUrl);
+                    $allowed = false;
                     if (
-                        in_array($parsed['host'], ['github.com', 'raw.githubusercontent.com'], true)
-                        && str_starts_with($parsed['path'], '/bulletinbored/langs/')
+                        $parsed
+                        && ($parsed['scheme'] ?? '') === 'https'
+                        && !str_contains($parsed['path'], '..')
                     ) {
-                        $allowed = true;
+                        if (
+                            in_array($parsed['host'], ['github.com', 'raw.githubusercontent.com'], true)
+                            && str_starts_with($parsed['path'], '/bulletinbored/langs/')
+                        ) {
+                            $allowed = true;
+                        }
+                        $mirrorHost = parse_url($langMirrorBase, PHP_URL_HOST);
+                        if ($mirrorHost && ($parsed['host'] ?? '') === $mirrorHost) {
+                            $allowed = true;
+                        }
                     }
-                    $mirrorHost = parse_url($langMirrorBase, PHP_URL_HOST);
-                    if ($mirrorHost && ($parsed['host'] ?? '') === $mirrorHost) {
-                        $allowed = true;
-                    }
-                }
-                }
-                if (!$allowed) {
-                    $langError = 'Invalid download URL. Only URLs from the official language repository are allowed.';
-                } else {
-                    $dest = __DIR__ . '/../../../lang/'.$langCode.'.json';
-                    if ($isUpdate && !file_exists($dest)) {
-                        $langError = 'Language file not found: '.escape($langCode);
-                    } elseif (!$isUpdate && file_exists($dest)) {
-                        $langError = 'Language file already exists: '.escape($langCode);
+
+                    if (!$allowed) {
+                        $langError = 'Invalid download URL. Only URLs from the official language repository are allowed.';
                     } else {
-                        $candidateUrls = [$downloadUrl];
-                        if (preg_match('#\.php$#i', $downloadUrl)) {
-                            $candidateUrls[] = substr($downloadUrl, 0, -4) . '.json';
+                        $dest = __DIR__ . '/../../../lang/'.$langCode.'.json';
+                        if ($isUpdate && !file_exists($dest)) {
+                            $langError = 'Language file not found: '.escape($langCode);
+                        } elseif (!$isUpdate && file_exists($dest)) {
+                            $langError = 'Language file already exists: '.escape($langCode);
                         } else {
-                            $candidateUrls[] = substr($downloadUrl, 0, -5) . '.php';
-                        }
+                            $candidateUrls = [$downloadUrl];
 
-                        $data = null;
-                        foreach ($candidateUrls as $tryUrl) {
-                            if (!str_ends_with($tryUrl, '.json')) {
-                                continue;
+                            // Always try both .json and .php variants regardless of primary URL extension
+                            $ext = strtolower(pathinfo($downloadUrl, PATHINFO_EXTENSION));
+                            if ($ext === 'json') {
+                                $candidateUrls[] = substr($downloadUrl, 0, -5) . '.php';
+                            } elseif ($ext === 'php') {
+                                $candidateUrls[] = substr($downloadUrl, 0, -4) . '.json';
+                            } else {
+                                // Unknown extension: try both
+                                $candidateUrls[] = $downloadUrl . '.json';
+                                $candidateUrls[] = $downloadUrl . '.php';
                             }
-                            $content = @file_get_contents($tryUrl);
-                            if ($content === false) {
-                                continue;
-                            }
-                            $decoded = json_decode($content, true);
-                            if (is_array($decoded)) {
-                                $data = $decoded;
-                                break;
-                            }
-                        }
 
-                        if ($data === null) {
+                            // Remove duplicates while preserving order
+                            $candidateUrls = array_values(array_unique($candidateUrls));
+
+                            $data = null;
+                            foreach ($candidateUrls as $tryUrl) {
+                                // Try ALL candidate URLs regardless of extension
+                                $content = @file_get_contents($tryUrl);
+                                if ($content === false) {
+                                    continue;
+                                }
+                                $decoded = json_decode($content, true);
+                                if (is_array($decoded)) {
+                                    $data = $decoded;
+                                    break;
+                                }
+                            }
+
+                            if ($data === null) {
                                 $langError = 'Invalid language file from repository';
                             } elseif (!is_writable(dirname($dest))) {
                                 $langError = 'Language directory is not writable. Please check permissions.';
@@ -162,17 +171,21 @@ function handle_admin_langs(string $method)
                                 if ($written === false) {
                                     $langError = 'Failed to save language file';
                                 } else {
-                                    saveLangMeta($langCode, $remoteSha);
+                                    saveLangMeta($langCode, $remoteSha, $langMetaPath);
                                     $_SESSION['lang_success'] = ($isUpdate ? 'Language file updated: ' : 'Language file installed: ') . escape($langCode);
-                                    ob_end_clean();
                                     @ini_set('display_errors', $prevDisplayErrors);
+                                    ob_end_clean();
                                     return redirect(url('admin_langs'));
                                 }
+                            }
                         }
+                    }
+                } finally {
+                    // Guaranteed cleanup on ALL paths (success, error, exception)
+                    @ini_set('display_errors', $prevDisplayErrors);
+                    ob_end_clean();
                 }
             }
-            @ini_set('display_errors', $prevDisplayErrors);
-            ob_end_clean();
         } elseif (isset($_POST['delete_lang'])) {
             $langCode = $_POST['lang_code'] ?? '';
             $langCode = preg_replace('/[^a-z_]/', '', strtolower($langCode));

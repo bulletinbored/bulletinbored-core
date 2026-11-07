@@ -322,7 +322,8 @@ function test_no_eval_in_langs(): Test
     $code = file_get_contents(__DIR__ . '/../src/actions/admin/langs.php');
     $t->assert('No eval() found', !str_contains($code, 'eval('));
     $t->assert('No PHP language file support', !str_contains($code, '?> . $content'));
-    $t->assert('Only JSON accepted', str_contains($code, "str_ends_with(\$tryUrl, '.json')"));
+    $t->assert('Both JSON and PHP variants tried', str_contains($code, 'pathinfo($downloadUrl, PATHINFO_EXTENSION)'));
+    $t->assert('Candidate URLs deduplicated', str_contains($code, 'array_unique($candidateUrls)'));
     return $t;
 }
 
