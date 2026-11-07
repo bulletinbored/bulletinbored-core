@@ -120,6 +120,7 @@ function handle_admin_langs(string $method)
                         $allowed = true;
                     }
                 }
+                }
                 if (!$allowed) {
                     $langError = 'Invalid download URL. Only URLs from the official language repository are allowed.';
                 } else {
