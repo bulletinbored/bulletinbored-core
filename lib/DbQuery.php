@@ -80,8 +80,26 @@ class DbQuery
         return $clone;
     }
 
+    /**
+     * Add a raw SQL fragment to the WHERE clause.
+     *
+     * @internal This method is for internal use only. The $sql parameter must NEVER
+     * contain user input or variable interpolation. Use where() and whereIn() for
+     * parameterized queries. Only hardcoded SQL fragments (e.g., "EXISTS (...)",
+     * "column IS NOT NULL") are safe to pass here.
+     *
+     * @param string $sql Raw SQL fragment (no user input!)
+     * @param array  $params Bound parameters for the raw SQL
+     * @return self
+     */
     public function whereRaw(string $sql, array $params = []): self
     {
+        // Debug-mode guard: detect variable interpolation in SQL string
+        assert(
+            !preg_match('/\$\w/', $sql),
+            'whereRaw SQL must not contain variables'
+        );
+
         $clone = clone $this;
         $clone->wheres[] = $sql;
         foreach ($params as $k => $v) {
