@@ -325,7 +325,11 @@ class ThemeManager
     private function verifyFilesEnabled(): bool
     {
         global $config;
-        return !isset($config['theme_verify_files']) || $config['theme_verify_files'] !== false;
+        $enabled = !isset($config['theme_verify_files']) || $config['theme_verify_files'] !== false;
+        if (!$enabled) {
+            error_log('SECURITY WARNING: Theme file integrity verification is DISABLED (theme_verify_files = false). This allows installation of themes with undeclared or modified files. Only disable if you fully trust the theme source.');
+        }
+        return $enabled;
     }
 
     private function detectThemeName(string $dir): ?string

@@ -257,3 +257,44 @@ fails, bulletinbored restores the previous files and `installed.json` metadata,
 but it cannot undo arbitrary database changes an `on_install` / `on_update`
 hook may already have performed. Plugin authors should keep migrations
 idempotent or provide their own rollback logic.
+
+### Plugin/Theme Trust Model
+
+bulletinbored uses a **trust-on-first-use** model for plugins, themes, and language packs.
+This means:
+
+1. **Package installation = explicit trust decision**
+   - When you install a plugin, theme, or language pack, you are explicitly trusting the source.
+   - The code runs with the same privileges as the core application — there is no sandboxing.
+   - Only install packages from sources you have reviewed and trust.
+
+2. **Integrity verification (`plugin_verify_files` / `theme_verify_files`)**
+   - Enabled by default in `config.json`.
+   - Verifies that every file in the package matches the `files` list declared in `manifest.json`.
+   - Detects undeclared files (potential backdoors) and missing files (corrupted/incomplete packages).
+   - **Disabling verification is strongly discouraged** — a warning is logged when disabled.
+   - If you must disable it (e.g., for a legacy package without a manifest), re-enable it immediately after.
+
+3. **No cryptographic signatures (currently)**
+   - Packages are downloaded from GitHub or uploaded as ZIP files.
+   - There is no GPG/PGP signature verification against a trusted keyring.
+   - This is a deliberate trade-off for a decentralized distribution model without a central catalog authority.
+   - Future versions may add optional GPG verification for packages from an official catalog.
+
+4. **Recommended practices for administrators**
+   - **Keep `plugin_verify_files` and `theme_verify_files` enabled** (default).
+   - **Only install from reviewed sources** — audit the code before installing on production.
+   - **Use the admin panel's "Verify Files" feature** to re-check installed packages.
+   - **Monitor the PHP error log** for security warnings about disabled verification.
+   - **Keep core, plugins, and themes updated** to receive security fixes.
+   - **Delete installer files** (`install.php`, `install2.php`, `install3.php`) after setup.
+
+5. **Risks of disabling verification**
+   - A malicious package could include undeclared PHP files that execute arbitrary code.
+   - Modified files in an otherwise legitimate package could introduce vulnerabilities.
+   - No integrity check means supply chain attacks (compromised GitHub repo, MITM on download) go undetected.
+
+6. **Language packs**
+   - Language files are JSON-only (non-executable), reducing risk.
+   - They are still subject to the same `plugin_verify_files` / `theme_verify_files` checks when bundled with plugins/themes.
+   - Standalone language pack installation follows the same trust model.

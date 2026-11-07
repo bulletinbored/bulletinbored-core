@@ -278,6 +278,9 @@ trait PluginPackages
         // Same integrity check PackageInstaller runs for ZIP installs.
         $app = App::getInstance();
         $verifyFiles = !isset($app->config['plugin_verify_files']) || $app->config['plugin_verify_files'] !== false;
+        if (!$verifyFiles) {
+            error_log('SECURITY WARNING: Plugin file integrity verification is DISABLED (plugin_verify_files = false). This allows installation of plugins with undeclared or modified files. Only disable if you fully trust the plugin source.');
+        }
         if ($verifyFiles) {
             $check = $this->installer->verifyInstalledFiles($stagingDir);
             if (empty($check['success'])) {

@@ -341,6 +341,10 @@ class PackageInstaller
     private function verifyFilesEnabled(): bool
     {
         $config = App::getInstance()->config;
-        return !isset($config[$this->verifyConfigKey]) || $config[$this->verifyConfigKey] !== false;
+        $enabled = !isset($config[$this->verifyConfigKey]) || $config[$this->verifyConfigKey] !== false;
+        if (!$enabled) {
+            error_log('SECURITY WARNING: Package file integrity verification is DISABLED (' . $this->verifyConfigKey . ' = false). This allows installation of packages with undeclared or modified files. Only disable if you fully trust the package source.');
+        }
+        return $enabled;
     }
 }
