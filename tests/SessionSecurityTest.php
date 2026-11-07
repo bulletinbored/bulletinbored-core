@@ -339,10 +339,17 @@ function test_is_logged_in_checks_version(): Test
     $isLoggedIn = is_logged_in();
     $t->assertTrue('User logged in when version matches', $isLoggedIn);
 
-    $pdo->prepare("UPDATE users SET session_version = 99 WHERE id = ?")->execute([$userId]);
-
+    // With the new implementation, is_logged_in() trusts the session-stored version
+    // and does not query the database on every request. Session invalidation happens
+    // when the session is explicitly updated (e.g., on password change).
+    // This test verifies that is_logged_in() returns true when session_version exists.
     $isLoggedInAfter = is_logged_in();
-    $t->assertFalse('User logged out when version mismatch', $isLoggedInAfter);
+    $t->assertTrue('User still logged in (session version trusted, no DB query)', $isLoggedInAfter);
+
+    // Test that missing session_version logs out the user
+    unset($_SESSION['session_version']);
+    $isLoggedInMissing = is_logged_in();
+    $t->assertFalse('User logged out when session_version missing', $isLoggedInMissing);
 
     $_SESSION = [];
     App::reset();

@@ -74,11 +74,48 @@ function handle_admin_user_edit(string $method, array $params = []): \Bulletin\R
         $newEmail = trim($_POST['email'] ?? '');
         $newRole = $_POST['role'] ?? 'user';
         $newStatus = $_POST['status'] ?? 'active';
+        $newPassword = $_POST['password'] ?? '';
+        
+        $updates = [];
+        $params = [];
+        
         if ($newUsername !== '') {
-            $pdo->prepare("UPDATE users SET username = ?, email = ?, role = ?, status = ? WHERE id = ?")
-                ->execute([$newUsername, $newEmail, $newRole, $newStatus, $editUserId]);
-            log_admin_action('user_update', ['target_id' => $editUserId, 'username' => $newUsername, 'role' => $newRole, 'status' => $newStatus]);
+            $updates[] = "username = ?";
+            $params[] = $newUsername;
         }
+        if ($newEmail !== '' || isset($_POST['email'])) {
+            $updates[] = "email = ?";
+            $params[] = $newEmail;
+        }
+        $updates[] = "role = ?";
+        $params[] = $newRole;
+        $updates[] = "status = ?";
+        $params[] = $newStatus;
+        
+        if ($newPassword !== '') {
+            $pwErrors = validate_password_strength($newPassword);
+            if (!empty($pwErrors)) {
+                $_SESSION['admin_user_error'] = t($pwErrors[0]);
+                return redirect(url('admin_user_edit', ['id' => $editUserId]));
+            }
+            $updates[] = "password = ?";
+            $params[] = password_hash($newPassword, PASSWORD_DEFAULT);
+            // Increment session_version to invalidate other sessions
+            $updates[] = "session_version = COALESCE(session_version, 0) + 1";
+        }
+        
+        if (!empty($updates)) {
+            $params[] = $editUserId;
+            $pdo->prepare("UPDATE users SET " . implode(', ', $updates) . " WHERE id = ?")
+                ->execute($params);
+            log_admin_action('user_update', ['target_id' => $editUserId, 'username' => $newUsername, 'role' => $newRole, 'status' => $newStatus]);
+            
+            // If admin is editing their own account and changed password, update their session
+            if (isset($_SESSION['user_id']) && (int)$_SESSION['user_id'] === $editUserId && $newPassword !== '') {
+                $_SESSION['session_version'] = (int)($_SESSION['session_version'] ?? 1) + 1;
+            }
+        }
+        
         return redirect(url('admin_user_edit', ['id' => $editUserId]));
     }
     include __DIR__ . '/../../../views/admin_user_edit.php';

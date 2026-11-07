@@ -17,7 +17,7 @@ data/backups/
 
 # Generated sitemap (produced at runtime by the sitemapbored plugin)
 /sitemap.xml
-
+.roo/
 .kilo/
 
 /lang/*.php
@@ -40,3 +40,4 @@ docs/phase1-audit-report.md
 RELEASE-NOTES.md
 
 EMAIL_INVIE.md
+

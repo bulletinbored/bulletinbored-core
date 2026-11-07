@@ -95,7 +95,7 @@ $pluginManager->setRouter($router);
 $pluginManager->applyRoutes();
 
 // Register authorization service and can: middleware
-$authz = new AuthZ($pdo);
+$authz = new AuthZ($pdo, $pluginManager);
 $app->authz = $authz;
 $app->pdo = $pdo;
 $router->registerCanMiddleware($authz);

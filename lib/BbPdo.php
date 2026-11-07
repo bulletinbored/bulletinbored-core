@@ -16,6 +16,11 @@ class BbPdo extends PDO
     {
         parent::__construct($dsn, $user, $pass, $options);
         $this->mysql = stripos($dsn, 'mysql:') === 0;
+
+        // Enable SQLite foreign key constraints
+        if (!$this->mysql) {
+            $this->exec('PRAGMA foreign_keys = ON');
+        }
     }
 
     private function normalize(string $sql): string
@@ -65,10 +70,6 @@ class BbPdo extends PDO
         return parent::exec($statement, ...$rest);
     }
 
-    public function query($statement, ...$rest): PDOStatement|false
-    {
-        return parent::query($this->normalize($statement), ...$rest);
-    }
 
     public function prepare($statement, $options = null): PDOStatement|false
     {

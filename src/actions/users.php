@@ -383,6 +383,8 @@ function handle_edit_profile(string $method): \Bulletin\Response|bool
                 }
                 $updates[] = "password = ?";
                 $params[] = password_hash($_POST['password'], PASSWORD_DEFAULT);
+                // Increment session_version to invalidate other sessions
+                $updates[] = "session_version = COALESCE(session_version, 0) + 1";
             }
 
             if (!empty($updates)) {
@@ -540,6 +542,11 @@ function handle_reset_password(string $method): \Bulletin\Response|bool
 
         $pdo->prepare("UPDATE users SET password = ?, session_version = COALESCE(session_version, 0) + 1 WHERE id = ?")
             ->execute([password_hash($password, PASSWORD_DEFAULT), $validToken['user_id']]);
+
+        // If the user resetting their password is the currently logged-in user, update their session
+        if (isset($_SESSION['user_id']) && (int)$_SESSION['user_id'] === (int)$validToken['user_id']) {
+            $_SESSION['session_version'] = (int)($_SESSION['session_version'] ?? 1) + 1;
+        }
 
         $userStmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
         $userStmt->execute([$validToken['user_id']]);

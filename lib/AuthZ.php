@@ -52,10 +52,12 @@ class AuthZ
 {
     private PDO $pdo;
     private array $roleCache = [];
+    private ?object $pluginManager = null;
 
-    public function __construct(PDO $pdo)
+    public function __construct(PDO $pdo, ?object $pluginManager = null)
     {
         $this->pdo = $pdo;
+        $this->pluginManager = $pluginManager;
     }
 
     /**
@@ -82,8 +84,7 @@ class AuthZ
         }
 
         // Plugin-contributed permissions.
-        global $pluginManager;
-        if (isset($pluginManager) && $pluginManager->checkHook('permission_' . $permission, $role)) {
+        if ($this->pluginManager !== null && method_exists($this->pluginManager, 'checkHook') && $this->pluginManager->checkHook('permission_' . $permission, $role)) {
             return true;
         }
 

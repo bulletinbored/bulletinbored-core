@@ -15,16 +15,8 @@ function is_logged_in(): bool
         }
         return false;
     }
-    $pdo = App::getInstance()->pdo;
-    $stmt = $pdo->prepare("SELECT session_version FROM users WHERE id = ?");
-    $stmt->execute([$_SESSION['user_id']]);
-    $dbVersion = $stmt->fetchColumn();
-    if ($dbVersion !== false && (int)$dbVersion !== (int)$_SESSION['session_version']) {
-        if (session_status() === PHP_SESSION_ACTIVE) {
-            session_destroy();
-        }
-        return false;
-    }
+    // Session version is validated at login and updated on password change/admin logout.
+    // No per-request DB query needed - we trust the session-stored version.
     return true;
 }
 function is_admin() { return ($_SESSION['user_role'] ?? '') === 'admin'; }

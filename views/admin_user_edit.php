@@ -37,6 +37,12 @@
                     </div>
                 </div>
 
+                <div class="mb-3">
+                    <label class="form-label"><?= t('password') ?> <small class="text-muted">(leave blank to keep current)</small></label>
+                    <input type="password" name="password" class="form-control" autocomplete="new-password">
+                    <div class="form-text"><?= t('password_min_10_chars') ?></div>
+                </div>
+
                 <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i><?= t('save_changes') ?></button>
                 <a href="<?= url('admin_users') ?>" class="btn btn-secondary"><?= t('cancel') ?></a>
             </form>
