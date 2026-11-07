@@ -107,7 +107,6 @@ $_SESSION = [];
 if (session_status() === PHP_SESSION_ACTIVE) {
     session_destroy();
 }
-session_start();
 
 // Session setup with test config (copied from session_setup.php but without main bootstrap dependencies)
 $sessionDir = $config['session_path'];

@@ -13,11 +13,11 @@ function handle_admin_categories(string $method): \Bulletin\Response|bool
         }
         $allowedRoles = $_POST['allowed_roles'] ?? 'all';
         $allowedRoles = in_array($allowedRoles, ['all', 'admin', 'moderator'], true) ? $allowedRoles : 'all';
-        if (isset($_GET['id'])) {
-            $catId = (int)$_GET['id'];
+        $catId = (int)($_POST['id'] ?? $_GET['id'] ?? 0);
+        if ($catId > 0) {
             $name = validate_input($_POST['name'] ?? '');
             $description = validate_input($_POST['description'] ?? '');
-            if ($catId > 0 && $name !== '') {
+            if ($name !== '') {
                 $pdo->prepare("UPDATE categories SET name = ?, description = ?, allowed_roles = ? WHERE id = ?")->execute([$name, $description, $allowedRoles, $catId]);
                 log_admin_action('category_update', ['category_id' => $catId, 'name' => $name]);
             }

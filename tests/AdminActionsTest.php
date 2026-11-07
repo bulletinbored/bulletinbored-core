@@ -784,7 +784,7 @@ function test_admin_create_user(): Test
 
     $_SERVER['REQUEST_METHOD'] = 'POST';
     $_POST['username'] = 'newuser';
-    $_POST['password'] = 'password123';
+    $_POST['password'] = 'Password123'; // Must have uppercase, lowercase, number, and >=10 chars
     $_POST['email'] = 'newuser@test.com';
     $_POST['role'] = 'user';
     $_POST['status'] = 'active';
@@ -816,7 +816,7 @@ function test_admin_create_user_duplicate_username(): Test
 
     $_SERVER['REQUEST_METHOD'] = 'POST';
     $_POST['username'] = 'testuser'; // already exists
-    $_POST['password'] = 'password123';
+    $_POST['password'] = 'Password123';
     $_POST['email'] = 'new@test.com';
     $_POST['role'] = 'user';
     $_POST['status'] = 'active';
@@ -1112,9 +1112,11 @@ function test_admin_categories_crud(): Test
     // Test create category
     require_once __DIR__ . '/../src/actions/admin/categories.php';
 
+    $uniqueName = 'New Category ' . uniqid();
+
     $_SERVER['REQUEST_METHOD'] = 'POST';
     $_POST['do'] = 'create';
-    $_POST['name'] = 'New Category';
+    $_POST['name'] = $uniqueName;
     $_POST['description'] = 'Description';
     $_POST['position'] = '5';
     $_POST['csrf_token'] = generate_csrf_token();
@@ -1123,20 +1125,20 @@ function test_admin_categories_crud(): Test
     $t->assertTrue('Create returns redirect', $result instanceof \Bulletin\Response);
 
     $stmt = $pdo->prepare("SELECT name, description, position FROM categories WHERE name = ?");
-    $stmt->execute(['New Category']);
+    $stmt->execute([$uniqueName]);
     $cat = $stmt->fetch();
-    $t->assertEquals('Category created', 'New Category', $cat['name']);
+    $t->assertEquals('Category created', $uniqueName, $cat['name']);
     $t->assertEquals('Description saved', 'Description', $cat['description']);
     $t->assertEquals('Position saved', 5, (int)$cat['position']);
 
     // Test update category
     $stmt = $pdo->prepare("SELECT id FROM categories WHERE name = ?");
-    $stmt->execute(['New Category']);
+    $stmt->execute([$uniqueName]);
     $catId = $stmt->fetchColumn();
 
     $_POST['do'] = 'update';
     $_POST['id'] = (string)$catId;
-    $_POST['name'] = 'Updated Category';
+    $_POST['name'] = 'Updated Category ' . uniqid();
     $_POST['description'] = 'Updated description';
     $_POST['position'] = '10';
     $_POST['csrf_token'] = generate_csrf_token();
@@ -1147,7 +1149,7 @@ function test_admin_categories_crud(): Test
     $stmt = $pdo->prepare("SELECT name, description, position FROM categories WHERE id = ?");
     $stmt->execute([$catId]);
     $cat = $stmt->fetch();
-    $t->assertEquals('Category updated', 'Updated Category', $cat['name']);
+    $t->assertEquals('Category updated', $_POST['name'], $cat['name']);
 
     // Test delete category
     $_POST['do'] = 'delete';

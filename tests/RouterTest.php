@@ -81,6 +81,25 @@ function setup_test_app(): array
             permissions TEXT DEFAULT '[]',
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
+        CREATE TABLE IF NOT EXISTS threads (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            category_id INTEGER,
+            user_id INTEGER,
+            title TEXT NOT NULL,
+            content TEXT,
+            status TEXT DEFAULT 'visible',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            views INTEGER DEFAULT 0
+        );
+        CREATE TABLE IF NOT EXISTS posts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            thread_id INTEGER,
+            user_id INTEGER,
+            content TEXT NOT NULL,
+            status TEXT DEFAULT 'visible',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
     ");
 
     $app->pdo = $pdo;
