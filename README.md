@@ -135,6 +135,71 @@ Without it, the `force_https` redirect may loop. You can also disable HTTPS forc
 }
 ```
 
+## Content Security Policy (CSP) Configuration
+
+bulletinbored uses a restrictive Content Security Policy by default. The CSP can be customized via the `csp` section in `config.json`.
+
+### Default CSP
+
+The default policy allows:
+- Scripts: Self + Twitter platform/syndication
+- Styles: Self + jsDelivr, Google Fonts, Cloudflare CDN
+- Fonts: Self + Google Fonts, jsDelivr, Cloudflare CDN, data URIs
+- Images: Self + data URIs + any HTTPS + Twitter images
+- Frames: YouTube, Twitter, Instagram, Facebook
+- Connect: Self + Twitter APIs
+- Objects: None
+- Base URI: Self
+- Form Action: Self
+- Frame Ancestors: None
+
+### Customizing CSP
+
+Add a `csp` object to `config.json` with any of these directives:
+
+```json
+{
+  "csp": {
+    "script_src": ["'self'", "https://cdn.example.com"],
+    "style_src": ["'self'", "https://fonts.googleapis.com"],
+    "img_src": ["'self'", "data:", "https://cdn.example.com"],
+    "frame_src": ["https://www.youtube.com"],
+    "connect_src": ["'self'"]
+  }
+}
+```
+
+### Important Notes
+
+1. **Nonce is automatic**: The `'nonce-{value}'` is automatically prepended to `script_src` and `style_src` — do not include it in your config.
+
+2. **Security restrictions**: The following are **rejected** if specified in config (logged as warnings):
+   - `unsafe-inline`, `unsafe-eval`, `wasm-unsafe-eval` in `script_src`
+   - `unsafe-inline` in `style_src`
+
+3. **Directive names**: Use snake_case in config (e.g., `script_src`), which maps to kebab-case in CSP header (e.g., `script-src`).
+
+4. **Complete override**: Specifying a directive completely replaces the default for that directive. To keep defaults and add more, include the default values in your config.
+
+### Example: Restrictive CSP
+
+For maximum security, use a minimal CSP:
+
+```json
+{
+  "csp": {
+    "script_src": ["'self'"],
+    "style_src": ["'self'"],
+    "img_src": ["'self'", "data:"],
+    "font_src": ["'self'"],
+    "frame_src": [],
+    "connect_src": ["'self'"]
+  }
+}
+```
+
+This blocks all external resources, inline scripts/styles (except those with valid nonce), and third-party frames.
+
 ## Documentation
 
 Full documentation lives in the separate [`docs`](https://github.com/bulletinbored/docs) repository (published at https://docs.bulletinbored.net):

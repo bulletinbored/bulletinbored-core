@@ -34,5 +34,19 @@
     "allow_catalog_only": true,
     "telemetry": true,
     "telemetry_url": "https://www.bulletinbored.net/heartbeat.php",
-    "trusted_proxies": ["127.0.0.1", "::1"]
+    "trusted_proxies": ["127.0.0.1", "::1"],
+    "csp": {
+        "default_src": ["'self'"],
+        "script_src": ["'self'", "https://platform.twitter.com", "https://cdn.syndication.twimg.com"],
+        "style_src": ["'self'", "https://cdn.jsdelivr.net", "https://fonts.googleapis.com", "https://cdnjs.cloudflare.com"],
+        "style_src_attr": ["'unsafe-inline'"],
+        "font_src": ["'self'", "https://fonts.gstatic.com", "https://cdn.jsdelivr.net", "https://cdnjs.cloudflare.com", "data:"],
+        "img_src": ["'self'", "data:", "https:", "https://*.twimg.com"],
+        "frame_src": ["https://www.youtube.com", "https://www.youtube-nocookie.com", "https://platform.twitter.com", "https://publish.twitter.com", "https://syndication.twitter.com", "https://www.instagram.com", "https://connect.facebook.net", "https://www.facebook.com", "https://facebook.com"],
+        "connect_src": ["'self'", "https://publish.twitter.com", "https://platform.twitter.com", "https://syndication.twitter.com", "https://cdn.syndication.twimg.com"],
+        "object_src": ["'none'"],
+        "base_uri": ["'self'"],
+        "form_action": ["'self'"],
+        "frame_ancestors": ["'none'"]
+    }
 }

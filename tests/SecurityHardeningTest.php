@@ -228,17 +228,24 @@ function test_security_headers_present(): Test
 {
     $t = new Test('Security - Headers Present');
 
-    $cspCode = file_get_contents(__DIR__ . '/../src/csp.php');
+    App::reset();
+    $config = [];
+    $nonce = generate_csp_nonce();
+    $header = build_csp_header($config, $nonce);
 
+    // Check that the source code still sets the other headers
+    $cspCode = file_get_contents(__DIR__ . '/../src/csp.php');
     $t->assert('X-Content-Type-Options header set', str_contains($cspCode, "X-Content-Type-Options: nosniff"));
     $t->assert('X-Frame-Options header set', str_contains($cspCode, "X-Frame-Options: DENY"));
     $t->assert('Referrer-Policy header set', str_contains($cspCode, "Referrer-Policy:"));
     $t->assert('Content-Security-Policy header set', str_contains($cspCode, "Content-Security-Policy:"));
-    $t->assert('CSP has default-src', str_contains($cspCode, "default-src 'self'"));
-    $t->assert('CSP has script-src with nonce', str_contains($cspCode, "script-src 'self' 'nonce-"));
-    $t->assert('CSP has object-src none', str_contains($cspCode, "object-src 'none'"));
-    $t->assert('CSP has frame-ancestors none', str_contains($cspCode, "frame-ancestors 'none'"));
-    $t->assert('CSP has base-uri self', str_contains($cspCode, "base-uri 'self'"));
+
+    // Check generated CSP header (nonce is prepended, so check for nonce before self)
+    $t->assert('CSP has default-src', str_contains($header, "default-src 'self'"));
+    $t->assert('CSP has script-src with nonce', str_contains($header, "script-src 'nonce-{$nonce}' 'self'"));
+    $t->assert('CSP has object-src none', str_contains($header, "object-src 'none'"));
+    $t->assert('CSP has frame-ancestors none', str_contains($header, "frame-ancestors 'none'"));
+    $t->assert('CSP has base-uri self', str_contains($header, "base-uri 'self'"));
 
     return $t;
 }
@@ -247,9 +254,20 @@ function test_security_headers_no_inline_scripts(): Test
 {
     $t = new Test('Security - CSP Blocks Inline Scripts');
 
-    $cspCode = file_get_contents(__DIR__ . '/../src/csp.php');
+    App::reset();
+    $config = [];
+    $nonce = generate_csp_nonce();
+    $header = build_csp_header($config, $nonce);
 
-    $t->assert('CSP does NOT have unsafe-inline in script-src', !str_contains($cspCode, "script-src 'self' 'unsafe-inline'"));
+    // Check that script-src does not contain unsafe-inline (style-src-attr may have it for backward compat)
+    $scriptSrcStart = strpos($header, 'script-src');
+    $scriptSrcEnd = strpos($header, ';', $scriptSrcStart);
+    if ($scriptSrcEnd === false) {
+        $scriptSrcEnd = strlen($header);
+    }
+    $scriptSrc = substr($header, $scriptSrcStart, $scriptSrcEnd - $scriptSrcStart);
+    
+    $t->assert('CSP does NOT have unsafe-inline in script-src', !str_contains($scriptSrc, "'unsafe-inline'"));
 
     return $t;
 }
@@ -333,6 +351,99 @@ function test_upload_null_byte(): Test
     return $t;
 }
 
+function test_csp_default_matches_current(): Test
+{
+    $t = new Test('CSP - Default matches current hardcoded');
+    App::reset();
+    $config = []; // No CSP config
+    $nonce = generate_csp_nonce();
+    $header = build_csp_header($config, $nonce);
+
+    // Verify key directives present (nonce is prepended)
+    $t->assert('Has default-src self', str_contains($header, "default-src 'self'"));
+    $t->assert('Has script-src with nonce', str_contains($header, "script-src 'nonce-{$nonce}' 'self'"));
+    $t->assert('Has Twitter domains', str_contains($header, 'platform.twitter.com') && str_contains($header, 'cdn.syndication.twimg.com'));
+    $t->assert('Has style-src with nonce', str_contains($header, "style-src 'nonce-{$nonce}' 'self'"));
+    $t->assert('Has object-src none', str_contains($header, "object-src 'none'"));
+    $t->assert('Has frame-ancestors none', str_contains($header, "frame-ancestors 'none'"));
+    return $t;
+}
+
+function test_csp_custom_override(): Test
+{
+    $t = new Test('CSP - Custom config overrides directives');
+    App::reset();
+    $config = ['csp' => ['script_src' => ["'self'", 'https://custom.example.com']]];
+    $nonce = generate_csp_nonce();
+    $header = build_csp_header($config, $nonce);
+
+    $t->assert('Custom domain present', str_contains($header, 'custom.example.com'));
+    
+    // Check that Twitter domains are absent from script-src specifically
+    $scriptStart = strpos($header, 'script-src');
+    $scriptEnd = strpos($header, ';', $scriptStart);
+    if ($scriptEnd === false) {
+        $scriptEnd = strlen($header);
+    }
+    $scriptSrc = substr($header, $scriptStart, $scriptEnd - $scriptStart);
+    $t->assert('Twitter domains absent from script-src', !str_contains($scriptSrc, 'platform.twitter.com'));
+    
+    $t->assert('Nonce still present', str_contains($header, "'nonce-{$nonce}'"));
+    return $t;
+}
+
+function test_csp_rejects_unsafe_inline_script(): Test
+{
+    $t = new Test('CSP - Rejects unsafe-inline in script_src');
+    App::reset();
+    $config = ['csp' => ['script_src' => ["'self'", "'unsafe-inline'"]]];
+    $nonce = generate_csp_nonce();
+
+    // Capture error log
+    $logOutput = '';
+    $handler = function($level, $message) use (&$logOutput) { $logOutput .= $message; };
+    set_error_handler($handler);
+
+    $header = build_csp_header($config, $nonce);
+    restore_error_handler();
+
+    $t->assert('Warning logged', str_contains($logOutput, 'unsafe-inline') && str_contains($logOutput, 'script_src'));
+    
+    // Check that unsafe-inline is not in script-src specifically
+    $scriptStart = strpos($header, 'script-src');
+    $scriptEnd = strpos($header, ';', $scriptStart);
+    if ($scriptEnd === false) {
+        $scriptEnd = strlen($header);
+    }
+    $scriptSrc = substr($header, $scriptStart, $scriptEnd - $scriptStart);
+    $t->assert('unsafe-inline not in script-src', !str_contains($scriptSrc, "'unsafe-inline'"));
+    
+    $t->assert('Nonce still present', str_contains($header, "'nonce-{$nonce}'"));
+    return $t;
+}
+
+function test_csp_restrictive_blocks_inline(): Test
+{
+    $t = new Test('CSP - Restrictive config blocks inline scripts');
+    App::reset();
+    $config = ['csp' => [
+        'script_src' => ["'self'"],
+        'style_src' => ["'self'"],
+        'img_src' => ["'self'", 'data:'],
+        'font_src' => ["'self'"],
+        'frame_src' => [],
+        'connect_src' => ["'self'"],
+    ]];
+    $nonce = generate_csp_nonce();
+    $header = build_csp_header($config, $nonce);
+
+    // Nonce is prepended, so check for nonce before self
+    $t->assert('Only self in script-src', str_contains($header, "script-src 'nonce-{$nonce}' 'self'") && substr_count($header, 'script-src') === 1);
+    $t->assert('No external domains', !str_contains($header, 'twitter.com') && !str_contains($header, 'youtube.com'));
+    $t->assert('frame-src empty', str_contains($header, "frame-src ") && !str_contains($header, "frame-src https://"));
+    return $t;
+}
+
 register_tests(
     'test_sql_injection_login',
     'test_sql_injection_search',
@@ -347,5 +458,9 @@ register_tests(
     'test_security_headers_frame_options',
     'test_csp_nonce_generation',
     'test_upload_double_extension',
-    'test_upload_null_byte'
+    'test_upload_null_byte',
+    'test_csp_default_matches_current',
+    'test_csp_custom_override',
+    'test_csp_rejects_unsafe_inline_script',
+    'test_csp_restrictive_blocks_inline'
 );

@@ -32,11 +32,6 @@ if (defined('BULLETIN_TEST_MODE') && BULLETIN_TEST_MODE) {
     return;
 }
 
-// --- Security headers -------------------------------------------------------
-require_once __DIR__ . '/csp.php';
-$cspNonce = generate_csp_nonce();
-send_security_headers($cspNonce);
-
 // --- Force HTTPS ------------------------------------------------------------
 // If the deployment is HTTPS-only (cookie_secure enabled), redirect any plain
 // HTTP request to the equivalent HTTPS URL before starting the session, so the
@@ -162,7 +157,12 @@ if (file_exists($configPath)) {
         @unlink($legacyConfigPath);
     }
 }
-
+ 
+// --- Security headers -------------------------------------------------------
+require_once __DIR__ . '/csp.php';
+$cspNonce = generate_csp_nonce();
+send_security_headers($cspNonce, $config);
+ 
 // All timestamps are stored in UTC (SQLite CURRENT_TIMESTAMP is UTC, and MySQL
 // sessions are pinned to +00:00 in setup.php). Pin PHP to UTC as well so that
 // PHP-generated timestamps (e.g. threads.updated_at) stay comparable with
