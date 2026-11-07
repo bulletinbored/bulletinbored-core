@@ -23,7 +23,7 @@ function handle_admin_action(string $action, string $method): \Bulletin\Response
         'delete_user', 'ban_user', 'unban_user', 'suspend_user',
     ];
     if (!in_array($action, $adminActions, true)) {
-        return false;
+        throw new \Bulletin\NotFoundException('Admin action not found');
     }
 
     switch ($action) {
@@ -40,29 +40,53 @@ function handle_admin_action(string $action, string $method): \Bulletin\Response
         case 'admin_moderation':
             return handle_admin_moderation_get();
         case 'moderate':
-            return $method === 'POST' ? handle_moderate_post() : false;
+            if ($method !== 'POST') {
+                throw new \Bulletin\MethodNotAllowedException('Method not allowed');
+            }
+            return handle_moderate_post();
         case 'frontend_moderate':
-            return $method === 'POST' ? handle_frontend_moderate_post() : false;
+            if ($method !== 'POST') {
+                throw new \Bulletin\MethodNotAllowedException('Method not allowed');
+            }
+            return handle_frontend_moderate_post();
         case 'split_thread':
-            return $method === 'POST' ? handle_split_thread_post() : false;
+            if ($method !== 'POST') {
+                throw new \Bulletin\MethodNotAllowedException('Method not allowed');
+            }
+            return handle_split_thread_post();
         case 'merge_thread':
-            return $method === 'POST' ? handle_merge_thread_post() : false;
+            if ($method !== 'POST') {
+                throw new \Bulletin\MethodNotAllowedException('Method not allowed');
+            }
+            return handle_merge_thread_post();
         case 'admin_roles':
             return handle_admin_roles_get();
         case 'admin_roles_action':
-            return $method === 'POST' ? handle_admin_roles_action_post() : false;
+            if ($method !== 'POST') {
+                throw new \Bulletin\MethodNotAllowedException('Method not allowed');
+            }
+            return handle_admin_roles_action_post();
         case 'admin_users':
             return handle_admin_users_get();
         case 'admin_user_edit':
             return handle_admin_user_edit($method);
         case 'admin_create_user':
-            return $method === 'POST' ? handle_admin_create_user_post() : false;
+            if ($method !== 'POST') {
+                throw new \Bulletin\MethodNotAllowedException('Method not allowed');
+            }
+            return handle_admin_create_user_post();
         case 'admin_categories':
             return handle_admin_categories($method);
         case 'delete_category':
-            return $method === 'POST' ? handle_delete_category_post() : false;
+            if ($method !== 'POST') {
+                throw new \Bulletin\MethodNotAllowedException('Method not allowed');
+            }
+            return handle_delete_category_post();
         case 'update_category_order':
-            return $method === 'POST' ? handle_update_category_order_post() : false;
+            if ($method !== 'POST') {
+                throw new \Bulletin\MethodNotAllowedException('Method not allowed');
+            }
+            return handle_update_category_order_post();
         case 'admin_langs':
             return handle_admin_langs($method);
         case 'admin_diagnostics':
@@ -76,15 +100,27 @@ function handle_admin_action(string $action, string $method): \Bulletin\Response
         case 'admin_updates':
             return handle_admin_updates($method);
         case 'delete_user':
-            return $method === 'POST' ? handle_delete_user_post() : false;
+            if ($method !== 'POST') {
+                throw new \Bulletin\MethodNotAllowedException('Method not allowed');
+            }
+            return handle_delete_user_post();
         case 'ban_user':
-            return $method === 'POST' ? handle_ban_user_post() : false;
+            if ($method !== 'POST') {
+                throw new \Bulletin\MethodNotAllowedException('Method not allowed');
+            }
+            return handle_ban_user_post();
         case 'unban_user':
-            return $method === 'POST' ? handle_unban_user_post() : false;
+            if ($method !== 'POST') {
+                throw new \Bulletin\MethodNotAllowedException('Method not allowed');
+            }
+            return handle_unban_user_post();
         case 'suspend_user':
-            return $method === 'POST' ? handle_suspend_user_post() : false;
+            if ($method !== 'POST') {
+                throw new \Bulletin\MethodNotAllowedException('Method not allowed');
+            }
+            return handle_suspend_user_post();
         default:
-            return false;
+            throw new \Bulletin\NotFoundException('Admin action not found');
     }
 }
 
@@ -108,9 +144,9 @@ function handle_admin_dashboard(): \Bulletin\Response|bool
     $adminSuccess = '';
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
         if (!csrf_validate_request()) {
-            $adminError = 'Invalid CSRF token';
+            throw new \Bulletin\ForbiddenException('CSRF token invalid');
         } elseif (!rate_limit('admin_dashboard_settings', 30, 3600, (string)($_SESSION['user_id'] ?? 0))) {
-            $adminError = 'You are changing settings too fast. Please try again later.';
+            throw new \Bulletin\TooManyRequestsException('You are changing settings too fast. Please try again later.');
         } else {
             $siteName = trim($_POST['site_name'] ?? $config['site_name']);
             $defaultLang = trim($_POST['default_lang'] ?? $config['default_lang'] ?? 'en');
@@ -123,7 +159,7 @@ function handle_admin_dashboard(): \Bulletin\Response|bool
             if (file_put_contents(__DIR__ . '/../../config.json', json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) !== false) {
                 $adminSuccess = 'Settings saved successfully';
             } else {
-                $adminError = 'Failed to save settings';
+                throw new \Bulletin\HttpException('Failed to save settings', 500);
             }
         }
 

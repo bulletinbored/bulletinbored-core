@@ -5,12 +5,10 @@ function handle_admin_settings_post(): ?string
     global $config;
 
     if (!csrf_validate_request()) {
-        $_SESSION['settings_error'] = 'CSRF token invalid';
-        return redirect(url('admin_settings'));
+        throw new \Bulletin\ForbiddenException('CSRF token invalid');
     }
     if (!rate_limit('admin_settings', 30, 3600, (string)($_SESSION['user_id'] ?? 0))) {
-        $_SESSION['settings_error'] = 'You are changing settings too fast. Please try again later.';
-        return redirect(url('admin_settings'));
+        throw new \Bulletin\TooManyRequestsException('You are changing settings too fast. Please try again later.');
     }
 
     $siteName = trim($_POST['site_name'] ?? $config['site_name']);
@@ -65,13 +63,13 @@ function handle_admin_upload_site_image(): \Bulletin\Response|bool
     global $config;
 
     if (!csrf_validate_request()) {
-        return \Bulletin\Response::json(['ok' => false, 'error' => 'CSRF token invalid'], 403);
+        throw new \Bulletin\ForbiddenException('CSRF token invalid');
     }
     if (!rate_limit('admin_upload_site_image', 20, 3600, (string)($_SESSION['user_id'] ?? 0))) {
-        return \Bulletin\Response::json(['ok' => false, 'error' => 'You are uploading too many site images. Please try again later.'], 429);
+        throw new \Bulletin\TooManyRequestsException('You are uploading too many site images. Please try again later.');
     }
     if (empty($_FILES['site_image']['tmp_name'])) {
-        return \Bulletin\Response::json(['ok' => false, 'error' => 'No file uploaded'], 400);
+        throw new \Bulletin\ValidationException(['site_image' => 'No file uploaded']);
     }
 
     $allowed = [
@@ -86,7 +84,7 @@ function handle_admin_upload_site_image(): \Bulletin\Response|bool
     $maxSize = 2 * 1024 * 1024;
     $info = validate_upload($_FILES['site_image']['tmp_name'], $_FILES['site_image']['name'] ?? '', $allowed, $maxSize);
     if ($info === null) {
-        return \Bulletin\Response::json(['ok' => false, 'error' => 'Invalid image. Allowed: JPG, PNG, GIF, WebP, SVG, ICO. Max 2MB.'], 400);
+        throw new \Bulletin\ValidationException(['site_image' => 'Invalid image. Allowed: JPG, PNG, GIF, WebP, SVG, ICO. Max 2MB.']);
     }
 
     $uploadDir = __DIR__ . '/../../../uploads';
@@ -95,7 +93,7 @@ function handle_admin_upload_site_image(): \Bulletin\Response|bool
     }
     $dest = $uploadDir . '/' . $info['safe_name'];
     if (!move_uploaded_file($_FILES['site_image']['tmp_name'], $dest)) {
-        return \Bulletin\Response::json(['ok' => false, 'error' => 'Failed to save file'], 500);
+        throw new \Bulletin\HttpException('Failed to save file', 500);
     }
 
     $url = base_url() . '/uploads/' . $info['safe_name'];
@@ -119,28 +117,26 @@ function handle_admin_smtp_post(): ?string
     global $config;
 
     if (!csrf_validate_request()) {
-        return 'CSRF token invalid';
+        throw new \Bulletin\ForbiddenException('CSRF token invalid');
     }
     if (!rate_limit('admin_smtp', 30, 3600, (string)($_SESSION['user_id'] ?? 0))) {
-        $_SESSION['smtp_test_error'] = 'You are performing too many SMTP operations. Please try again later.';
-        return redirect(url('admin_smtp'));
+        throw new \Bulletin\TooManyRequestsException('You are performing too many SMTP operations. Please try again later.');
     }
 
     if (isset($_POST['send_smtp_test'])) {
         $testEmail = trim($_POST['smtp_test_to'] ?? '');
         if (empty($testEmail) || !filter_var($testEmail, FILTER_VALIDATE_EMAIL)) {
-            $_SESSION['smtp_test_error'] = t('invalid_email_address');
+            throw new \Bulletin\ValidationException(['smtp_test_to' => t('invalid_email_address')]);
+        }
+        $subject = 'Test email from ' . ($config['site_name'] ?? 'bulletinbored');
+        $body = '<p>This is a test email sent from your forum\'s SMTP configuration page.</p>'
+              . '<p>If you received this, your SMTP settings are correct.</p>';
+        $sent = send_email($testEmail, $subject, $body);
+        if ($sent) {
+            $_SESSION['smtp_test_success'] = $testEmail;
         } else {
-            $subject = 'Test email from ' . ($config['site_name'] ?? 'bulletinbored');
-            $body = '<p>This is a test email sent from your forum\'s SMTP configuration page.</p>'
-                  . '<p>If you received this, your SMTP settings are correct.</p>';
-            $sent = send_email($testEmail, $subject, $body);
-            if ($sent) {
-                $_SESSION['smtp_test_success'] = $testEmail;
-            } else {
-                $err = error_get_last();
-                $_SESSION['smtp_test_error'] = $err['message'] ?? 'Unknown error';
-            }
+            $err = error_get_last();
+            throw new \Bulletin\HttpException($err['message'] ?? 'Unknown error', 500);
         }
         return redirect(url('admin_smtp'));
     }

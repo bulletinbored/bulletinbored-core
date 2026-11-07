@@ -58,15 +58,15 @@ function handle_update_category_order_post(): \Bulletin\Response|bool
     $pdo = App::getInstance()->pdo;
 
     if (!csrf_validate_request()) {
-        return \Bulletin\Response::json(['success' => false, 'message' => 'CSRF token invalid'], 403);
+        throw new \Bulletin\ForbiddenException('CSRF token invalid');
     }
     if (!rate_limit('admin_category_order', 30, 3600, (string)($_SESSION['user_id'] ?? 0))) {
-        return \Bulletin\Response::json(['success' => false, 'message' => 'You are reordering categories too fast. Please try again later.'], 429);
+        throw new \Bulletin\TooManyRequestsException('You are reordering categories too fast. Please try again later.');
     }
     $orderRaw = $_POST['order'] ?? '';
     $order = is_string($orderRaw) ? json_decode($orderRaw, true) : $orderRaw;
     if (!is_array($order)) {
-        return \Bulletin\Response::json(['success' => false, 'message' => 'Invalid order data'], 400);
+        throw new \Bulletin\ValidationException(['order' => 'Invalid order data']);
     }
     $position = 1;
     $stmt = $pdo->prepare("UPDATE categories SET position = ? WHERE id = ?");

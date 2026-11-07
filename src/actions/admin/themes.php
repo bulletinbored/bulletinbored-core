@@ -8,37 +8,30 @@ function handle_admin_themes(string $method): \Bulletin\Response|bool
     $adminThemeSuccess = '';
     if ($method === 'POST' && isset($_POST['csrf_token'])) {
         if (!csrf_validate_request()) {
-            $adminThemeError = 'Invalid CSRF token';
-        } elseif (!rate_limit('admin_themes', 20, 3600, (string)($_SESSION['user_id'] ?? 0))) {
-            $adminThemeError = 'You are performing too many theme operations. Please try again later.';
-        } else {
-            if (isset($_POST['install_theme']) && !empty($_FILES['theme_zip']['tmp_name'])) {
-                $tmpPath = $_FILES['theme_zip']['tmp_name'];
-                $result = $themeManager->installFromZip($tmpPath);
-                if ($result['success']) {
-                    $adminThemeSuccess = $result['message'];
-                } else {
-                    $adminThemeError = $result['message'];
-                }
-            } elseif (isset($_POST['install_from_catalog'])) {
-                $repo = $_POST['repo'] ?? '';
-                $tag = $_POST['tag'] ?? null;
-                $name = strtolower($_POST['theme_name'] ?? '');
-                if (!empty($config['allow_catalog_only'])) {
-                    $catalog = isset($updateManager) ? $updateManager->getCatalog() : (json_decode((string)@file_get_contents(__DIR__ . '/../../../data/catalog.json'), true) ?: []);
-                    $catalogItem = array_values(array_filter($catalog, fn($i) => strtolower($i['name'] ?? '') === $name && strtolower($i['type'] ?? '') === 'theme'));
-                    if (empty($catalogItem)) {
-                        $adminThemeError = 'Catalog-only mode: this entry is not present in the catalog.';
-                        goto skip_catalog_install_theme;
-                    }
-                    if (($catalogItem[0]['author_type'] ?? '') === 'third_party') {
-                        $adminThemeError = 'Catalog-only mode: third-party themes cannot be installed. Only bulletinbored team themes are allowed.';
-                        goto skip_catalog_install_theme;
-                    }
-                }
-                skip_catalog_install_theme:
-                if ($repo === '' || $name === '') {
-                    $adminThemeError = 'Invalid catalog item';
+            throw new \Bulletin\ForbiddenException('CSRF token invalid');
+        }
+        if (!rate_limit('admin_themes', 20, 3600, (string)($_SESSION['user_id'] ?? 0))) {
+            throw new \Bulletin\TooManyRequestsException('You are performing too many theme operations. Please try again later.');
+        }
+        if (isset($_POST['install_theme']) && !empty($_FILES['theme_zip']['tmp_name'])) {
+            $tmpPath = $_FILES['theme_zip']['tmp_name'];
+            $result = $themeManager->installFromZip($tmpPath);
+            if ($result['success']) {
+                $adminThemeSuccess = $result['message'];
+            } else {
+                $adminThemeError = $result['message'];
+            }
+        } elseif (isset($_POST['install_from_catalog'])) {
+            $repo = $_POST['repo'] ?? '';
+            $tag = $_POST['tag'] ?? null;
+            $name = strtolower($_POST['theme_name'] ?? '');
+            if (!empty($config['allow_catalog_only'])) {
+                $catalog = isset($updateManager) ? $updateManager->getCatalog() : (json_decode((string)@file_get_contents(__DIR__ . '/../../../data/catalog.json'), true) ?: []);
+                $catalogItem = array_values(array_filter($catalog, fn($i) => strtolower($i['name'] ?? '') === $name && strtolower($i['type'] ?? '') === 'theme'));
+                if (empty($catalogItem)) {
+                    $adminThemeError = 'Catalog-only mode: this entry is not present in the catalog.';
+                } elseif (($catalogItem[0]['author_type'] ?? '') === 'third_party') {
+                    $adminThemeError = 'Catalog-only mode: third-party themes cannot be installed. Only bulletinbored team themes are allowed.';
                 } else {
                     $result = $themeManager->installFromRepo($repo, $tag, $name);
                     if ($result['success']) {

@@ -8,7 +8,7 @@ function handle_new_thread(string $method): \Bulletin\Response|bool
     $authz = App::getInstance()->authz;
 
     if (!is_logged_in()) {
-        return redirect(url('login')) ?? true;
+        throw new \Bulletin\UnauthorizedException();
     }
 
     $userId = (int)$_SESSION['user_id'];
@@ -18,15 +18,11 @@ function handle_new_thread(string $method): \Bulletin\Response|bool
 
     if ($method === 'POST') {
         if (!csrf_validate_request()) {
-            $_SESSION['new_thread_error'] = 'CSRF token invalid';
-            include __DIR__ . '/../../views/new_thread.php';
-            return true;
+            throw new \Bulletin\ForbiddenException('CSRF token invalid');
         }
 
         if (!rate_limit('new_thread', 20, 3600, (string)($_SESSION['user_id'] ?? 0))) {
-            $_SESSION['new_thread_error'] = 'You are posting too fast. Please try again later.';
-            include __DIR__ . '/../../views/new_thread.php';
-            return true;
+            throw new \Bulletin\TooManyRequestsException('You are posting too fast. Please try again later.');
         }
 
         $title = clean_text($_POST['title'] ?? '');
@@ -70,9 +66,7 @@ function handle_new_thread(string $method): \Bulletin\Response|bool
         if (isset($pluginManager)) {
             $threadData = $pluginManager->filter('thread_before_create', $threadData);
             if ($pluginManager->checkHook('thread_create_block', $threadData)) {
-                $_SESSION['new_thread_error'] = t('thread_creation_blocked');
-                include __DIR__ . '/../../views/new_thread.php';
-                return true;
+                throw new \Bulletin\ForbiddenException('Thread creation blocked');
             }
         }
 

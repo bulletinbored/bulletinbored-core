@@ -76,109 +76,109 @@ function handle_admin_updates(string $method): \Bulletin\Response|bool
 
     if ($method === 'POST' && isset($_POST['check_updates'])) {
         if (!csrf_validate_request()) {
-            $updateError = 'Invalid CSRF token';
-        } elseif (!rate_limit('admin_updates_check', 20, 3600, (string)($_SESSION['user_id'] ?? 0))) {
-            $updateError = 'You are checking for updates too fast. Please try again later.';
-        } else {
-            // Explicit check: force-refresh the catalog (which is also cached to
-            // data/catalog.json) so newly catalogued extensions are seen.
-            $catalog = $updateManager->getCatalog(true);
-            $updateResults = $updateManager->checkAll($config['version'] ?? '1.0.0', $pluginManager, $themeManager, $catalog);
+            throw new \Bulletin\ForbiddenException('CSRF token invalid');
         }
+        if (!rate_limit('admin_updates_check', 20, 3600, (string)($_SESSION['user_id'] ?? 0))) {
+            throw new \Bulletin\TooManyRequestsException('You are checking for updates too fast. Please try again later.');
+        }
+        // Explicit check: force-refresh the catalog (which is also cached to
+        // data/catalog.json) so newly catalogued extensions are seen.
+        $catalog = $updateManager->getCatalog(true);
+        $updateResults = $updateManager->checkAll($config['version'] ?? '1.0.0', $pluginManager, $themeManager, $catalog);
     }
 
     if ($method === 'POST' && isset($_POST['apply_update'])) {
         if (!csrf_validate_request()) {
-            $updateError = 'Invalid CSRF token';
-        } elseif (!rate_limit('admin_updates_apply', 10, 3600, (string)($_SESSION['user_id'] ?? 0))) {
-            $updateError = 'You are applying updates too fast. Please try again later.';
-        } else {
-            $type = $_POST['type'] ?? '';
-            $name = $_POST['name'] ?? '';
-            $tag = '';
-            if ($type === 'core' && !empty($_POST['core_tag'])) {
-                $tag = ltrim($_POST['core_tag'], 'v');
-            } elseif (($type === 'plugins' || $type === 'themes') && !empty($_POST['ext_tag'])) {
-                $tag = ltrim($_POST['ext_tag'], 'v');
-            }
-
-            if ($tag !== '') {
-                $status = admin_apply_update_target($updateManager, $config, $pluginManager, $themeManager, $type, $name, $tag);
-                if ($status === 'applied') {
-                    $updateSuccess = ($type === 'core' ? 'Core' : 'Extension') . ' updated to v' . escape($tag);
-                } elseif ($status === 'skipped') {
-                    $updateError = 'No newer version available';
-                } else {
-                    $updateError = $type === 'core' ? 'Failed to update core' : 'Failed to update extension';
-                }
-            } elseif (!empty($_FILES['update_package']['tmp_name'])) {
-                $tmpPath = $_FILES['update_package']['tmp_name'];
-                $result = $updateManager->applyUpdate($type, $name, $tmpPath);
-                if ($result) {
-                    $updateSuccess = 'Update applied successfully';
-                } else {
-                    $updateError = 'Failed to apply update';
-                }
-            } else {
-                $updateError = 'No update package uploaded';
-            }
-
-            $updateResults = $updateManager->checkAll($config['version'] ?? '1.0.0', $pluginManager, $themeManager);
+            throw new \Bulletin\ForbiddenException('CSRF token invalid');
         }
+        if (!rate_limit('admin_updates_apply', 10, 3600, (string)($_SESSION['user_id'] ?? 0))) {
+            throw new \Bulletin\TooManyRequestsException('You are applying updates too fast. Please try again later.');
+        }
+        $type = $_POST['type'] ?? '';
+        $name = $_POST['name'] ?? '';
+        $tag = '';
+        if ($type === 'core' && !empty($_POST['core_tag'])) {
+            $tag = ltrim($_POST['core_tag'], 'v');
+        } elseif (($type === 'plugins' || $type === 'themes') && !empty($_POST['ext_tag'])) {
+            $tag = ltrim($_POST['ext_tag'], 'v');
+        }
+
+        if ($tag !== '') {
+            $status = admin_apply_update_target($updateManager, $config, $pluginManager, $themeManager, $type, $name, $tag);
+            if ($status === 'applied') {
+                $updateSuccess = ($type === 'core' ? 'Core' : 'Extension') . ' updated to v' . escape($tag);
+            } elseif ($status === 'skipped') {
+                $updateError = 'No newer version available';
+            } else {
+                $updateError = $type === 'core' ? 'Failed to update core' : 'Failed to update extension';
+            }
+        } elseif (!empty($_FILES['update_package']['tmp_name'])) {
+            $tmpPath = $_FILES['update_package']['tmp_name'];
+            $result = $updateManager->applyUpdate($type, $name, $tmpPath);
+            if ($result) {
+                $updateSuccess = 'Update applied successfully';
+            } else {
+                $updateError = 'Failed to apply update';
+            }
+        } else {
+            $updateError = 'No update package uploaded';
+        }
+
+        $updateResults = $updateManager->checkAll($config['version'] ?? '1.0.0', $pluginManager, $themeManager);
     }
 
     if ($method === 'POST' && isset($_POST['apply_all_updates'])) {
         if (!csrf_validate_request()) {
-            $updateError = 'Invalid CSRF token';
-        } elseif (!rate_limit('admin_updates_apply_all', 5, 3600, (string)($_SESSION['user_id'] ?? 0))) {
-            $updateError = 'You are applying updates too fast. Please try again later.';
-        } else {
-            $status = $updateManager->checkAll($config['version'] ?? '1.0.0', $pluginManager, $themeManager);
-            $applied = 0;
-            $failed = 0;
-
-            foreach (['plugins', 'themes'] as $group) {
-                foreach ($status[$group] ?? [] as $extName => $info) {
-                    if (!($info['update_available'] ?? false)) {
-                        continue;
-                    }
-                    $tag = ltrim((string)($info['remote'] ?? ''), 'v');
-                    if ($tag === '') {
-                        continue;
-                    }
-                    $result = admin_apply_update_target($updateManager, $config, $pluginManager, $themeManager, $group, $extName, $tag);
-                    if ($result === 'applied') {
-                        $applied++;
-                    } elseif ($result === 'failed') {
-                        $failed++;
-                    }
-                }
-            }
-
-            if ($status['core']['update_available'] ?? false) {
-                $tag = ltrim((string)($status['core']['remote'] ?? ''), 'v');
-                if ($tag !== '') {
-                    $result = admin_apply_update_target($updateManager, $config, $pluginManager, $themeManager, 'core', 'core', $tag);
-                    if ($result === 'applied') {
-                        $applied++;
-                    } elseif ($result === 'failed') {
-                        $failed++;
-                    }
-                }
-            }
-
-            if ($applied > 0) {
-                $updateSuccess = t('update_all_success', ['n' => $applied]);
-            }
-            if ($failed > 0) {
-                $updateError = t('update_all_failed', ['n' => $failed]);
-            }
-            if ($applied === 0 && $failed === 0) {
-                $updateError = t('update_all_none');
-            }
-
-            $updateResults = $updateManager->checkAll($config['version'] ?? '1.0.0', $pluginManager, $themeManager);
+            throw new \Bulletin\ForbiddenException('CSRF token invalid');
         }
+        if (!rate_limit('admin_updates_apply_all', 5, 3600, (string)($_SESSION['user_id'] ?? 0))) {
+            throw new \Bulletin\TooManyRequestsException('You are applying updates too fast. Please try again later.');
+        }
+        $status = $updateManager->checkAll($config['version'] ?? '1.0.0', $pluginManager, $themeManager);
+        $applied = 0;
+        $failed = 0;
+
+        foreach (['plugins', 'themes'] as $group) {
+            foreach ($status[$group] ?? [] as $extName => $info) {
+                if (!($info['update_available'] ?? false)) {
+                    continue;
+                }
+                $tag = ltrim((string)($info['remote'] ?? ''), 'v');
+                if ($tag === '') {
+                    continue;
+                }
+                $result = admin_apply_update_target($updateManager, $config, $pluginManager, $themeManager, $group, $extName, $tag);
+                if ($result === 'applied') {
+                    $applied++;
+                } elseif ($result === 'failed') {
+                    $failed++;
+                }
+            }
+        }
+
+        if ($status['core']['update_available'] ?? false) {
+            $tag = ltrim((string)($status['core']['remote'] ?? ''), 'v');
+            if ($tag !== '') {
+                $result = admin_apply_update_target($updateManager, $config, $pluginManager, $themeManager, 'core', 'core', $tag);
+                if ($result === 'applied') {
+                    $applied++;
+                } elseif ($result === 'failed') {
+                    $failed++;
+                }
+            }
+        }
+
+        if ($applied > 0) {
+            $updateSuccess = t('update_all_success', ['n' => $applied]);
+        }
+        if ($failed > 0) {
+            $updateError = t('update_all_failed', ['n' => $failed]);
+        }
+        if ($applied === 0 && $failed === 0) {
+            $updateError = t('update_all_none');
+        }
+
+        $updateResults = $updateManager->checkAll($config['version'] ?? '1.0.0', $pluginManager, $themeManager);
     }
 
     $updateStatus = $updateResults ?? null;

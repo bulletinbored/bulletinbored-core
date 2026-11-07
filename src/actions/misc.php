@@ -4,11 +4,17 @@ function handle_misc_action(string $action, string $method): \Bulletin\Response|
 {
     switch ($action) {
         case 'preview':
-            return $method === 'POST' ? handle_markdown_preview() : false;
+            if ($method !== 'POST') {
+                throw new \Bulletin\MethodNotAllowedException('Method not allowed');
+            }
+            return handle_markdown_preview();
         case 'mention_users':
-            return $method === 'GET' ? handle_mention_users() : false;
+            if ($method !== 'GET') {
+                throw new \Bulletin\MethodNotAllowedException('Method not allowed');
+            }
+            return handle_mention_users();
         default:
-            return false;
+            throw new \Bulletin\NotFoundException('Misc action not found');
     }
 }
 
@@ -20,7 +26,7 @@ function handle_misc_action(string $action, string $method): \Bulletin\Response|
 function handle_markdown_preview(): \Bulletin\Response|bool
 {
     if (!csrf_validate_request()) {
-        return \Bulletin\Response::html('<p class="text-danger">CSRF token invalid</p>', 403);
+        throw new \Bulletin\ForbiddenException('CSRF token invalid');
     }
     $content = $_POST['content'] ?? '';
     return \Bulletin\Response::html(bb_render_content(validate_input($content)));

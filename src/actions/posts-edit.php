@@ -7,7 +7,7 @@ function handle_reply_post(): \Bulletin\Response|bool
     $authz = App::getInstance()->authz;
 
     if (!is_logged_in()) {
-        return redirect(url('login')) ?? true;
+        throw new \Bulletin\UnauthorizedException();
     }
 
     $userId = (int)$_SESSION['user_id'];
@@ -16,22 +16,18 @@ function handle_reply_post(): \Bulletin\Response|bool
     }
 
     if (!csrf_validate_request()) {
-        $_SESSION['reply_error'] = 'CSRF token invalid';
-        return redirect(url('thread', ['id' => (int)($_POST['thread_id'] ?? 0)]));
+        throw new \Bulletin\ForbiddenException('CSRF token invalid');
     }
 
     if (!rate_limit('reply', 30, 3600, (string)($_SESSION['user_id'] ?? 0))) {
-        $_SESSION['reply_error'] = 'You are posting too fast. Please try again later.';
-        return redirect(url('thread', ['id' => (int)($_POST['thread_id'] ?? 0)]));
+        throw new \Bulletin\TooManyRequestsException('You are posting too fast. Please try again later.');
     }
 
     $threadId = (int)($_POST['thread_id'] ?? 0);
     $content = validate_input($_POST['content'] ?? '');
 
     if ($threadId <= 0 || $content === '') {
-        $_SESSION['reply_error'] = 'Content is required';
-        $_SESSION['reply_content'] = $_POST['content'] ?? '';
-        return redirect(url('thread', ['id' => $threadId]));
+        throw new \Bulletin\ValidationException(['content' => 'Content is required']);
     }
 
     $threadStmt = $pdo->prepare("SELECT * FROM threads WHERE id = ?");
@@ -43,8 +39,7 @@ function handle_reply_post(): \Bulletin\Response|bool
     }
 
     if ($thread['status'] === 'locked' && !$authz->can((int)$_SESSION['user_id'], 'threads.lock')) {
-        $_SESSION['reply_error'] = 'Thread is locked';
-        return redirect(url('thread', ['id' => $threadId]));
+        throw new \Bulletin\ForbiddenException('Thread is locked');
     }
 
     if (!can_view_thread($thread['status'])) {
@@ -61,8 +56,7 @@ function handle_reply_post(): \Bulletin\Response|bool
     if (isset($pluginManager)) {
         $postData = $pluginManager->filter('post_before_create', $postData, $thread);
         if ($pluginManager->checkHook('post_create_block', $postData, $thread)) {
-            $_SESSION['reply_error'] = t('post_creation_blocked');
-            return redirect(url('thread', ['id' => $threadId]));
+            throw new \Bulletin\ForbiddenException('Post creation blocked');
         }
     }
 
@@ -99,12 +93,12 @@ function handle_edit_post(string $method, array $params = []): \Bulletin\Respons
     $authz = App::getInstance()->authz;
 
     if (!is_logged_in()) {
-        return redirect(url('login')) ?? true;
+        throw new \Bulletin\UnauthorizedException();
     }
 
     $postId = (int)($params['id'] ?? $_POST['post_id'] ?? $_GET['id'] ?? 0);
     if ($postId <= 0) {
-        return redirect(url('home'));
+        throw new \Bulletin\NotFoundException('Post not found');
     }
 
     if (!rate_limit('edit_post', 30, 3600, (string)($_SESSION['user_id'] ?? 0))) {
@@ -116,7 +110,7 @@ function handle_edit_post(string $method, array $params = []): \Bulletin\Respons
     $post = $postStmt->fetch();
 
     if (!$post) {
-        return redirect(url('home'));
+        throw new \Bulletin\NotFoundException('Post not found');
     }
 
     $threadStmt = $pdo->prepare("SELECT * FROM threads WHERE id = ?");
@@ -175,7 +169,7 @@ function handle_delete_post(array $params = []): \Bulletin\Response|bool
     $authz = App::getInstance()->authz;
 
     if (!is_logged_in()) {
-        return redirect(url('login')) ?? true;
+        throw new \Bulletin\UnauthorizedException();
     }
 
     if (!csrf_validate_request()) {
@@ -188,7 +182,7 @@ function handle_delete_post(array $params = []): \Bulletin\Response|bool
 
     $postId = (int)($params['id'] ?? $_GET['id'] ?? 0);
     if ($postId <= 0) {
-        return redirect(url('home'));
+        throw new \Bulletin\NotFoundException('Post not found');
     }
 
     $postStmt = $pdo->prepare("SELECT * FROM posts WHERE id = ?");
@@ -196,7 +190,7 @@ function handle_delete_post(array $params = []): \Bulletin\Response|bool
     $post = $postStmt->fetch();
 
     if (!$post) {
-        return redirect(url('home'));
+        throw new \Bulletin\NotFoundException('Post not found');
     }
 
     $userId = (int)$_SESSION['user_id'];
@@ -230,12 +224,12 @@ function handle_edit_thread(string $method, array $params = []): \Bulletin\Respo
     $authz = App::getInstance()->authz;
 
     if (!is_logged_in()) {
-        return redirect(url('login')) ?? true;
+        throw new \Bulletin\UnauthorizedException();
     }
 
     $threadId = (int)($params['id'] ?? $_GET['id'] ?? 0);
     if ($threadId <= 0) {
-        return redirect(url('home'));
+        throw new \Bulletin\NotFoundException('Thread not found');
     }
 
     if (!rate_limit('edit_thread', 20, 3600, (string)($_SESSION['user_id'] ?? 0))) {
@@ -247,7 +241,7 @@ function handle_edit_thread(string $method, array $params = []): \Bulletin\Respo
     $thread = $threadStmt->fetch();
 
     if (!$thread) {
-        return redirect(url('home'));
+        throw new \Bulletin\NotFoundException('Thread not found');
     }
 
     $userId = (int)$_SESSION['user_id'];
@@ -311,7 +305,7 @@ function handle_delete_thread(array $params = []): \Bulletin\Response|bool
     $authz = App::getInstance()->authz;
 
     if (!is_logged_in()) {
-        return redirect(url('login')) ?? true;
+        throw new \Bulletin\UnauthorizedException();
     }
 
     if (!csrf_validate_request()) {
@@ -324,7 +318,7 @@ function handle_delete_thread(array $params = []): \Bulletin\Response|bool
 
     $threadId = (int)($params['id'] ?? $_GET['id'] ?? 0);
     if ($threadId <= 0) {
-        return redirect(url('home'));
+        throw new \Bulletin\NotFoundException('Thread not found');
     }
 
     $threadStmt = $pdo->prepare("SELECT * FROM threads WHERE id = ?");
@@ -332,7 +326,7 @@ function handle_delete_thread(array $params = []): \Bulletin\Response|bool
     $thread = $threadStmt->fetch();
 
     if (!$thread) {
-        return redirect(url('home'));
+        throw new \Bulletin\NotFoundException('Thread not found');
     }
 
     $userId = (int)$_SESSION['user_id'];

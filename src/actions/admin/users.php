@@ -55,13 +55,13 @@ function handle_admin_user_edit(string $method, array $params = []): \Bulletin\R
 
     $editUserId = (int)($params['id'] ?? $_GET['id'] ?? 0);
     if ($editUserId <= 0) {
-        return redirect(url('admin_users'));
+        throw new \Bulletin\NotFoundException('User not found');
     }
     $editUser = $pdo->prepare("SELECT * FROM users WHERE id = ?");
     $editUser->execute([$editUserId]);
     $editUser = $editUser->fetch();
     if (!$editUser) {
-        return redirect(url('admin_users'));
+        throw new \Bulletin\NotFoundException('User not found');
     }
     if ($method === 'POST') {
         if (!csrf_validate_request()) {
@@ -141,25 +141,19 @@ function handle_admin_create_user_post(): \Bulletin\Response|bool
     $emailVerified = isset($_POST['email_verified']) ? 1 : 0;
 
     if ($username === '' || $password === '') {
-        $_SESSION['admin_user_error'] = 'Username and password are required';
-        $_SESSION['admin_user_old'] = compact('username', 'email', 'role', 'status', 'emailVerified');
-        return redirect(url('admin_users'));
+        throw new \Bulletin\ValidationException(['username' => 'Username and password are required']);
     }
 
     $pwErrors = validate_password_strength($password);
     if (!empty($pwErrors)) {
-        $_SESSION['admin_user_error'] = t($pwErrors[0]);
-        $_SESSION['admin_user_old'] = compact('username', 'email', 'role', 'status', 'emailVerified');
-        return redirect(url('admin_users'));
+        throw new \Bulletin\ValidationException(['password' => t($pwErrors[0])]);
     }
 
     $existsStmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE username = ?");
     $existsStmt->execute([$username]);
     $exists = $existsStmt->fetchColumn();
     if ($exists > 0) {
-        $_SESSION['admin_user_error'] = 'Username already taken';
-        $_SESSION['admin_user_old'] = compact('username', 'email', 'role', 'status', 'emailVerified');
-        return redirect(url('admin_users'));
+        throw new \Bulletin\ValidationException(['username' => 'Username already taken']);
     }
 
     if ($email === '') {
@@ -204,17 +198,15 @@ function handle_delete_user_post(): \Bulletin\Response|bool
         throw new \Bulletin\TooManyRequestsException('You are deleting too many users. Please try again later.');
     }
     $userId = (int)($_POST['id'] ?? $_GET['id'] ?? 0);
-    if ($userId > 0) {
-        $stmt = $pdo->prepare("DELETE FROM users WHERE id = ? AND role <> 'admin'");
-        $stmt->execute([$userId]);
-        if ($stmt->rowCount() === 0) {
-            $_SESSION['admin_error'] = t('user_not_deleted') ?? 'User could not be deleted (does not exist or is an admin).';
-        } else {
-            log_admin_action('user_delete', ['target_id' => $userId]);
-        }
-    } else {
-        $_SESSION['admin_error'] = t('invalid_user_id') ?? 'Invalid user id.';
+    if ($userId <= 0) {
+        throw new \Bulletin\ValidationException(['id' => 'Invalid user id']);
     }
+    $stmt = $pdo->prepare("DELETE FROM users WHERE id = ? AND role <> 'admin'");
+    $stmt->execute([$userId]);
+    if ($stmt->rowCount() === 0) {
+        throw new \Bulletin\NotFoundException('User could not be deleted (does not exist or is an admin)');
+    }
+    log_admin_action('user_delete', ['target_id' => $userId]);
     return redirect(url('admin_users'));
 }
 

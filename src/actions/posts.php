@@ -17,26 +17,47 @@ function handle_posts_action(string $action, string $method): \Bulletin\Response
 {
     switch ($action) {
         case 'thread':
-            return $method === 'GET' ? handle_thread_view() : false;
+            if ($method !== 'GET') {
+                throw new \Bulletin\MethodNotAllowedException('Method not allowed');
+            }
+            return handle_thread_view();
         case 'new_thread':
             return handle_new_thread($method);
         case 'reply':
-            return $method === 'POST' ? handle_reply_post() : false;
+            if ($method !== 'POST') {
+                throw new \Bulletin\MethodNotAllowedException('Method not allowed');
+            }
+            return handle_reply_post();
         case 'edit_post':
             return handle_edit_post($method);
         case 'delete_post':
-            return $method === 'POST' ? handle_delete_post() : false;
+            if ($method !== 'POST') {
+                throw new \Bulletin\MethodNotAllowedException('Method not allowed');
+            }
+            return handle_delete_post();
         case 'edit_thread':
             return handle_edit_thread($method);
         case 'delete_thread':
-            return $method === 'POST' ? handle_delete_thread() : false;
+            if ($method !== 'POST') {
+                throw new \Bulletin\MethodNotAllowedException('Method not allowed');
+            }
+            return handle_delete_thread();
         case 'watch':
-            return is_logged_in() ? handle_watch() : false;
+            if (!is_logged_in()) {
+                throw new \Bulletin\UnauthorizedException();
+            }
+            return handle_watch();
         case 'unwatch':
-            return is_logged_in() ? handle_unwatch() : false;
+            if (!is_logged_in()) {
+                throw new \Bulletin\UnauthorizedException();
+            }
+            return handle_unwatch();
         case 'upload_image':
-            return $method === 'POST' ? handle_upload_image() : false;
+            if ($method !== 'POST') {
+                throw new \Bulletin\MethodNotAllowedException('Method not allowed');
+            }
+            return handle_upload_image();
         default:
-            return false;
+            throw new \Bulletin\NotFoundException('Post action not found');
     }
 }

@@ -22,7 +22,7 @@ function handle_users_action(string $action, string $method): \Bulletin\Response
         case 'reset_password':
             return handle_reset_password($method);
         default:
-            return false;
+            throw new \Bulletin\NotFoundException('User action not found');
     }
 }
 
@@ -37,17 +37,12 @@ function handle_login(string $method): \Bulletin\Response|bool
 
     if ($method === 'POST') {
         if (!csrf_validate_request()) {
-            $error = 'CSRF token invalid';
-            log_security_event('csrf_fail', ['action' => 'login']);
-            include __DIR__ . '/../../views/login.php';
-            return true;
+            throw new \Bulletin\ForbiddenException('CSRF token invalid');
         }
 
         $rlKey = rate_limit_client_ip() . '|' . ($_POST['username'] ?? '');
         if (!rate_limit('login', 5, 900, $rlKey)) {
-            $error = 'Too many login attempts. Please try again later.';
-            include __DIR__ . '/../../views/login.php';
-            return true;
+            throw new \Bulletin\TooManyRequestsException('Too many login attempts. Please try again later.');
         }
 
         $username = $_POST['username'] ?? '';
@@ -63,18 +58,15 @@ function handle_login(string $method): \Bulletin\Response|bool
 
         if ($user && password_verify($password, $user['password'])) {
             if (isset($pluginManager) && $pluginManager->checkHook('auth_login_block', $user)) {
-                $error = 'login_blocked';
-                log_security_event('login_blocked_by_plugin', ['username' => $username]);
-                include __DIR__ . '/../../views/login.php';
-                return true;
+                throw new \Bulletin\ForbiddenException('Login blocked');
             }
 
             if ($user['status'] === 'banned') {
-                $error = 'user_banned';
+                throw new \Bulletin\ForbiddenException('Account banned');
             } elseif ($user['status'] === 'suspended' && !empty($user['suspension_time']) && time() < $user['suspension_time']) {
-                $error = 'user_suspended';
+                throw new \Bulletin\ForbiddenException('Account suspended');
             } elseif (empty($user['email_verified'])) {
-                $error = 'email_not_verified';
+                throw new \Bulletin\ForbiddenException('Email not verified');
             } else {
                 $_SESSION['user_id'] = $user['id'];
                 $_SESSION['user_role'] = $user['role'];
@@ -118,15 +110,11 @@ function handle_register(string $method): \Bulletin\Response|bool
 
     if ($method === 'POST') {
         if (!csrf_validate_request()) {
-            $error = 'CSRF token invalid';
-            include __DIR__ . '/../../views/register.php';
-            return true;
+            throw new \Bulletin\ForbiddenException('CSRF token invalid');
         }
 
         if (!rate_limit('register', 5, 3600)) {
-            $error = 'Too many registration attempts. Please try again later.';
-            include __DIR__ . '/../../views/register.php';
-            return true;
+            throw new \Bulletin\TooManyRequestsException('Too many registration attempts. Please try again later.');
         }
 
         $username = validate_input($_POST['username'] ?? '');
@@ -193,7 +181,7 @@ function handle_logout(): \Bulletin\Response|bool
         return redirect(url('home'));
     }
     if (!csrf_validate_request()) {
-        return redirect(url('home'));
+        throw new \Bulletin\ForbiddenException('CSRF token invalid');
     }
     session_regenerate_id(true);
     session_destroy();
@@ -207,9 +195,7 @@ function handle_verify_email(): \Bulletin\Response|bool
     $token = $_GET['token'] ?? '';
 
     if (empty($token)) {
-        $error = 'verify_email_invalid';
-        include __DIR__ . '/../../views/verify_email.php';
-        return true;
+        throw new \Bulletin\NotFoundException('Invalid verification token');
     }
 
     $tokenHash = hash('sha256', $token);
@@ -218,17 +204,13 @@ function handle_verify_email(): \Bulletin\Response|bool
     $validToken = $stmt->fetch();
 
     if (!$validToken || !password_verify($token, $validToken['token'])) {
-        $error = 'verify_email_invalid';
-        include __DIR__ . '/../../views/verify_email.php';
-        return true;
+        throw new \Bulletin\NotFoundException('Invalid verification token');
     }
 
     $consumeStmt = $pdo->prepare("UPDATE email_verifications SET used = 1 WHERE id = ? AND used = 0");
     $consumeStmt->execute([$validToken['id']]);
     if ($consumeStmt->rowCount() !== 1) {
-        $error = 'verify_email_invalid';
-        include __DIR__ . '/../../views/verify_email.php';
-        return true;
+        throw new \Bulletin\NotFoundException('Invalid verification token');
     }
 
     $pdo->prepare("UPDATE users SET email_verified = 1 WHERE id = ?")->execute([$validToken['user_id']]);
@@ -281,18 +263,16 @@ function handle_edit_profile(string $method): \Bulletin\Response|bool
     $pdo = App::getInstance()->pdo; $config = App::getInstance()->config;
 
     if (!is_logged_in()) {
-        return redirect(url('login')) ?? true;
+        throw new \Bulletin\UnauthorizedException();
     }
 
     if ($method === 'POST') {
         if (!csrf_validate_request()) {
-            $_SESSION['profile_error'] = 'CSRF token invalid';
-            return redirect(url('edit_profile'));
+            throw new \Bulletin\ForbiddenException('CSRF token invalid');
         }
 
         if (!rate_limit('edit_profile', 20, 3600, (string)($_SESSION['user_id'] ?? 0))) {
-            $_SESSION['profile_error'] = 'You are updating your profile too fast. Please try again later.';
-            return redirect(url('edit_profile'));
+            throw new \Bulletin\TooManyRequestsException('You are updating your profile too fast. Please try again later.');
         }
 
         if (!empty($_FILES['avatar']['name'])) {
@@ -410,18 +390,16 @@ function handle_remove_avatar(string $method): \Bulletin\Response|bool
     $pdo = App::getInstance()->pdo;
 
     if (!is_logged_in()) {
-        return redirect(url('login')) ?? true;
+        throw new \Bulletin\UnauthorizedException();
     }
 
     if ($method === 'POST') {
         if (!csrf_validate_request()) {
-            $_SESSION['avatar_upload_error'] = 'CSRF token invalid';
-            return redirect(url('edit_profile'));
+            throw new \Bulletin\ForbiddenException('CSRF token invalid');
         }
 
         if (!rate_limit('remove_avatar', 20, 3600, (string)($_SESSION['user_id'] ?? 0))) {
-            $_SESSION['avatar_upload_error'] = 'You are removing avatars too fast. Please try again later.';
-            return redirect(url('edit_profile'));
+            throw new \Bulletin\TooManyRequestsException('You are removing avatars too fast. Please try again later.');
         }
 
         $avatarDir = __DIR__ . '/../../uploads/avatars/';
@@ -448,15 +426,11 @@ function handle_forgot_password(string $method): \Bulletin\Response|bool
 
     if ($method === 'POST') {
         if (!csrf_validate_request()) {
-            $error = 'CSRF token invalid';
-            include __DIR__ . '/../../views/forgot_password.php';
-            return true;
+            throw new \Bulletin\ForbiddenException('CSRF token invalid');
         }
 
         if (!rate_limit('forgot_password', 5, 3600)) {
-            $error = 'Too many requests. Please try again later.';
-            include __DIR__ . '/../../views/forgot_password.php';
-            return true;
+            throw new \Bulletin\TooManyRequestsException('Too many requests. Please try again later.');
         }
 
         $email = validate_input($_POST['email'] ?? '');
@@ -494,15 +468,11 @@ function handle_reset_password(string $method): \Bulletin\Response|bool
 
     if ($method === 'POST') {
         if (!csrf_validate_request()) {
-            $error = 'CSRF token invalid';
-            include __DIR__ . '/../../views/reset_password.php';
-            return true;
+            throw new \Bulletin\ForbiddenException('CSRF token invalid');
         }
 
         if (!rate_limit('reset_password', 10, 3600)) {
-            $error = 'Too many attempts. Please try again later.';
-            include __DIR__ . '/../../views/reset_password.php';
-            return true;
+            throw new \Bulletin\TooManyRequestsException('Too many attempts. Please try again later.');
         }
 
         $token = $_POST['token'] ?? '';
@@ -527,17 +497,13 @@ function handle_reset_password(string $method): \Bulletin\Response|bool
         $validToken = $stmt->fetch();
 
         if (!$validToken || !password_verify($token, $validToken['token'])) {
-            $error = 'Invalid or expired reset token.';
-            include __DIR__ . '/../../views/reset_password.php';
-            return true;
+            throw new \Bulletin\NotFoundException('Invalid or expired reset token');
         }
 
         $consumeStmt = $pdo->prepare("UPDATE password_resets SET used = 1 WHERE id = ? AND used = 0");
         $consumeStmt->execute([$validToken['id']]);
         if ($consumeStmt->rowCount() !== 1) {
-            $error = 'Invalid or expired reset token.';
-            include __DIR__ . '/../../views/reset_password.php';
-            return true;
+            throw new \Bulletin\NotFoundException('Invalid or expired reset token');
         }
 
         $pdo->prepare("UPDATE users SET password = ?, session_version = COALESCE(session_version, 0) + 1 WHERE id = ?")

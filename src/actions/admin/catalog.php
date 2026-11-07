@@ -8,14 +8,15 @@ function handle_admin_catalog(string $method): \Bulletin\Response|bool
     $adminCatalogSuccess = '';
     if ($method === 'POST' && isset($_POST['csrf_token'])) {
         if (!csrf_validate_request()) {
-            $adminCatalogError = 'Invalid CSRF token';
-        } elseif (!rate_limit('admin_catalog', 20, 3600, (string)($_SESSION['user_id'] ?? 0))) {
-            $adminCatalogError = 'You are performing too many catalog operations. Please try again later.';
+            throw new \Bulletin\ForbiddenException('CSRF token invalid');
+        }
+        if (!rate_limit('admin_catalog', 20, 3600, (string)($_SESSION['user_id'] ?? 0))) {
+            throw new \Bulletin\TooManyRequestsException('You are performing too many catalog operations. Please try again later.');
         } elseif (isset($_POST['uninstall_from_catalog'])) {
             $name = strtolower(trim($_POST['name'] ?? ''));
             $type = strtolower(trim($_POST['type'] ?? ''));
             if ($name === '' || !in_array($type, ['plugin', 'theme'])) {
-                $adminCatalogError = 'Invalid request';
+                throw new \Bulletin\ValidationException(['request' => 'Invalid request']);
             } else {
                 $baseDir = $type === 'plugin' ? __DIR__ . '/../../../plugins' : __DIR__ . '/../../../themes';
                 $target = $baseDir.'/'.$name;
@@ -42,7 +43,7 @@ function handle_admin_catalog(string $method): \Bulletin\Response|bool
             $repo = trim($_POST['repo'] ?? '');
             $tag = $_POST['tag'] ?? null;
             if ($repo === '' || $name === '' || !in_array($type, ['plugin', 'theme'])) {
-                $adminCatalogError = 'Invalid request';
+                throw new \Bulletin\ValidationException(['request' => 'Invalid request']);
             } else {
                 if ($type === 'plugin') {
                     $pluginManager = new PluginManager(__DIR__ . '/../../../plugins', __DIR__ . '/../../../data/plugins.json');

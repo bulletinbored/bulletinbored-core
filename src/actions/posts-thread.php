@@ -6,16 +6,16 @@ function handle_upload_image(): \Bulletin\Response|bool
 {
     $pdo = App::getInstance()->pdo;
     if (!is_logged_in()) {
-        return \Bulletin\Response::json(['ok' => false, 'error' => 'Login required'], 401);
+        throw new \Bulletin\UnauthorizedException('Login required');
     }
     if (!csrf_validate_request()) {
-        return \Bulletin\Response::json(['ok' => false, 'error' => 'CSRF token invalid'], 403);
+        throw new \Bulletin\ForbiddenException('CSRF token invalid');
     }
     if (!rate_limit('upload_image', 20, 3600, (string)($_SESSION['user_id'] ?? 0))) {
-        return \Bulletin\Response::json(['ok' => false, 'error' => 'You are uploading too fast. Please try again later.'], 429);
+        throw new \Bulletin\TooManyRequestsException('You are uploading too fast. Please try again later.');
     }
     if (empty($_FILES['image']['tmp_name'])) {
-        return \Bulletin\Response::json(['ok' => false, 'error' => 'No file uploaded'], 400);
+        throw new \Bulletin\ValidationException(['image' => 'No file uploaded']);
     }
 
     $allowed = [
@@ -27,13 +27,13 @@ function handle_upload_image(): \Bulletin\Response|bool
     $maxSize = App::getInstance()->config['image_max_size'] ?? 5 * 1024 * 1024;
     $info = validate_uploaded_file($_FILES['image']['tmp_name'], $_FILES['image']['name'] ?? '', $allowed, $maxSize);
     if ($info === null) {
-        return \Bulletin\Response::json(['ok' => false, 'error' => 'Invalid image'], 400);
+        throw new \Bulletin\ValidationException(['image' => 'Invalid image']);
     }
 
     $threadId = (int)($_POST['thread_id'] ?? 0);
     $postId = (int)($_POST['post_id'] ?? 0);
     if ($threadId <= 0 && $postId <= 0) {
-        return \Bulletin\Response::json(['ok' => false, 'error' => 'Invalid attachment context'], 400);
+        throw new \Bulletin\ValidationException(['context' => 'Invalid attachment context']);
     }
 
     // Authorization check BEFORE moving file
@@ -49,7 +49,7 @@ function handle_upload_image(): \Bulletin\Response|bool
     $contextStmt->execute($contextParams);
     $context = $contextStmt->fetch();
     if ($context === false || !can_view_thread((string)$context['status'])) {
-        return \Bulletin\Response::json(['ok' => false, 'error' => 'Thread not found'], 404);
+        throw new \Bulletin\NotFoundException('Thread not found');
     }
 
     // If post_id provided, verify it belongs to the thread
@@ -57,7 +57,7 @@ function handle_upload_image(): \Bulletin\Response|bool
         $postCheck = $pdo->prepare("SELECT id FROM posts WHERE id = ? AND thread_id = ?");
         $postCheck->execute([$postId, $threadId]);
         if ($postCheck->fetch() === false) {
-            return \Bulletin\Response::json(['ok' => false, 'error' => 'Post does not belong to thread'], 400);
+            throw new \Bulletin\ValidationException(['post_id' => 'Post does not belong to thread']);
         }
     }
 
@@ -69,7 +69,7 @@ function handle_upload_image(): \Bulletin\Response|bool
     }
     $dest = $uploadDir . '/' . $info['safe_name'];
     if (!move_uploaded_file($_FILES['image']['tmp_name'], $dest)) {
-        return \Bulletin\Response::json(['ok' => false, 'error' => 'Move failed'], 500);
+        throw new \Bulletin\HttpException('Move failed', 500);
     }
 
     try {
@@ -88,7 +88,7 @@ function handle_upload_image(): \Bulletin\Response|bool
         if (file_exists($dest)) {
             @unlink($dest);
         }
-        return \Bulletin\Response::json(['ok' => false, 'error' => 'Database error'], 500);
+        throw new \Bulletin\HttpException('Database error', 500);
     }
 
     $privateUrl = base_url() . '/download/' . $pdo->lastInsertId();
@@ -102,7 +102,7 @@ function handle_thread_view(array $params = []): \Bulletin\Response|bool
 
     $threadId = (int)($params['id'] ?? $_POST['thread_id'] ?? $_GET['id'] ?? 0);
     if ($threadId <= 0) {
-        return redirect(url('home'));
+        throw new \Bulletin\NotFoundException('Thread not found');
     }
 
     $stmt = $pdo->prepare("
@@ -200,11 +200,11 @@ function handle_watch(): \Bulletin\Response|bool
     $pdo = App::getInstance()->pdo;
 
     if (!is_logged_in()) {
-        return redirect(url('login')) ?? true;
+        throw new \Bulletin\UnauthorizedException();
     }
 
     if (!csrf_validate_request()) {
-        return redirect(url('thread', ['id' => (int)($_POST['thread_id'] ?? 0)]));
+        throw new \Bulletin\ForbiddenException('CSRF token invalid');
     }
 
     if (!rate_limit('watch', 30, 3600, (string)($_SESSION['user_id'] ?? 0))) {
@@ -213,7 +213,7 @@ function handle_watch(): \Bulletin\Response|bool
 
     $threadId = (int)($_POST['thread_id'] ?? 0);
     if ($threadId <= 0) {
-        return redirect(url('home'));
+        throw new \Bulletin\NotFoundException('Thread not found');
     }
 
     $thread = $pdo->prepare("SELECT status FROM threads WHERE id = ?");
@@ -249,11 +249,11 @@ function handle_unwatch(): \Bulletin\Response|bool
     $pdo = App::getInstance()->pdo;
 
     if (!is_logged_in()) {
-        return redirect(url('login')) ?? true;
+        throw new \Bulletin\UnauthorizedException();
     }
 
     if (!csrf_validate_request()) {
-        return redirect(url('thread', ['id' => (int)($_POST['thread_id'] ?? 0)]));
+        throw new \Bulletin\ForbiddenException('CSRF token invalid');
     }
 
     if (!rate_limit('unwatch', 30, 3600, (string)($_SESSION['user_id'] ?? 0))) {
@@ -262,7 +262,7 @@ function handle_unwatch(): \Bulletin\Response|bool
 
     $threadId = (int)($_POST['thread_id'] ?? 0);
     if ($threadId <= 0) {
-        return redirect(url('home'));
+        throw new \Bulletin\NotFoundException('Thread not found');
     }
 
     $thread = $pdo->prepare("SELECT status FROM threads WHERE id = ?");

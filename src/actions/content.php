@@ -10,7 +10,7 @@ function handle_content_action(string $action, string $method): \Bulletin\Respon
         case 'download':
             return handle_download();
         default:
-            return false;
+            throw new \Bulletin\NotFoundException('Content action not found');
     }
 }
 
