@@ -1,6 +1,7 @@
 <?php
 // Admin header - completely separate from frontend theme
-function render_admin_header($title = 'Admin Panel') {
+if (!function_exists('render_admin_header')) {
+    function render_admin_header($title = 'Admin Panel') {
     global $config, $lang;
     $siteName = $config['site_name'] ?? 'bulletinbored';
     $currentAction = current_route_action();
@@ -132,5 +133,6 @@ function render_admin_header($title = 'Admin Panel') {
                 <div class="container-fluid">
 
                     <?php
+                    }
                     }
                     ?>

@@ -234,6 +234,25 @@ class TestSuite
                     $test = $testOrFactory;
                 }
 
+                // Clean up rate limiter files before each test
+                $rateLimitDir = dirname(__DIR__) . '/data/ratelimit';
+                if (is_dir($rateLimitDir)) {
+                    foreach (glob($rateLimitDir . '/*.json') as $bucket) {
+                        @unlink($bucket);
+                    }
+                }
+
+                // Reset session for test isolation (only if headers not sent)
+                if (session_status() === PHP_SESSION_ACTIVE) {
+                    session_destroy();
+                }
+                if (!headers_sent()) {
+                    session_start();
+                }
+
+                // Reset global config
+                $GLOBALS['config'] = null;
+
                 $test->run();
                 $this->totalPassed += $test->getPassed();
                 $this->totalFailed += $test->getFailed();

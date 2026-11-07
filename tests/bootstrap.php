@@ -99,6 +99,16 @@ App::reset();
 $app = App::getInstance();
 $app->config = $config;
 
+// Ensure global config is available for tests that use it
+$GLOBALS['config'] = $config;
+
+// Clear session for clean test state
+$_SESSION = [];
+if (session_status() === PHP_SESSION_ACTIVE) {
+    session_destroy();
+}
+session_start();
+
 // Session setup with test config (copied from session_setup.php but without main bootstrap dependencies)
 $sessionDir = $config['session_path'];
 if (is_dir($sessionDir) && is_writable($sessionDir)) {
@@ -124,6 +134,14 @@ if (session_status() === PHP_SESSION_NONE) {
 require_once __DIR__ . '/../src/csp.php';
 require_once __DIR__ . '/../src/Errors.php';
 require_once __DIR__ . '/../src/Response.php';
+
+// Load helper files needed by tests
+require_once __DIR__ . '/../src/helpers.php';           // base_url, csrf_validate_request, current_route_action, url, slugify
+require_once __DIR__ . '/../src/Helpers/Text.php';      // load_lang_file
+require_once __DIR__ . '/../src/Helpers/AuthHelpers.php'; // is_logged_in, is_admin, is_banned, is_suspended
+require_once __DIR__ . '/../src/Helpers/Url.php';       // url()
+require_once __DIR__ . '/../src/Helpers/Data.php';      // slugify()
+require_once __DIR__ . '/../src/Security.php';          // csrf_validate_request, rate_limit
 
 $cspNonce = generate_csp_nonce();
 // Don't send headers in test bootstrap - they interfere with session operations

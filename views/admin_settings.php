@@ -1,4 +1,4 @@
-<?php include __DIR__.'/admin_header.php'; render_admin_header(t('settings')); ?>
+<?php include_once __DIR__.'/admin_header.php'; render_admin_header(t('settings')); ?>
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>

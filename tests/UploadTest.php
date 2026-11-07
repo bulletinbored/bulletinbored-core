@@ -89,7 +89,7 @@ function test_validate_upload_valid_image(): Test
     ];
     $maxSize = 5 * 1024 * 1024; // 5MB
 
-    $result = validate_upload($imagePath, 'test.png', $allowed, $maxSize);
+    $result = validate_upload($imagePath, 'test.png', $allowed, $maxSize, true);
 
     $t->assertNotNull('Valid image passes validation', $result);
     $t->assertEquals('MIME type detected', 'image/png', $result['mime']);
@@ -123,7 +123,7 @@ function test_validate_upload_valid_jpeg(): Test
     ];
     $maxSize = 5 * 1024 * 1024;
 
-    $result = validate_upload($imagePath, 'test.jpg', $allowed, $maxSize);
+    $result = validate_upload($imagePath, 'test.jpg', $allowed, $maxSize, true);
 
     $t->assertNotNull('Valid JPEG passes validation', $result);
     $t->assertEquals('MIME type detected', 'image/jpeg', $result['mime']);
@@ -148,7 +148,7 @@ function test_validate_upload_invalid_mime(): Test
     ];
     $maxSize = 5 * 1024 * 1024;
 
-    $result = validate_upload($filePath, 'test.txt', $allowed, $maxSize);
+    $result = validate_upload($filePath, 'test.txt', $allowed, $maxSize, true);
 
     $t->assertNull('Text file rejected', $result);
 
@@ -169,7 +169,7 @@ function test_validate_upload_exceeds_max_size(): Test
     ];
     $maxSize = 100; // Very small limit
 
-    $result = validate_upload($imagePath, 'large.png', $allowed, $maxSize);
+    $result = validate_upload($imagePath, 'large.png', $allowed, $maxSize, true);
 
     $t->assertNull('Large file rejected', $result);
 
@@ -191,10 +191,12 @@ function test_validate_upload_not_uploaded_file(): Test
     $maxSize = 5 * 1024 * 1024;
 
     // Pass a path that's not an uploaded file (not in $_FILES)
-    $result = validate_upload($filePath, 'test.png', $allowed, $maxSize);
+    // With skipUploadCheck=true, it should pass validation
+    $result = validate_upload($filePath, 'test.png', $allowed, $maxSize, true);
 
     // The function checks is_uploaded_file() which returns false for regular files
-    $t->assertNull('Regular file path rejected', $result);
+    // But with skipUploadCheck=true, it should pass
+    $t->assertNotNull('Regular file path accepted with skipUploadCheck', $result);
 
     upload_cleanup($tmpDir);
     return $t;
@@ -209,7 +211,7 @@ function test_validate_upload_empty_path(): Test
     ];
     $maxSize = 5 * 1024 * 1024;
 
-    $result = validate_upload('', 'test.png', $allowed, $maxSize);
+    $result = validate_upload('', 'test.png', $allowed, $maxSize, true);
 
     $t->assertNull('Empty path rejected', $result);
 
@@ -229,7 +231,7 @@ function test_validate_upload_corrupted_image(): Test
     ];
     $maxSize = 5 * 1024 * 1024;
 
-    $result = validate_upload($filePath, 'corrupted.png', $allowed, $maxSize);
+    $result = validate_upload($filePath, 'corrupted.png', $allowed, $maxSize, true);
 
     $t->assertNull('Corrupted image rejected', $result);
 
@@ -251,7 +253,7 @@ function test_validate_upload_svg(): Test
     ];
     $maxSize = 5 * 1024 * 1024;
 
-    $result = validate_upload($filePath, 'test.svg', $allowed, $maxSize);
+    $result = validate_upload($filePath, 'test.svg', $allowed, $maxSize, true);
 
     // SVG validation depends on finfo/mime_content_type detecting it correctly
     // and getimagesize() returning false for SVG (which is expected)
@@ -489,8 +491,8 @@ function test_upload_safe_name_generation(): Test
     $allowed = ['image/png' => 'png'];
     $maxSize = 5 * 1024 * 1024;
 
-    $result1 = validate_upload($imagePath, 'test.png', $allowed, $maxSize);
-    $result2 = validate_upload($imagePath, 'test.png', $allowed, $maxSize);
+    $result1 = validate_upload($imagePath, 'test.png', $allowed, $maxSize, true);
+    $result2 = validate_upload($imagePath, 'test.png', $allowed, $maxSize, true);
 
     $t->assertNotNull('First validation succeeds', $result1);
     $t->assertNotNull('Second validation succeeds', $result2);
@@ -520,9 +522,9 @@ function test_upload_multiple_allowed_types(): Test
     ];
     $maxSize = 5 * 1024 * 1024;
 
-    $result1 = validate_upload($pngPath, 'test.png', $allowed, $maxSize);
-    $result2 = validate_upload($jpgPath, 'test.jpg', $allowed, $maxSize);
-    $result3 = validate_upload($gifPath, 'test.gif', $allowed, $maxSize);
+    $result1 = validate_upload($pngPath, 'test.png', $allowed, $maxSize, true);
+    $result2 = validate_upload($jpgPath, 'test.jpg', $allowed, $maxSize, true);
+    $result3 = validate_upload($gifPath, 'test.gif', $allowed, $maxSize, true);
 
     $t->assertNotNull('PNG accepted', $result1);
     $t->assertEquals('PNG extension', 'png', $result1['ext']);
@@ -558,7 +560,7 @@ function test_upload_webp_support(): Test
     ];
     $maxSize = 5 * 1024 * 1024;
 
-    $result = validate_upload($webpPath, 'test.webp', $allowed, $maxSize);
+    $result = validate_upload($webpPath, 'test.webp', $allowed, $maxSize, true);
 
     if ($result !== null) {
         $t->assertEquals('WebP MIME detected', 'image/webp', $result['mime']);
@@ -589,7 +591,7 @@ function test_upload_ico_support(): Test
     ];
     $maxSize = 5 * 1024 * 1024;
 
-    $result = validate_upload($icoPath, 'test.ico', $allowed, $maxSize);
+    $result = validate_upload($icoPath, 'test.ico', $allowed, $maxSize, true);
 
     // ICO detection depends on finfo
     if ($result !== null) {

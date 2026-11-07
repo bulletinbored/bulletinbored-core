@@ -1117,9 +1117,9 @@ function test_admin_categories_crud(): Test
     $_POST['name'] = 'New Category';
     $_POST['description'] = 'Description';
     $_POST['position'] = '5';
-    $_POST['csrf_token'] = $_SESSION['csrf_token'];
+    $_POST['csrf_token'] = generate_csrf_token();
 
-    $result = handle_admin_categories_post();
+    $result = handle_admin_categories('POST');
     $t->assertTrue('Create returns redirect', $result instanceof \Bulletin\Response);
 
     $stmt = $pdo->prepare("SELECT name, description, position FROM categories WHERE name = ?");
@@ -1139,8 +1139,9 @@ function test_admin_categories_crud(): Test
     $_POST['name'] = 'Updated Category';
     $_POST['description'] = 'Updated description';
     $_POST['position'] = '10';
+    $_POST['csrf_token'] = generate_csrf_token();
 
-    $result = handle_admin_categories_post();
+    $result = handle_admin_categories('POST');
     $t->assertTrue('Update returns redirect', $result instanceof \Bulletin\Response);
 
     $stmt = $pdo->prepare("SELECT name, description, position FROM categories WHERE id = ?");
@@ -1151,8 +1152,9 @@ function test_admin_categories_crud(): Test
     // Test delete category
     $_POST['do'] = 'delete';
     $_POST['id'] = (string)$catId;
+    $_POST['csrf_token'] = generate_csrf_token();
 
-    $result = handle_admin_categories_post();
+    $result = handle_admin_categories('POST');
     $t->assertTrue('Delete returns redirect', $result instanceof \Bulletin\Response);
 
     $stmt = $pdo->prepare("SELECT COUNT(*) FROM categories WHERE id = ?");
@@ -1244,7 +1246,7 @@ function test_admin_plugins_install_update_uninstall(): Test
         'error' => 0,
         'size' => filesize($zipPath),
     ];
-    $_POST['csrf_token'] = $_SESSION['csrf_token'];
+    $_POST['csrf_token'] = generate_csrf_token();
 
     $result = handle_admin_plugins('POST');
     $t->assertTrue('Install returns true (view rendered)', $result === true);
@@ -1274,6 +1276,7 @@ function test_admin_plugins_install_update_uninstall(): Test
         'error' => 0,
         'size' => filesize($zipPath2),
     ];
+    $_POST['csrf_token'] = generate_csrf_token();
 
     $result = handle_admin_plugins('POST');
     $t->assertTrue('Update returns true (view rendered)', $result === true);
@@ -1284,6 +1287,7 @@ function test_admin_plugins_install_update_uninstall(): Test
     // Test uninstall
     $_POST['uninstall_plugin'] = '1';
     $_POST['plugin_name'] = 'testplug';
+    $_POST['csrf_token'] = generate_csrf_token();
 
     $result = handle_admin_plugins('POST');
     $t->assertTrue('Uninstall returns true (view rendered)', $result === true);
@@ -1332,7 +1336,7 @@ function test_admin_themes_install_activate_delete(): Test
         'error' => 0,
         'size' => filesize($zipPath),
     ];
-    $_POST['csrf_token'] = $_SESSION['csrf_token'];
+    $_POST['csrf_token'] = generate_csrf_token();
 
     $result = handle_admin_themes('POST');
     $t->assertTrue('Install returns true (view rendered)', $result === true);
@@ -1340,6 +1344,7 @@ function test_admin_themes_install_activate_delete(): Test
     // Test activate
     $_POST['activate_theme'] = '1';
     $_POST['theme'] = 'testtheme';
+    $_POST['csrf_token'] = generate_csrf_token();
 
     $result = handle_admin_themes('POST');
     $t->assertTrue('Activate returns true (view rendered)', $result === true);
@@ -1350,6 +1355,7 @@ function test_admin_themes_install_activate_delete(): Test
     // Test delete
     $_POST['delete_theme'] = '1';
     $_POST['theme'] = 'testtheme';
+    $_POST['csrf_token'] = generate_csrf_token();
 
     $result = handle_admin_themes('POST');
     $t->assertTrue('Delete returns true (view rendered)', $result === true);
@@ -1410,7 +1416,7 @@ function test_admin_catalog(): Test
 
     $_SERVER['REQUEST_METHOD'] = 'GET';
 
-    $result = handle_admin_catalog_get();
+    $result = handle_admin_catalog('GET');
     $t->assertTrue('Returns true (view rendered)', $result === true);
 
     admin_cleanup($tmpDir);
@@ -1428,7 +1434,7 @@ function test_admin_langs(): Test
 
     $_SERVER['REQUEST_METHOD'] = 'GET';
 
-    $result = handle_admin_langs_get();
+    $result = handle_admin_langs('GET');
     $t->assertTrue('Returns true (view rendered)', $result === true);
 
     admin_cleanup($tmpDir);

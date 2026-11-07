@@ -107,7 +107,7 @@ function setup_test_app(): array
     require_once __DIR__ . '/../lib/AuthZ.php';
     require_once __DIR__ . '/../lib/PluginManager.php';
     $pluginManager = new PluginManager($tmpDir . '/plugins', $dataDir . '/plugins.json');
-    $app->authz = new AuthZ($pluginManager);
+    $app->authz = new AuthZ($pdo, $pluginManager);
     $app->pluginManager = $pluginManager;
 
     // Set up session

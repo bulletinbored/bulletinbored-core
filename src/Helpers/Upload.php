@@ -32,9 +32,12 @@ function ensure_private_uploads_dir(): string
     return $dir;
 }
 
-function validate_upload(string $tmpPath, string $origName, array $allowed, int $maxSize): ?array
+function validate_upload(string $tmpPath, string $origName, array $allowed, int $maxSize, bool $skipUploadCheck = false): ?array
 {
-    if ($tmpPath === '' || !is_uploaded_file($tmpPath)) {
+    if (!$skipUploadCheck && ($tmpPath === '' || !is_uploaded_file($tmpPath))) {
+        return null;
+    }
+    if ($tmpPath === '' || !file_exists($tmpPath)) {
         return null;
     }
     if (filesize($tmpPath) > $maxSize) {

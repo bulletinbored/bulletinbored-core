@@ -592,7 +592,7 @@ function test_email_body_html_structure(): Test
 {
     $t = new Test('Email - HTML Body Structure');
 
-    $env = setup_test_app([
+    $env = emailtest_setup_app([
         'site_name' => 'My Forum',
         'site_logo' => 'http://example.com/logo.png',
     ]);
@@ -627,7 +627,7 @@ function test_email_body_html_structure(): Test
     $t->assertTrue('HTML contains copyright', str_contains($htmlBody, '&copy;'));
     $t->assertTrue('HTML contains current year', str_contains($htmlBody, (string)date('Y')));
 
-    email_cleanup($env['tmpDir']);
+    emailtest_cleanup($env['tmpDir']);
     return $t;
 }
 
@@ -635,7 +635,7 @@ function test_email_without_logo(): Test
 {
     $t = new Test('Email - Without Logo');
 
-    $env = setup_test_app([
+    $env = emailtest_setup_app([
         'site_name' => 'My Forum',
         'site_logo' => '',
     ]);
@@ -648,7 +648,7 @@ function test_email_without_logo(): Test
 
     $t->assertEquals('Logo HTML empty when no logo', '', $siteLogoHtml);
 
-    email_cleanup($env['tmpDir']);
+    emailtest_cleanup($env['tmpDir']);
     return $t;
 }
 
@@ -656,7 +656,7 @@ function test_email_special_characters_in_body(): Test
 {
     $t = new Test('Email - Special Characters in Body');
 
-    $env = setup_test_app();
+    $env = emailtest_setup_app();
 
     $body = '<p>Special chars: <>&"\'日本語</p>';
     $result = send_email('test@test.com', 'Subject', $body);
@@ -664,7 +664,7 @@ function test_email_special_characters_in_body(): Test
     // Should not throw, just return false in test env
     $t->assert('Function handles special chars', is_bool($result));
 
-    email_cleanup($env['tmpDir']);
+    emailtest_cleanup($env['tmpDir']);
     return $t;
 }
 
@@ -672,7 +672,7 @@ function test_email_long_recipient_list(): Test
 {
     $t = new Test('Email - Long Recipient (Single)');
 
-    $env = setup_test_app();
+    $env = emailtest_setup_app();
 
     // Test with a very long but valid email
     $longEmail = str_repeat('a', 60) . '@' . str_repeat('b', 60) . '.com';
@@ -680,7 +680,7 @@ function test_email_long_recipient_list(): Test
 
     $t->assert('Function handles long email', is_bool($result));
 
-    email_cleanup($env['tmpDir']);
+    emailtest_cleanup($env['tmpDir']);
     return $t;
 }
 
