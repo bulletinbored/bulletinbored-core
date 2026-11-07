@@ -4,11 +4,11 @@
  * Avatar rendering helpers.
  */
 
-function avatar_initial($name) {
+function avatar_initial(string $name): string {
     return mb_strtoupper(mb_substr($name, 0, 1));
 }
 
-function avatar_color($name) {
+function avatar_color(string $name): string {
     $colors = ['#550296', '#0d6efd', '#198754', '#dc3545', '#fd7e14', '#6f42c1'];
     $hash = 0;
     for ($i = 0; $i < mb_strlen($name); $i++) {
@@ -17,7 +17,7 @@ function avatar_color($name) {
     return $colors[$hash];
 }
 
-function render_avatar($username, $avatar = '', $size = 44, $class = '') {
+function render_avatar(string $username, string $avatar = '', int $size = 44, string $class = ''): string {
     $size = max(8, (int)$size);
     if ($avatar && file_exists(__DIR__ . '/../uploads/avatars/' . $avatar)) {
         return '<img src="' . base_url() . '/uploads/avatars/' . escape($avatar) . '" alt="' . escape($username) . '" class="rounded-circle ' . escape($class) . '" width="' . $size . '" height="' . $size . '">';

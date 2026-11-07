@@ -19,7 +19,7 @@ function is_logged_in(): bool
     // No per-request DB query needed - we trust the session-stored version.
     return true;
 }
-function is_admin() { return ($_SESSION['user_role'] ?? '') === 'admin'; }
+function is_admin(): bool { return ($_SESSION['user_role'] ?? '') === 'admin'; }
 
 function validate_password_strength(string $password): array
 {
@@ -54,9 +54,9 @@ function can_view_thread(string $threadStatus): bool
     return false;
 }
 
-function is_banned() { return ($_SESSION['user_status'] ?? '') === 'banned'; }
+function is_banned(): bool { return ($_SESSION['user_status'] ?? '') === 'banned'; }
 
-function is_suspended()
+function is_suspended(): bool
 {
     $status = $_SESSION['user_status'] ?? '';
     $suspensionTime = $_SESSION['user_suspension_time'] ?? 0;

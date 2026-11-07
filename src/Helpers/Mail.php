@@ -4,7 +4,7 @@
  * Email sending (SMTP and PHP mail()).
  */
 
-function send_email($to, $subject, $body) {
+function send_email(string $to, string $subject, string $body): bool {
     if ($to === '' || preg_match('/[\r\n]/', $to)) {
         error_log("send_email: invalid recipient address");
         return false;

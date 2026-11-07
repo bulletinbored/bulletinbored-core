@@ -4,9 +4,9 @@
  * Text and content helpers.
  */
 
-function escape($s) { return htmlspecialchars($s, ENT_QUOTES, 'UTF-8'); }
+function escape(string $s): string { return htmlspecialchars($s, ENT_QUOTES, 'UTF-8'); }
 
-function validate_input($data) {
+function validate_input(mixed $data): mixed {
     if (is_array($data)) {
         return array_map('validate_input', $data);
     }
@@ -21,7 +21,7 @@ function validate_input($data) {
  * Escaping here as well caused double encoding: "we're" was stored as
  * "we&#039;re" and then displayed literally as "we&#039;re".
  */
-function clean_text($data) {
+function clean_text(string $data): string {
     return trim($data);
 }
 
@@ -29,12 +29,12 @@ function render_site_name(string $name): string {
     return $name;
 }
 
-function marked_parse($text) {
+function marked_parse(string $text): string {
     require_once __DIR__ . '/../markdown.php';
     return bb_render_content($text);
 }
 
-function time_ago($datetime) {
+function time_ago(string $datetime): string {
     $now = new DateTime();
     $ago = new DateTime($datetime);
     $diff = $now->diff($ago);
@@ -46,13 +46,13 @@ function time_ago($datetime) {
     return 'just now';
 }
 
-function compact_number($n) {
+function compact_number(int $n): string {
     if ($n >= 1000000) return round($n / 1000000, 1) . 'M';
     if ($n >= 1000) return round($n / 1000, 1) . 'K';
     return (string)$n;
 }
 
-function excerpt($text, $length = 110) {
+function excerpt(string $text, int $length = 110): string {
     $text = strip_tags($text);
     if (mb_strlen($text) <= $length) return $text;
     return mb_substr($text, 0, $length) . '...';

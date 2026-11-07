@@ -35,7 +35,7 @@ function redirect(string $url, int $status = 302): \Bulletin\Response {
 /**
  * Get the base URL of the forum.
  */
-function base_url() {
+function base_url(): string {
     static $baseUrl = null;
     if ($baseUrl === null) {
         $base = App::getInstance()->config['base_url'] ?? '';

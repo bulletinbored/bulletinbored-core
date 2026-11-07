@@ -4,7 +4,7 @@
  * URL generation and slug utilities.
  */
 
-function slugify($text) {
+function slugify(string $text): string {
     $text = preg_replace('~[^\pL\d]+~u', '-', $text);
     $text = iconv('utf-8', 'us-ascii//TRANSLIT', $text);
     $text = preg_replace('~[^-\w]+~', '', $text);
@@ -13,7 +13,7 @@ function slugify($text) {
     return empty($text) ? 'n-a' : $text;
 }
 
-function url($action, $params = [], $absolute = false) {
+function url(string $action, array $params = [], bool $absolute = false): string {
     $base = base_url();
     if ($absolute) {
         $configBase = App::getInstance()->config['base_url'] ?? '';

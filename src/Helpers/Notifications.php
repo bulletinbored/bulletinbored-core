@@ -75,7 +75,7 @@ function notify_thread_reply($thread, int $authorId, string $content): void
     }
 }
 
-function notify_admin_new_user($username, $email = '') {
+function notify_admin_new_user(string $username, string $email = ''): bool {
     $config = App::getInstance()->config;
     $recipient = !empty($config['notify_admin_email']) ? $config['notify_admin_email'] : ($config['mail_from'] ?? '');
     if (empty($recipient)) {
@@ -147,7 +147,7 @@ function notify_mentioned_users($pdo, $content, $threadId, $threadTitle, $author
     return $created;
 }
 
-function ensure_private_messages_table($pdo) {
+function ensure_private_messages_table(PDO $pdo): void {
     $cfg = App::getInstance()->config;
     $driver = ($cfg['db_driver'] ?? 'sqlite');
     if ($driver === 'mysql') {

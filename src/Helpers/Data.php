@@ -4,7 +4,7 @@
  * Data fetching helpers for sidebar, statistics, and thread listing.
  */
 
-function sidebar_categories() {
+function sidebar_categories(): array {
     $pdo = App::getInstance()->pdo;
     // Attach the number of discussions per category, using the same visible
     // statuses as the thread listing so the sidebar count matches what the
@@ -20,7 +20,7 @@ function sidebar_categories() {
     return $stmt->fetchAll();
 }
 
-function forum_statistics() {
+function forum_statistics(): array {
     $pdo = App::getInstance()->pdo;
     return [
         'threads' => (int)$pdo->query("SELECT COUNT(*) FROM threads")->fetchColumn(),
@@ -31,7 +31,7 @@ function forum_statistics() {
     ];
 }
 
-function thread_sort_options() {
+function thread_sort_options(): array {
     $options = ['latest' => t('sort_latest'), 'replies' => t('sort_replies'), 'views' => t('sort_views'), 'newest' => t('sort_newest'), 'oldest' => t('sort_oldest')];
 
     // Plugins may add their own sort options (e.g. updownbored's "Votes").
@@ -43,7 +43,7 @@ function thread_sort_options() {
     return $options;
 }
 
-function fetch_threads(array $opts = []) {
+function fetch_threads(array $opts = []): array {
     $pdo = App::getInstance()->pdo;
     $allowedStatuses = ['visible', 'sticky', 'locked', 'hidden', 'pending'];
     $statusFilter = $opts['status'] ?? ['visible', 'sticky', 'locked'];

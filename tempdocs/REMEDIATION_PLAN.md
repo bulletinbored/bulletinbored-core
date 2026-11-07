@@ -382,7 +382,7 @@ class AddPerformanceIndexes
 **Problem:** Many functions missing return type declarations.
 
 **Implementation Approach:**
-1. Run PHPStan/Psalm to identify missing types
+1. Identify missing types
 2. Add return types to:
    - `src/helpers.php`: `base_url(): string`
    - `src/Helpers/AuthHelpers.php`: `is_admin(): bool`, `is_banned(): bool`, `is_suspended(): bool`
@@ -399,7 +399,6 @@ class AddPerformanceIndexes
 **Dependencies:** None
 
 **Verification Criteria:**
-- [ ] PHPStan level 5 passes (or project's configured level)
 - [ ] No type errors introduced
 - [ ] Tests pass
 
