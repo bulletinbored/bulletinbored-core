@@ -364,10 +364,29 @@ class UpdateManager
             return false;
         }
 
+        // Delegate to shared method for backup, copy, rollback, flattening, cleanup
+        if (!$this->applyCoreUpdateFromSource($sourceDir, 'uploaded')) {
+            return false;
+        }
+
+        $this->fetcher->clearCache();
+        return true;
+    }
+
+    /**
+     * Apply core update from an already-extracted and validated source directory.
+     * Handles backup, copy, rollback, nested directory flattening, and cleanup.
+     *
+     * @param string $sourceDir Path to extracted source (must contain index.php and VERSION)
+     * @param string $tag       Version tag for logging and version tracking
+     * @return bool True on success, false on failure (rollback performed)
+     */
+    private function applyCoreUpdateFromSource(string $sourceDir, string $tag): bool
+    {
         $backupPath = $this->backup->backupCore();
         if ($backupPath === null) {
             error_log('BB CORE FAIL: backup failed, aborting update');
-            $this->backup->deleteRecursive($tmpExtract);
+            $this->backup->deleteRecursive($sourceDir);
             return false;
         }
 
@@ -379,12 +398,13 @@ class UpdateManager
             if ($backupPath !== null) {
                 $this->backup->restoreCoreBackup($backupPath);
             }
-            $this->backup->deleteRecursive($tmpExtract);
+            $this->backup->deleteRecursive($sourceDir);
             error_log('BB CORE FAIL copy error: ' . $e->getMessage());
             return false;
         }
-        $this->backup->deleteRecursive($tmpExtract);
+        $this->backup->deleteRecursive($sourceDir);
 
+        // Flatten nested bulletinbored-core-* directories (GitHub ZIP structure)
         foreach (glob($root . '/bulletinbored-core-*', GLOB_ONLYDIR) as $nested) {
             foreach (glob($nested . '/*') as $item) {
                 $base = basename($item);
@@ -453,42 +473,12 @@ class UpdateManager
             return false;
         }
 
-        $backupPath = $this->backup->backupCore();
-        if ($backupPath === null) {
-            error_log('BB CORE FAIL: backup failed, aborting update');
-            $this->backup->deleteRecursive($tmpExtract);
+        // Delegate to shared method for backup, copy, rollback, flattening, cleanup
+        if (!$this->applyCoreUpdateFromSource($sourceDir, $tag)) {
             return false;
         }
 
         $root = rtrim(__DIR__ . '/../', '/');
-
-        try {
-            $this->backup->copyRecursive($sourceDir, $root);
-        } catch (\Throwable $e) {
-            if ($backupPath !== null) {
-                $this->backup->restoreCoreBackup($backupPath);
-            }
-            $this->backup->deleteRecursive($tmpExtract);
-            error_log('BB CORE FAIL copy error: ' . $e->getMessage());
-            return false;
-        }
-        $this->backup->deleteRecursive($tmpExtract);
-
-        foreach (glob($root . '/bulletinbored-core-*', GLOB_ONLYDIR) as $nested) {
-            foreach (glob($nested . '/*') as $item) {
-                $base = basename($item);
-                $dest = $root . '/' . $base;
-                if (is_dir($item)) {
-                    $this->backup->copyRecursive($item, $dest);
-                } elseif (is_file($item)) {
-                    if (is_dir($dest)) {
-                        $this->backup->deleteRecursive($dest);
-                    }
-                    copy($item, $dest);
-                }
-            }
-            $this->backup->deleteRecursive($nested);
-        }
 
         $this->removeInstallerScripts($root);
         error_log('BB CORE extracted');
