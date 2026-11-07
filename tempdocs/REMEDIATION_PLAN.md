@@ -466,6 +466,34 @@ Create test files:
 
 **Risk:** Low — additive tests only
 
+### P2-5: Fix Defects in Language Admin Handler (`src/actions/admin/langs.php`)
+
+**Problem:** Three defects in the language administration handler:
+1. **Scoping bug** (line 22): `saveLangMeta()` declares `global $langMetaPath` but `$langMetaPath` is a local variable in `handle_admin_langs()`, not global — causes fallback path to always execute
+2. **Broken fallback logic** (lines 132-137): When `$downloadUrl` is a `.json` URL, fallback generates `.php` URL but loop filters for `.json` only, so fallback never tried
+3. **Output buffer leak** (line 102): `ob_start()` called before validation/HTTP fetching; exceptions bypass `ob_end_clean()` cleanup
+
+**Implementation Approach:**
+1. **Fix scoping**: Change `saveLangMeta(string $code, string $sha): void` to `saveLangMeta(string $code, string $sha, string $langMetaPath): void` and pass `$langMetaPath` explicitly at call site (line 164)
+2. **Fix fallback**: Generate both `.json` and `.php` variants unconditionally, try all candidates regardless of extension
+3. **Fix buffer leak**: Wrap critical section in `try/finally` to guarantee `ob_end_clean()` and `ini_set('display_errors')` restoration
+
+**Files Affected:**
+- `src/actions/admin/langs.php` — lines 20-28, 102-175, 164
+
+**Dependencies:** None (can start immediately)
+
+**Verification Criteria:**
+- [ ] `saveLangMeta()` called with explicit `$langMetaPath` parameter (no `global`)
+- [ ] Language metadata correctly written to `data/lang-meta.json`
+- [ ] Install/update from GitHub works for both `.json` and `.php` source URLs
+- [ ] Fallback attempted when primary URL fails
+- [ ] No output buffer leaks when exceptions thrown (CSRF, rate limit, validation)
+- [ ] `display_errors` restored to original value on all code paths
+- [ ] All existing tests pass
+
+**Risk:** Low — isolated to single admin action; straightforward fixes with minimal regression surface
+
 ---
 
 ## P3 — Code Quality
