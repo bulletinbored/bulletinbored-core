@@ -406,37 +406,21 @@ class AddPerformanceIndexes
 
 ---
 
-### P2-3: Make Rate Limiter Backend Pluggable
+### P2-3: Make Rate Limiter Backend Pluggable — **SKIPPED (Out of Scope)**
 
 **Problem:** File-based rate limiter doesn't work in clustered deployments.
 
-**Implementation Approach:**
-1. Create `RateLimiterInterface`:
-```php
-interface RateLimiterInterface {
-    public function check(string $action, int $max, int $window, string $key): bool;
-    public function gc(int $maxAge): int;
-}
-```
-2. Implement `FileRateLimiter` (current logic)
-3. Add `RedisRateLimiter` implementation (optional, behind config)
-4. Factory in `Security.php` to instantiate based on config
-5. Config option: `rate_limiter` => `file` | `redis`
+**Decision:** This issue is **skipped** as it is out of scope for BulletinBored's intended deployment model. The application is designed as a lightweight, self-hosted forum primarily using SQLite on a single server node. Horizontal clustering (multi-node deployments behind a load balancer) is not a supported or intended use case for the core application.
 
-**Files Affected:**
-- `src/Security.php` — `rate_limit()`, `rate_limit_gc()`, `rate_limit_client_ip()`
-- New: `src/RateLimiter/` directory with interface + implementations
-- `config-sample.json` — rate_limiter config
+**Future Consideration:** If the project evolves to support multi-node deployments with shared databases (e.g., MySQL), a pluggable rate limiter backend (file, database, or Redis) could be a useful addition at that time. For now, the existing file-based rate limiter in `src/Security.php` is sufficient and appropriate.
+
+**Files Affected:** None (no changes required)
 
 **Dependencies:** None
 
-**Verification Criteria:**
-- [ ] File backend works identically to current
-- [ ] Redis backend works (if Redis available)
-- [ ] Config switches between backends
-- [ ] Fail-closed behavior preserved for sensitive actions
+**Verification Criteria:** N/A — issue deferred
 
-**Risk:** Medium — new abstraction; ensure backward compatibility
+**Risk:** None — no implementation risk
 
 ---
 
@@ -600,7 +584,7 @@ Phase 2 (Week 2): P1 Significant Fixes
 Phase 3 (Week 3): P2 Improvements
 ├── P2-1: Extract UpdateManager duplicate logic
 ├── P2-2: Add return type hints
-├── P2-3: Pluggable rate limiter (file backend only first)
+├── P2-3: **SKIPPED** — Rate limiter pluggable backend (out of scope)
 └── P2-4: Expand test coverage (start with AdminActions)
 
 Phase 4 (Week 4): P3 Code Quality
@@ -637,7 +621,7 @@ Phase 4 (Week 4): P3 Code Quality
 ### Gate 3: After Phase 3 (P2 Complete)
 - [ ] UpdateManager duplicate logic extracted
 - [ ] PHPStan passes with return types
-- [ ] Rate limiter interface exists, file backend works
+- [ ] **SKIPPED** — Rate limiter pluggable backend (out of scope)
 - [ ] AdminActionsTest.php covers >80% of admin handlers
 
 ### Gate 4: After Phase 4 (P3 Complete)
