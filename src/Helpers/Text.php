@@ -4,8 +4,39 @@
  * Text and content helpers.
  */
 
+/**
+ * Escape a string for safe HTML output.
+ *
+ * @param string $s  Raw string
+ * @return string    HTML-escaped string
+ */
 function escape(string $s): string { return htmlspecialchars($s, ENT_QUOTES, 'UTF-8'); }
 
+/**
+ * Sanitize and normalize user input from HTTP requests.
+ *
+ * Use this for ALL incoming form data (POST, GET, REQUEST) before validation
+ * or storage. Handles both scalar values and arrays recursively.
+ *
+ * Operations performed:
+ * - Trims leading/trailing whitespace
+ * - Removes backslashes added by PHP's deprecated magic_quotes_gpc
+ * - Recursively processes arrays
+ *
+ * Does NOT HTML-escape. Escaping is context-dependent and should be done
+ * at output time via escape() or via template auto-escaping.
+ *
+ * @param mixed $data  Input value or array of values
+ * @return mixed       Sanitized value with same structure
+ *
+ * @example
+ *   $username = validate_input($_POST['username'] ?? '');
+ *   $email    = validate_input($_POST['email'] ?? '');
+ *   $tags     = validate_input($_POST['tags'] ?? []); // array
+ *
+ * @see escape()      For HTML output escaping
+ * @see clean_text()  For single-line titles/headings needing only trim
+ */
 function validate_input(mixed $data): mixed {
     if (is_array($data)) {
         return array_map('validate_input', $data);
@@ -14,12 +45,28 @@ function validate_input(mixed $data): mixed {
 }
 
 /**
- * Trim a raw single-line text value (e.g. a thread title) for storage.
+ * Normalize a single-line text value for storage.
  *
- * Intentionally does NOT HTML-escape. Values are stored exactly as the user
- * typed them and escaped only on output (like usernames via validate_input()).
- * Escaping here as well caused double encoding: "we're" was stored as
- * "we&#039;re" and then displayed literally as "we&#039;re".
+ * Use this for short, single-line fields like titles, headings, slugs,
+ * or labels where only whitespace trimming is desired.
+ *
+ * Operations performed:
+ * - Trims leading/trailing whitespace only
+ *
+ * Does NOT:
+ * - Strip backslashes (use validate_input() if magic_quotes may apply)
+ * - HTML-escape (values are stored raw and escaped on output)
+ * - Handle arrays (string input only)
+ *
+ * @param string $data  Raw single-line text
+ * @return string       Trimmed text
+ *
+ * @example
+ *   $title = clean_text($_POST['title'] ?? '');      // thread title
+ *   $name  = clean_text($_POST['category_name'] ?? ''); // category name
+ *
+ * @see validate_input()  For multi-line content or form fields needing stripslashes
+ * @see escape()          For HTML output escaping
  */
 function clean_text(string $data): string {
     return trim($data);
