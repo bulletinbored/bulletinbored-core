@@ -8,8 +8,8 @@ function handle_admin_langs(string $method)
     $langMirrorBase = !empty($config['update_mirror']) ? rtrim($config['update_mirror'], '/') : 'https://extend.bulletinbored.net';
     $langsJsonUrl = $langMirrorBase . '/langs.json';
 
-    if (!function_exists('loadLangMeta')) {
-        function loadLangMeta(string $path): array {
+    if (!function_exists('load_lang_meta')) {
+        function load_lang_meta(string $path): array {
             if (!file_exists($path)) {
                 return [];
             }
@@ -17,16 +17,16 @@ function handle_admin_langs(string $method)
             return is_array($data) ? $data : [];
         }
     }
-    if (!function_exists('saveLangMeta')) {
-        function saveLangMeta(string $code, string $sha, string $langMetaPath): void {
+    if (!function_exists('save_lang_meta')) {
+        function save_lang_meta(string $code, string $sha, string $langMetaPath): void {
             $path = $langMetaPath ?: __DIR__ . '/../../../data/lang-meta.json';
-            $meta = loadLangMeta($path);
+            $meta = load_lang_meta($path);
             $meta[$code] = ['sha' => $sha, 'updated' => date('c')];
             @file_put_contents($path, json_encode($meta, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
         }
     }
 
-    $langMeta = loadLangMeta($langMetaPath);
+    $langMeta = load_lang_meta($langMetaPath);
     $remoteLangsRaw = @file_get_contents($langsJsonUrl);
     $remoteLangs = is_string($remoteLangsRaw) ? json_decode($remoteLangsRaw, true) : null;
     if (!is_array($remoteLangs)) {
@@ -171,7 +171,7 @@ function handle_admin_langs(string $method)
                                 if ($written === false) {
                                     $langError = 'Failed to save language file';
                                 } else {
-                                    saveLangMeta($langCode, $remoteSha, $langMetaPath);
+                                    save_lang_meta($langCode, $remoteSha, $langMetaPath);
                                     $_SESSION['lang_success'] = ($isUpdate ? 'Language file updated: ' : 'Language file installed: ') . escape($langCode);
                                     @ini_set('display_errors', $prevDisplayErrors);
                                     ob_end_clean();
