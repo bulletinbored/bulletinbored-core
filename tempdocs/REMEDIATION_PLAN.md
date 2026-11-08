@@ -620,7 +620,6 @@ Phase 4 (Week 4): P3 Code Quality
 
 ### Gate 3: After Phase 3 (P2 Complete)
 - [ ] UpdateManager duplicate logic extracted
-- [ ] PHPStan passes with return types
 - [ ] **SKIPPED** — Rate limiter pluggable backend (out of scope)
 - [ ] AdminActionsTest.php covers >80% of admin handlers
 
