@@ -622,6 +622,18 @@ Phase 4 (Week 4): P3 Code Quality
 - [ ] UpdateManager duplicate logic extracted
 - [ ] **SKIPPED** — Rate limiter pluggable backend (out of scope)
 - [ ] AdminActionsTest.php covers >80% of admin handlers
+- [ ] UpdateManagerTest.php covers >80% of UpdateManager (P2-4)
+- [ ] ThemeManagerTest.php covers >80% of ThemeManager (P2-4)
+- [ ] UploadTest.php covers >80% of Upload helper (P2-4)
+- [ ] EmailTest.php covers >80% of Email functions (P2-4)
+- [ ] RouterTest.php covers >80% of Router (P2-4)
+- [ ] All existing tests pass
+- [ ] P2-5: `saveLangMeta()` called with explicit `$langMetaPath` parameter (no `global`)
+- [ ] P2-5: Language metadata correctly written to `data/lang-meta.json`
+- [ ] P2-5: Install/update from GitHub works for both `.json` and `.php` source URLs
+- [ ] P2-5: Fallback attempted when primary URL fails
+- [ ] P2-5: No output buffer leaks when exceptions thrown (CSRF, rate limit, validation)
+- [ ] P2-5: `display_errors` restored to original value on all code paths
 
 ### Gate 4: After Phase 4 (P3 Complete)
 - [ ] PHP-CS-Fixer passes
@@ -649,7 +661,6 @@ Each migration is reversible (`down()` method). For code changes:
 | FK constraints | 100% of relationships |
 | Index coverage | All FK/filter columns indexed |
 | Test coverage (new modules) | >80% |
-| PHPStan level | Level 5 clean |
 | CSP configurable | Yes, with secure defaults |
 
 ---
