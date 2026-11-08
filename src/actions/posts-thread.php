@@ -24,7 +24,8 @@ function handle_upload_image(): \Bulletin\Response|bool
         'image/gif'  => 'gif',
         'image/webp' => 'webp',
     ];
-    $maxSize = App::getInstance()->config['image_max_size'] ?? 5 * 1024 * 1024;
+    $config = App::getInstance()->config;
+    $maxSize = $config['image_max_size'] ?? ((int)($config['image_max_size_mb'] ?? 5) * 1024 * 1024);
     $info = validate_uploaded_file($_FILES['image']['tmp_name'], $_FILES['image']['name'] ?? '', $allowed, $maxSize);
     if ($info === null) {
         throw new \Bulletin\ValidationException(['image' => 'Invalid image']);

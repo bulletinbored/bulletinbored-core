@@ -162,7 +162,15 @@ class UpdateManager
             }
         }
 
-        $needed = $requiredBytes > 0 ? $requiredBytes : (50 * 1024 * 1024);
+        $config = [];
+        if (class_exists('App')) {
+            $app = App::getInstance();
+            if ($app !== null) {
+                $config = $app->config ?? [];
+            }
+        }
+        $defaultMinDiskSpace = (int)($config['update_min_disk_space_mb'] ?? 50) * 1024 * 1024;
+        $needed = $requiredBytes > 0 ? $requiredBytes : $defaultMinDiskSpace;
         $root = $this->rootDir;
         $freeSpace = @disk_free_space($root);
         if ($freeSpace !== false && $freeSpace < $needed) {

@@ -67,6 +67,22 @@ Once your server is configured, the web installer runs in 3 steps:
 
 The installer creates `config.json` and the database automatically.
 
+### Configuration files: `config-sample.json` vs `config.json`
+
+bulletinbored uses two configuration files:
+
+| File | Purpose | Version controlled? |
+|------|---------|---------------------|
+| **`config-sample.json`** | Template/reference with **all available options** and their default values. Shipped with the software. | ✅ Yes |
+| **`config.json`** | **Actual runtime configuration** created by the installer (or manually). Contains site-specific values (database credentials, secrets, admin account). | ❌ No (in `.gitignore`) |
+
+**How they work together:**
+1. The installer reads `config-sample.json` and writes `config.json` with your provided values
+2. At runtime, `bootstrap.php` loads `config.json`
+3. Code uses null-coalescing (`??`) with hardcoded fallbacks — so upgrades work even if `config.json` lacks new keys
+
+**For manual installation:** Copy `config-sample.json` to `config.json` and edit the required values (database, site name, admin user). See [Manual installation](#manual-installation) below.
+
 ### Security reminder
 
 After installation completes, **delete the installer files** from your server:

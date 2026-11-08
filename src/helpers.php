@@ -20,9 +20,17 @@ require_once __DIR__ . '/Helpers/Data.php';
  * Number of posts shown per page inside a thread.
  * Kept in one place so pagination maths (e.g. the "last activity" link)
  * can never drift from the query in actions/posts-thread.php.
+ * Configurable via config.json 'posts_per_page' (default: 15).
  */
 if (!defined('POSTS_PER_PAGE')) {
-    define('POSTS_PER_PAGE', 15);
+    $config = [];
+    if (class_exists('App')) {
+        $app = App::getInstance();
+        if ($app !== null) {
+            $config = $app->config ?? [];
+        }
+    }
+    define('POSTS_PER_PAGE', (int)($config['posts_per_page'] ?? 15));
 }
 
 /**

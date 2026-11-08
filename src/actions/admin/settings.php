@@ -81,10 +81,12 @@ function handle_admin_upload_site_image(): \Bulletin\Response|bool
         'image/x-icon' => 'ico',
         'image/vnd.microsoft.icon' => 'ico',
     ];
-    $maxSize = 2 * 1024 * 1024;
+    $config = App::getInstance()->config;
+    $maxSize = $config['site_image_max_size'] ?? ((int)($config['site_image_max_size_mb'] ?? 2) * 1024 * 1024);
+    $maxSizeMb = (int)($config['site_image_max_size_mb'] ?? 2);
     $info = validate_upload($_FILES['site_image']['tmp_name'], $_FILES['site_image']['name'] ?? '', $allowed, $maxSize);
     if ($info === null) {
-        throw new \Bulletin\ValidationException(['site_image' => 'Invalid image. Allowed: JPG, PNG, GIF, WebP, SVG, ICO. Max 2MB.']);
+        throw new \Bulletin\ValidationException(['site_image' => 'Invalid image. Allowed: JPG, PNG, GIF, WebP, SVG, ICO. Max ' . $maxSizeMb . 'MB.']);
     }
 
     $uploadDir = __DIR__ . '/../../../uploads';

@@ -89,9 +89,18 @@ function rate_limit_client_ip(): string
  * Delete rate-limit buckets that have not been touched for $maxAge seconds.
  * Called opportunistically by rate_limit() (one file per action+key would
  * otherwise accumulate forever). Returns the number of files removed.
+ * Configurable via config.json 'rate_limit_gc_max_age' (default: 86400).
  */
-function rate_limit_gc(string $dir, int $maxAge = 86400): int
+function rate_limit_gc(string $dir, ?int $maxAge = null): int
 {
+    $config = [];
+    if (class_exists('App')) {
+        $app = App::getInstance();
+        if ($app !== null) {
+            $config = $app->config ?? [];
+        }
+    }
+    $maxAge = $maxAge ?? (int)($config['rate_limit_gc_max_age'] ?? 86400);
     if (!is_dir($dir)) {
         return 0;
     }
@@ -138,9 +147,18 @@ function rate_limit(string $action, int $max = 10, int $window = 300, ?string $k
     if (!is_dir($dir)) {
         @mkdir($dir, 0755, true);
     }
-    // Opportunistic cleanup (~0.5% of calls) so the bucket directory does not
+    // Opportunistic cleanup so the bucket directory does not
     // grow without bound: one file per action+key accumulates indefinitely.
-    if (random_int(1, 200) === 1) {
+    // Configurable via config.json 'rate_limit_gc_probability' (default: 200).
+    $config = [];
+    if (class_exists('App')) {
+        $app = App::getInstance();
+        if ($app !== null) {
+            $config = $app->config ?? [];
+        }
+    }
+    $gcProbability = (int)($config['rate_limit_gc_probability'] ?? 200);
+    if ($gcProbability > 0 && random_int(1, $gcProbability) === 1) {
         rate_limit_gc($dir);
     }
     $file = $dir . '/' . $bucket . '.json';

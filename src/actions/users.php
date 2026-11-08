@@ -287,7 +287,8 @@ function handle_edit_profile(string $method): \Bulletin\Response|bool
             }
 
             $allowed = $config['avatar_allowed_types'] ?? ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-            $maxSize = $config['avatar_max_size'] ?? 2*1024*1024;
+            $maxSize = $config['avatar_max_size'] ?? ((int)($config['avatar_max_size_mb'] ?? 2) * 1024 * 1024);
+            $maxSizeMb = (int)($config['avatar_max_size_mb'] ?? 2);
 
             $finfo = new finfo(FILEINFO_MIME_TYPE);
             $mime = $finfo->file($_FILES['avatar']['tmp_name']);
@@ -298,7 +299,7 @@ function handle_edit_profile(string $method): \Bulletin\Response|bool
             }
 
             if ($_FILES['avatar']['size'] > $maxSize) {
-                $_SESSION['avatar_upload_error'] = 'File is too large. Max 2MB.';
+                $_SESSION['avatar_upload_error'] = 'File is too large. Max ' . $maxSizeMb . 'MB.';
                 return redirect(url('edit_profile'));
             }
 
