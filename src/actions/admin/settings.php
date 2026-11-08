@@ -1,6 +1,6 @@
 <?php
 
-function handle_admin_settings_post(): ?string
+function handle_admin_settings_post(): \Bulletin\Response|string|null
 {
     global $config;
 
@@ -11,14 +11,14 @@ function handle_admin_settings_post(): ?string
         throw new \Bulletin\TooManyRequestsException('You are changing settings too fast. Please try again later.');
     }
 
-    $siteName = trim($_POST['site_name'] ?? $config['site_name']);
-    $siteTagline = trim($_POST['site_tagline'] ?? $config['site_tagline']);
-    $siteIcon = trim($_POST['site_icon'] ?? $config['site_icon']);
-    $siteLogo = trim($_POST['site_logo'] ?? ($config['site_logo'] ?? ''));
-    $siteFavicon = trim($_POST['site_favicon'] ?? ($config['site_favicon'] ?? ''));
-    $timezone = trim($_POST['timezone'] ?? $config['timezone']);
-    $dateFormat = trim($_POST['date_format'] ?? $config['date_format']);
-    $timeFormat = trim($_POST['time_format'] ?? $config['time_format']);
+    $siteName = trim((string)($_POST['site_name'] ?? $config['site_name'] ?? ''));
+    $siteTagline = trim((string)($_POST['site_tagline'] ?? $config['site_tagline'] ?? ''));
+    $siteIcon = trim((string)($_POST['site_icon'] ?? $config['site_icon'] ?? ''));
+    $siteLogo = trim((string)($_POST['site_logo'] ?? ($config['site_logo'] ?? '')));
+    $siteFavicon = trim((string)($_POST['site_favicon'] ?? ($config['site_favicon'] ?? '')));
+    $timezone = trim((string)($_POST['timezone'] ?? $config['timezone'] ?? 'UTC'));
+    $dateFormat = trim((string)($_POST['date_format'] ?? $config['date_format'] ?? 'Y-m-d'));
+    $timeFormat = trim((string)($_POST['time_format'] ?? $config['time_format'] ?? 'H:i'));
     $attachmentsEnabled = !empty($_POST['attachments_enabled']) ? 1 : 0;
     $allowCatalogOnly = !empty($_POST['allow_catalog_only']) ? 1 : 0;
     $pluginVerifyFiles = !empty($_POST['plugin_verify_files']) ? 1 : 0;
@@ -112,7 +112,7 @@ function handle_admin_smtp_get(): \Bulletin\Response|bool
     return true;
 }
 
-function handle_admin_smtp_post(): ?string
+function handle_admin_smtp_post(): \Bulletin\Response|string|null
 {
     global $config;
 

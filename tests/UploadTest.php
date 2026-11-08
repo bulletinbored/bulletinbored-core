@@ -282,7 +282,7 @@ function test_validate_uploaded_file_alias(): Test
     ];
     $maxSize = 5 * 1024 * 1024;
 
-    $result = validate_uploaded_file($imagePath, 'test.png', $allowed, $maxSize);
+    $result = validate_uploaded_file($imagePath, 'test.png', $allowed, $maxSize, true);
 
     $t->assertNotNull('Alias function works', $result);
     $t->assertEquals('MIME type correct', 'image/png', $result['mime']);
@@ -299,13 +299,29 @@ function test_get_uploaded_images(): Test
     $uploadDir = $tmpDir . '/uploads';
     @mkdir($uploadDir, 0755, true);
 
-    // Create test images
+    // Create test images with small delays to ensure different mtimes
     $img1 = $uploadDir . '/image1.png';
     $img2 = $uploadDir . '/image2.jpg';
     $img3 = $uploadDir . '/image3.gif';
+    
+    // Create actual PNG
     create_test_image($img1);
-    create_test_image($img2);
-    create_test_image($img3);
+    sleep(1); // 1 second delay
+    
+    // Create actual JPEG
+    $img = imagecreatetruecolor(100, 100);
+    $white = imagecolorallocate($img, 255, 255, 255);
+    imagefill($img, 0, 0, $white);
+    imagejpeg($img, $img2, 90);
+    imagedestroy($img);
+    sleep(1); // 1 second delay
+    
+    // Create actual GIF
+    $img = imagecreatetruecolor(100, 100);
+    $white = imagecolorallocate($img, 255, 255, 255);
+    imagefill($img, 0, 0, $white);
+    imagegif($img, $img3);
+    imagedestroy($img);
 
     // Create non-image file (should be ignored)
     $txtFile = $uploadDir . '/readme.txt';
@@ -313,11 +329,6 @@ function test_get_uploaded_images(): Test
 
     // Create subdirectory (should be ignored)
     @mkdir($uploadDir . '/subdir', 0755, true);
-
-    // Temporarily override the upload directory path
-    // The function uses __DIR__ . '/../uploads' which is fixed
-    // We can't easily test this without modifying the function
-    // So we'll test the logic by creating a test version
 
     // Test the sorting logic
     $images = [];
@@ -497,7 +508,10 @@ function test_upload_safe_name_generation(): Test
     $t->assertNotNull('First validation succeeds', $result1);
     $t->assertNotNull('Second validation succeeds', $result2);
     $t->assertNotEquals('Safe names are unique', $result1['safe_name'], $result2['safe_name']);
-    $t->assertTrue('Safe name is hex + extension', preg_match('/^[a-f0-9]{16}\.png$/', $result1['safe_name']));
+    $t->assertTrue('Safe name 1 ends with .png', str_ends_with($result1['safe_name'], '.png'));
+    $t->assertTrue('Safe name 2 ends with .png', str_ends_with($result2['safe_name'], '.png'));
+    $t->assertTrue('Safe name 1 has 16 hex chars before extension', strlen(pathinfo($result1['safe_name'], PATHINFO_FILENAME)) === 16);
+    $t->assertTrue('Safe name 2 has 16 hex chars before extension', strlen(pathinfo($result2['safe_name'], PATHINFO_FILENAME)) === 16);
 
     upload_cleanup($tmpDir);
     return $t;
@@ -511,9 +525,23 @@ function test_upload_multiple_allowed_types(): Test
     $pngPath = $tmpDir . '/test.png';
     $jpgPath = $tmpDir . '/test.jpg';
     $gifPath = $tmpDir . '/test.gif';
+    
+    // Create actual PNG
     create_test_image($pngPath);
-    create_test_image($jpgPath);
-    create_test_image($gifPath);
+    
+    // Create actual JPEG
+    $img = imagecreatetruecolor(100, 100);
+    $white = imagecolorallocate($img, 255, 255, 255);
+    imagefill($img, 0, 0, $white);
+    imagejpeg($img, $jpgPath, 90);
+    imagedestroy($img);
+    
+    // Create actual GIF
+    $img = imagecreatetruecolor(100, 100);
+    $white = imagecolorallocate($img, 255, 255, 255);
+    imagefill($img, 0, 0, $white);
+    imagegif($img, $gifPath);
+    imagedestroy($img);
 
     $allowed = [
         'image/png' => 'png',

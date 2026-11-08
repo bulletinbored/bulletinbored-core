@@ -21,8 +21,28 @@ function handle_admin_plugins(string $method): \Bulletin\Response|bool
             $adminPluginSuccess = t('settings_saved');
         } elseif (isset($_POST['install_plugin']) && !empty($_FILES['plugin_zip']['tmp_name'])) {
             $tmpPath = $_FILES['plugin_zip']['tmp_name'];
-            $result = $pluginManager->installFromZip($tmpPath);
-            log_security_event('plugin_install', ['plugin' => $_POST['plugin_name'] ?? 'unknown', 'success' => (int)$result['success'], 'message' => $result['message']]);
+            // Detect if this is an update (plugin already exists)
+            $zip = new ZipArchive();
+            $pluginName = null;
+            if ($zip->open($tmpPath) === true) {
+                $manifestRaw = $zip->getFromName('manifest.json');
+                if ($manifestRaw !== false) {
+                    $manifest = json_decode($manifestRaw, true);
+                    $pluginName = strtolower($manifest['name'] ?? '');
+                }
+                $zip->close();
+            }
+            
+            $isUpdate = $pluginName && $pluginManager->isEnabled($pluginName);
+            
+            if ($isUpdate) {
+                $result = $pluginManager->updateFromZip($pluginName, $tmpPath);
+                log_security_event('plugin_update', ['plugin' => $pluginName, 'success' => (int)$result['success'], 'message' => $result['message']]);
+            } else {
+                $result = $pluginManager->installFromZip($tmpPath);
+                log_security_event('plugin_install', ['plugin' => $_POST['plugin_name'] ?? 'unknown', 'success' => (int)$result['success'], 'message' => $result['message']]);
+            }
+            
             if ($result['success']) {
                 $adminPluginSuccess = $result['message'];
             } else {
@@ -47,34 +67,34 @@ function handle_admin_plugins(string $method): \Bulletin\Response|bool
                         $adminPluginError = $result['message'];
                     }
                 }
-            } elseif (isset($_POST['delete_plugin'])) {
-                $pluginName = $_POST['plugin_name'] ?? '';
-                $result = $pluginManager->uninstall($pluginName);
-                if ($result['success']) {
-                    $adminPluginSuccess = $result['message'];
-                    log_admin_action('plugin_delete', ['plugin' => $pluginName]);
+            }
+        } elseif (isset($_POST['delete_plugin'])) {
+            $pluginName = $_POST['plugin_name'] ?? '';
+            $result = $pluginManager->uninstall($pluginName);
+            if ($result['success']) {
+                $adminPluginSuccess = $result['message'];
+                log_admin_action('plugin_delete', ['plugin' => $pluginName]);
+            } else {
+                $adminPluginError = $result['message'];
+            }
+        } elseif (isset($_POST['action'])) {
+            $pluginName = $_POST['plugin_name'] ?? '';
+            if ($_POST['action'] === 'enable') {
+                if ($pluginManager->enable($pluginName)) {
+                    $adminPluginSuccess = 'Plugin enabled';
+                    log_admin_action('plugin_enable', ['plugin' => $pluginName]);
                 } else {
-                    $adminPluginError = $result['message'];
+                    $adminPluginError = 'Plugin not found or dependencies not met';
                 }
-            } elseif (isset($_POST['action'])) {
-                $pluginName = $_POST['plugin_name'] ?? '';
-                if ($_POST['action'] === 'enable') {
-                    if ($pluginManager->enable($pluginName)) {
-                        $adminPluginSuccess = 'Plugin enabled';
-                        log_admin_action('plugin_enable', ['plugin' => $pluginName]);
-                    } else {
-                        $adminPluginError = 'Plugin not found or dependencies not met';
-                    }
-                } elseif ($_POST['action'] === 'disable') {
-                    if ($pluginManager->disable($pluginName)) {
-                        $adminPluginSuccess = 'Plugin disabled';
-                        log_admin_action('plugin_disable', ['plugin' => $pluginName]);
-                    } else {
-                        $adminPluginError = 'Plugin not found';
-                    }
+            } elseif ($_POST['action'] === 'disable') {
+                if ($pluginManager->disable($pluginName)) {
+                    $adminPluginSuccess = 'Plugin disabled';
+                    log_admin_action('plugin_disable', ['plugin' => $pluginName]);
+                } else {
+                    $adminPluginError = 'Plugin not found';
                 }
             }
-        }
+    }
     }
 
     $allPlugins = $pluginManager->getAll();

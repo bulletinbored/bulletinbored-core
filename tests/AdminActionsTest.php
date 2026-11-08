@@ -1114,6 +1114,9 @@ function test_admin_categories_crud(): Test
 
     $uniqueName = 'New Category ' . uniqid();
 
+    // Ensure no leftover id from previous tests
+    unset($_POST['id'], $_GET['id']);
+
     $_SERVER['REQUEST_METHOD'] = 'POST';
     $_POST['do'] = 'create';
     $_POST['name'] = $uniqueName;
@@ -1152,11 +1155,11 @@ function test_admin_categories_crud(): Test
     $t->assertEquals('Category updated', $_POST['name'], $cat['name']);
 
     // Test delete category
+    $_GET['id'] = (string)$catId;
     $_POST['do'] = 'delete';
-    $_POST['id'] = (string)$catId;
     $_POST['csrf_token'] = generate_csrf_token();
 
-    $result = handle_admin_categories('POST');
+    $result = handle_delete_category_post();
     $t->assertTrue('Delete returns redirect', $result instanceof \Bulletin\Response);
 
     $stmt = $pdo->prepare("SELECT COUNT(*) FROM categories WHERE id = ?");
@@ -1287,7 +1290,9 @@ function test_admin_plugins_install_update_uninstall(): Test
     $t->assertEquals('Version updated to 2.0.0', '2.0.0', $installed['plugins']['testplug']['version'] ?? '');
 
     // Test uninstall
-    $_POST['uninstall_plugin'] = '1';
+    $_POST = [];
+    $_FILES = [];
+    $_POST['delete_plugin'] = '1';
     $_POST['plugin_name'] = 'testplug';
     $_POST['csrf_token'] = generate_csrf_token();
 
@@ -1344,6 +1349,8 @@ function test_admin_themes_install_activate_delete(): Test
     $t->assertTrue('Install returns true (view rendered)', $result === true);
 
     // Test activate
+    $_POST = [];
+    $_FILES = [];
     $_POST['activate_theme'] = '1';
     $_POST['theme'] = 'testtheme';
     $_POST['csrf_token'] = generate_csrf_token();
@@ -1355,6 +1362,7 @@ function test_admin_themes_install_activate_delete(): Test
     $t->assertEquals('Active theme set', 'testtheme', $themesManifest['active'] ?? '');
 
     // Test delete
+    $_POST = [];
     $_POST['delete_theme'] = '1';
     $_POST['theme'] = 'testtheme';
     $_POST['csrf_token'] = generate_csrf_token();

@@ -53,8 +53,11 @@ class Response
 
     public function send(): void
     {
+        // Always set response code, even if headers already sent (for test compatibility)
+        // Suppress warning if headers already sent
+        @http_response_code($this->status);
+        
         if (!headers_sent()) {
-            http_response_code($this->status);
             if ($this->isJson) {
                 header('Content-Type: application/json; charset=utf-8');
             }

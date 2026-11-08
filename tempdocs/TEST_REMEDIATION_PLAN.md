@@ -1,224 +1,260 @@
 # Test Remediation Plan
 
-**Based on:** Test run results from P2-4 Expand Test Coverage implementation
-**Date:** 2026-11-07
+**Based on:** Test run results from 2026-11-08
+**Date:** 2026-11-08
 **Status:** Draft for review
 
 ---
 
 ## Overview
 
-This plan addresses the test failures identified after implementing P2-4 (Expand Test Coverage). The failures fall into 5 main categories:
+This plan addresses the test failures identified in the current test suite run (1573 passed, 38 failed, 1 error). The failures fall into several categories:
 
-1. **View Inclusion Conflicts** - Views included multiple times causing "Cannot redeclare function" errors
-2. **Missing Helper Functions** - Test environment lacks required helper functions
-3. **AuthZ Constructor Issues** - Wrong parameter order in RouterTest
-4. **Upload Validation** - `is_uploaded_file()` check fails for regular files
-5. **Test Isolation** - Global state and shared resources cause interference
+1. **Router Tests** - Multiple middleware and routing failures (13 failures)
+2. **Admin Actions Tests** - Categories CRUD, Settings, Plugins, Themes (8 failures)
+3. **Upload Tests** - File sorting, safe name generation, MIME type detection (4 failures)
+4. **ThemeManager Tests** - Active theme fallback, install/update messages, rollback, ghost theme removal (10 failures)
+5. **Content Hardening** - Request parsing edge case (1 failure)
+6. **BB-001 can_view_thread** - Guest access to hidden/pending threads (2 failures)
 
 ---
 
 ## Failure Categories Analysis
 
-### 1. View Inclusion Conflicts
+### 1. Router Tests (13 failures)
 
-**Error:** `Fatal error: Cannot redeclare function render_admin_header() (previously declared in /home/user1/Projects/bulletinbored-core/views/admin_header.php:3)`
-
-**Root Cause:** Admin action handlers include view files directly (e.g., `include __DIR__ . '/../../../views/admin_settings.php'`). When multiple tests run, the same view file is included multiple times, causing function redeclaration errors.
+**Root Cause:** The Router test setup in `tests/RouterTest.php` has issues with:
+- AuthZ constructor receiving wrong parameters (PluginManager instead of PDO)
+- Middleware not properly redirecting/returning correct status codes
+- Request parsing not handling POST data correctly
+- JSON content-type detection issues
 
 **Affected Tests:**
-- AdminActionsTest.php - all admin handler tests that include views
-- The error occurs at the end of test runs when views are included multiple times
+- `Test: Router - POST Method` - POST data in params (expected 'test', got '')
+- `Test: Router - Method Mismatch Returns 404` - Returns 404 for wrong method
+- `Test: Router - 404 Not Found` - Returns 404
+- `Test: Router - Guest Middleware` - Redirects logged-in user
+- `Test: Router - Auth Middleware` - Redirects to login
+- `Test: Router - Admin Middleware` - Redirects to login
+- `Test: Router - CSRF Middleware` - Returns 404 for GET
+- `Test: Router - Middleware Chain` - Multiple failures (3)
+- `Test: Router - API Group` - Content-Type is JSON
+- `Test: Router - Wants JSON False for HTML` - Does not want JSON for HTML accept
+- `Test: Router - Exception Handling` - Returns 404
+- `Test: Router - Response Object` - Status 201
+- `Test: Router - Middleware Can Block Request` - Status 403
 
 **Files Involved:**
-- `views/admin_header.php` - contains `render_admin_header()` function
-- `views/admin_settings.php` - includes admin_header.php
-- `src/actions/admin/settings.php` - includes admin_settings.php
-- Similar patterns in other admin handlers
+- `tests/RouterTest.php` - Test setup and test cases
+- `src/Router.php` - Router implementation
+- `src/AuthZ.php` - Authorization class
 
-### 2. Missing Helper Functions
+---
 
-**Errors:**
-- `Call to undefined function csrf_validate_request()`
-- `Call to undefined function base_url()`
-- `Call to undefined function load_lang_file()`
-- `Call to undefined function current_route_action()`
-- `Call to undefined function setup_test_app()` (in EmailTest - wrong function name)
+### 2. Admin Actions Tests (8 failures)
 
-**Root Cause:** Test bootstrap doesn't load all required helper files. The main bootstrap.php loads minimal files for testing, but admin handlers and other code depend on helpers from `src/bootstrap.php` or `src/helpers.php`.
+**Root Cause:** Multiple issues in admin action handlers and test setup:
 
-**Affected Tests:**
-- AdminActionsTest.php - csrf_validate_request, base_url
-- ThemeManagerTest.php - base_url, load_lang_file
-- RouterTest.php - current_route_action (used in views)
-- EmailTest.php - setup_test_app (should be emailtest_setup_app)
+**a) Admin Categories CRUD** - UNIQUE constraint violation on categories.name
+- Test tries to create duplicate category names
+- `src/actions/admin/categories.php:28` - INSERT fails
 
-**Required Files:**
-- `src/helpers.php` - contains base_url(), csrf_validate_request(), current_route_action()
-- `src/Helpers/Text.php` - contains load_lang_file()
-- `src/bootstrap.php` - full application bootstrap
+**b) Admin Settings** - Multiple warnings:
+- Undefined array key "site_icon" in `src/actions/admin/settings.php:16`
+- Deprecated trim() with null parameter
+- Headers already sent (output started in test runner)
 
-### 3. AuthZ Constructor Issues
+**c) Admin Plugins - Install/Update/Uninstall** - Version not updated, plugin not removed from installed.json
+- Update process not properly updating version in installed.json
+- Uninstall not cleaning up installed.json
 
-**Error:** `AuthZ::__construct(): Argument #1 ($pdo) must be of type PDO, PluginManager given`
+**d) Admin Themes - Install/Activate/Delete** - Active theme not switching, theme directory not removed
+- Theme activation not persisting
+- Delete not removing theme directory
 
-**Root Cause:** RouterTest's `setup_test_app()` creates AuthZ with wrong parameter order:
-```php
-$app->authz = new AuthZ($pluginManager);  // Wrong - missing PDO
-```
+**Files Involved:**
+- `src/actions/admin/categories.php`
+- `src/actions/admin/settings.php`
+- `src/actions/admin/plugins.php`
+- `src/actions/admin/themes.php`
+- `lib/PluginManager.php`
+- `lib/ThemeManager.php`
 
-Should be:
-```php
-$app->authz = new AuthZ($pdo, $pluginManager);
-```
+---
 
-**Affected Tests:**
-- All RouterTest.php tests (32 errors)
+### 3. Upload Tests (4 failures)
 
-### 4. Upload Validation
+**Root Cause:** Issues with file handling and MIME type detection:
 
-**Errors:** `validate_upload()` returns NULL for valid images
+**a) Get Uploaded Images** - Sorting by mtime desc fails (expected 'image3.gif', got 'image1.png')
+- File creation order in test doesn't match expected mtime order
 
-**Root Cause:** `validate_upload()` uses `is_uploaded_file($tmpPath)` which returns FALSE for regular files created in tests. The function is designed to only accept files uploaded via HTTP POST.
+**b) Safe Name Generation** - Safe name format validation fails
+- Generated names don't match expected hex + extension pattern
 
-**Affected Tests:**
-- UploadTest.php - tests for valid images, JPEG, multiple types, safe name generation, alias function
+**c) Multiple Allowed Types** - JPEG returns 'png' extension, GIF returns 'png' extension
+- MIME type to extension mapping incorrect for JPEG/GIF
 
-**Code in src/Helpers/Upload.php:**
-```php
-function validate_upload(string $tmpPath, string $origName, array $allowed, int $maxSize): ?array
-{
-    if ($tmpPath === '' || !is_uploaded_file($tmpPath)) {  // <-- This fails
-        return null;
-    }
-    ...
-}
-```
+**Files Involved:**
+- `src/Helpers/Upload.php`
+- `tests/UploadTest.php`
 
-### 5. Test Isolation Issues
+---
 
-**Problems:**
-- Global `$config` variable shared across tests
-- Session state persists between tests
-- Rate limiter files not cleaned up properly
-- Database state not reset between tests
-- View functions declared globally
+### 4. ThemeManager Tests (10 failures)
 
-**Affected Tests:**
-- AdminActionsTest.php - settings test fails because global $config not updated
-- Multiple tests may interfere with each other
+**Root Cause:** ThemeManager implementation issues:
+
+**a) Get Active Theme** - Fallback returns 'darkmode' instead of 'freshbored'
+- Fallback logic incorrect when persisted theme not found
+
+**b) Install From ZIP** - Success message says 'Package installed' instead of 'Theme installed'
+- Error message for duplicate install not matching expected
+
+**c) Update Rollback on Failure** - Multiple failures:
+- Update doesn't fail with invalid package
+- Original files not restored
+- Version not rolled back
+
+**d) Remove Missing Themes** - Ghost theme not detected/removed
+- Cleanup logic not finding orphaned theme directories
+
+**Files Involved:**
+- `lib/ThemeManager.php`
+- `tests/ThemeManagerTest.php`
+
+---
+
+### 5. Content Hardening - Request Parsing (1 failure)
+
+**Root Cause:** Request::string() returns wrong default value
+- Expected 'default', got 'Updated Category 6aefbbc196b58'
+- Test pollution from previous test modifying global state
+
+**Files Involved:**
+- `src/Request.php`
+- `tests/ContentHardeningTest.php`
+
+---
+
+### 6. BB-001 can_view_thread (2 failures)
+
+**Root Cause:** Guest users can view hidden/pending threads when they shouldn't
+- Authorization logic in `can_view_thread()` helper not properly checking permissions
+
+**Files Involved:**
+- `src/Helpers/AuthHelpers.php` - `can_view_thread()` function
+- `tests/AuthHelpersTest.php` (or similar)
 
 ---
 
 ## Remediation Plan
 
-### Phase 1: Fix View Inclusion Conflicts (High Priority)
+### Phase 1: Fix Router Tests (High Priority - 13 failures)
 
-**Approach:** Modify test bootstrap to prevent view function redeclaration.
+**Approach:** Fix the test setup in `RouterTest.php` and verify Router implementation.
 
-**Options:**
-1. **Use `include_once` in views** - Modify view files to use `include_once` for shared partials
-2. **Mock view inclusion** - In tests, override `include` behavior or mock the view rendering
-3. **Separate view functions** - Move functions from views to helper files
-4. **Test-level view isolation** - Track included views and prevent re-inclusion
-
-**Recommended:** Option 1 (minimal change) + Option 4 (test harness support)
-- Modify `views/admin_header.php` and similar to use `include_once`
-- Add view inclusion tracking to test harness
+**Tasks:**
+1. Fix `setup_test_app()` in `RouterTest.php` - AuthZ constructor needs PDO first, then PluginManager
+2. Verify middleware redirect logic returns correct status codes (302 for redirects, 403 for forbidden)
+3. Fix POST data parsing in Router
+4. Fix JSON content-type detection for API routes
+5. Fix exception handling to return proper 404/400 status codes
 
 **Files to Modify:**
-- `views/admin_header.php` - change `include` to `include_once` for partials
-- `views/admin_footer.php` - same
-- `tests/harness.php` - add view inclusion tracking
+- `tests/RouterTest.php` - Fix test setup
+- `src/Router.php` - Fix middleware and routing logic if needed
 
-### Phase 2: Fix Missing Helper Functions (High Priority)
+---
 
-**Approach:** Load required helper files in test bootstrap.
+### Phase 2: Fix Admin Actions Tests (High Priority - 8 failures)
 
-**Files to Load in tests/bootstrap.php:**
-```php
-require_once __DIR__ . '/../src/helpers.php';           // base_url, csrf_validate_request, current_route_action
-require_once __DIR__ . '/../src/Helpers/Text.php';      // load_lang_file
-require_once __DIR__ . '/../src/Helpers/AuthHelpers.php'; // is_logged_in, is_admin, etc.
-require_once __DIR__ . '/../src/Helpers/Url.php';       // url()
-require_once __DIR__ . '/../src/Helpers/Data.php';      // slugify()
-require_once __DIR__ . '/../src/Security.php';          // csrf_validate_request, rate_limit
-```
+**Approach:** Fix each admin action handler and test data setup.
 
-**Also Fix:** EmailTest.php - rename `setup_test_app` calls to `emailtest_setup_app`
+**Tasks:**
 
-### Phase 3: Fix AuthZ Constructor (High Priority)
+**2a) Admin Categories CRUD:**
+- Ensure test uses unique category names
+- Add cleanup between test cases
 
-**Approach:** Fix RouterTest.php `setup_test_app()` function.
+**2b) Admin Settings:**
+- Fix undefined "site_icon" key - add null coalescing or default
+- Fix deprecated trim(null) - add null check
+- Fix headers already sent - ensure no output before headers
 
-**Change in tests/RouterTest.php line ~110:**
-```php
-// Before (wrong)
-$app->authz = new AuthZ($pluginManager);
+**2c) Admin Plugins:**
+- Fix version update in installed.json during plugin update
+- Fix uninstall to remove from installed.json
 
-// After (correct)
-$app->authz = new AuthZ($pdo, $pluginManager);
-```
-
-### Phase 4: Fix Upload Validation (Medium Priority)
-
-**Approach Options:**
-
-1. **Modify validate_upload() for testing** - Add a test mode flag or parameter to skip `is_uploaded_file()` check
-2. **Use actual file uploads in tests** - Use `$_FILES` with `move_uploaded_file()` simulation
-3. **Create test-specific wrapper** - Add `validate_upload_for_test()` function
-
-**Recommended:** Option 1 - Add optional parameter to skip upload check
-```php
-function validate_upload(string $tmpPath, string $origName, array $allowed, int $maxSize, bool $skipUploadCheck = false): ?array
-{
-    if (!$skipUploadCheck && ($tmpPath === '' || !is_uploaded_file($tmpPath))) {
-        return null;
-    }
-    ...
-}
-```
+**2d) Admin Themes:**
+- Fix theme activation persistence
+- Fix theme directory removal on delete
 
 **Files to Modify:**
-- `src/Helpers/Upload.php` - add `$skipUploadCheck` parameter
-- `tests/UploadTest.php` - pass `true` for test calls
+- `src/actions/admin/categories.php`
+- `src/actions/admin/settings.php`
+- `src/actions/admin/plugins.php`
+- `src/actions/admin/themes.php`
+- `lib/PluginManager.php`
+- `lib/ThemeManager.php`
 
-### Phase 5: Improve Test Isolation (Medium Priority)
+---
 
-**Approach:** Enhance test bootstrap and harness for better isolation.
+### Phase 3: Fix Upload Tests (Medium Priority - 4 failures)
 
-**Changes:**
+**Approach:** Fix file handling and MIME type detection in Upload helper.
 
-1. **Reset global state in bootstrap:**
-```php
-// In tests/bootstrap.php
-$GLOBALS['config'] = $config;  // Ensure fresh config
-$_SESSION = [];  // Clear session
-```
+**Tasks:**
+1. Fix test to create files in correct order for mtime sorting
+2. Fix safe name generation to match expected hex + extension pattern
+3. Fix MIME type to extension mapping for JPEG (jpg) and GIF (gif)
 
-2. **Add test-level cleanup in harness:**
-```php
-// In Test::run() or TestSuite::run()
-register_shutdown_function(function() {
-    // Clean up rate limiter files
-    // Reset global config
-    // Clear session
-});
-```
+**Files to Modify:**
+- `src/Helpers/Upload.php` - Fix `get_extension_from_mime()` function
+- `tests/UploadTest.php` - Fix test file creation order
 
-3. **Use unique database per test** - Already done via temp directories
+---
 
-4. **Fix global $config in AdminActionsTest** - Ensure tests update `$GLOBALS['config']` not just local variable
+### Phase 4: Fix ThemeManager Tests (Medium Priority - 10 failures)
+
+**Approach:** Fix ThemeManager implementation.
+
+**Tasks:**
+1. Fix fallback logic in `getActiveTheme()` to return 'freshbored' as default
+2. Fix success message in `installFromZip()` to say 'Theme installed'
+3. Fix duplicate install error message
+4. Fix update rollback on failure - ensure original files restored, version rolled back
+5. Fix ghost theme detection in `removeMissingThemes()`
+
+**Files to Modify:**
+- `lib/ThemeManager.php`
+- `tests/ThemeManagerTest.php` - Update expected messages
+
+---
+
+### Phase 5: Fix Content Hardening & BB-001 (Low Priority - 3 failures)
+
+**Approach:** Fix test isolation and authorization logic.
+
+**Tasks:**
+1. Fix Request::string() default value - ensure test isolation
+2. Fix `can_view_thread()` to properly deny guest access to hidden/pending threads
+
+**Files to Modify:**
+- `src/Request.php` - If bug in default handling
+- `src/Helpers/AuthHelpers.php` - Fix `can_view_thread()`
+- `tests/ContentHardeningTest.php` - Ensure test isolation
+- `tests/AuthHelpersTest.php` - Fix test expectations
 
 ---
 
 ## Implementation Order
 
-1. **Phase 3** (AuthZ constructor) - Quick fix, unblocks 32 RouterTest tests
-2. **Phase 2** (Missing helpers) - Unblocks AdminActions, ThemeManager, EmailTest
-3. **Phase 1** (View conflicts) - Fixes fatal error stopping test runs
-4. **Phase 4** (Upload validation) - Fixes 22 failing UploadTest tests
-5. **Phase 5** (Test isolation) - Prevents flaky tests
+1. **Phase 1** (Router) - Unblocks 13 tests, foundation for other tests
+2. **Phase 2** (Admin Actions) - Unblocks 8 tests, core admin functionality
+3. **Phase 3** (Upload) - Unblocks 4 tests, file handling
+4. **Phase 4** (ThemeManager) - Unblocks 10 tests, theme system
+5. **Phase 5** (Content Hardening & BB-001) - Unblocks 3 tests, security helpers
 
 ---
 
@@ -227,25 +263,27 @@ register_shutdown_function(function() {
 After each phase, run relevant test suites:
 
 ```bash
-# Phase 3 verification
+# Phase 1 verification
 php tests/run.php --filter "Router"
 
 # Phase 2 verification
 php tests/run.php --filter "Admin"
-php tests/run.php --filter "ThemeManager"
-php tests/run.php --filter "Email"
 
-# Phase 1 verification
-php tests/run.php --filter "Admin"  # Should not crash with redeclare error
+# Phase 3 verification
+php tests/run.php --filter "Upload"
 
 # Phase 4 verification
-php tests/run.php --filter "Upload"
+php tests/run.php --filter "ThemeManager"
+
+# Phase 5 verification
+php tests/run.php --filter "ContentHardening"
+php tests/run.php --filter "BB-001"
 
 # Full suite
 php tests/run.php
 ```
 
-**Target:** All 495 tests pass (or at least no fatal errors, minimal failures)
+**Target:** All 495 tests pass (0 failed, 0 errors)
 
 ---
 
@@ -253,20 +291,20 @@ php tests/run.php
 
 | Phase | Risk | Mitigation |
 |-------|------|------------|
-| 1 (Views) | Low | Minimal changes to view files, backward compatible |
-| 2 (Helpers) | Low | Loading more files in bootstrap, no code changes |
-| 3 (AuthZ) | Low | Single line fix in test file |
-| 4 (Upload) | Medium | Changes production code signature, but backward compatible with default param |
-| 5 (Isolation) | Medium | Bootstrap changes could affect existing tests |
+| 1 (Router) | Medium | Core routing changes could affect application; test thoroughly |
+| 2 (Admin) | Low | Admin-only changes, well-isolated |
+| 3 (Upload) | Low | Helper function changes, backward compatible |
+| 4 (ThemeManager) | Medium | Theme system changes; verify install/update/delete flows |
+| 5 (AuthHelpers) | Low | Security helper fix; verify authorization still works |
 
 ---
 
 ## Dependencies
 
-- Phase 1 should complete before full test runs (fatal error blocks everything)
+- Phase 1 should complete first (Router is used by many tests)
 - Phase 2 and 3 can be done in parallel
-- Phase 4 independent
-- Phase 5 benefits from 1-4 being complete
+- Phase 4 depends on PluginManager (shared code)
+- Phase 5 independent
 
 ---
 
@@ -274,18 +312,18 @@ php tests/run.php
 
 | Phase | Effort | Duration |
 |-------|--------|----------|
-| 1 | 2-3 hours | Day 1 |
-| 2 | 1-2 hours | Day 1 |
-| 3 | 0.5 hours | Day 1 |
-| 4 | 1-2 hours | Day 2 |
-| 5 | 2-3 hours | Day 2 |
-| **Total** | **7-10 hours** | **2 days** |
+| 1 | 3-4 hours | Day 1 |
+| 2 | 3-4 hours | Day 1-2 |
+| 3 | 1-2 hours | Day 2 |
+| 4 | 2-3 hours | Day 2-3 |
+| 5 | 1-2 hours | Day 3 |
+| **Total** | **10-15 hours** | **3 days** |
 
 ---
 
 ## Notes
 
-- The "Cannot redeclare function" fatal error is the most critical as it stops test execution entirely
-- Some test failures (like admin_create_user validation) may be pre-existing issues not related to new tests
-- Consider adding a test configuration flag to `validate_upload()` for production safety
+- The "headers already sent" warning in Admin Settings is caused by test runner output starting before the action handler sends headers
+- Some test failures may be due to test pollution (shared global state between tests)
+- Consider adding test isolation improvements in a follow-up phase
 - Document any production code changes in CHANGELOG if project maintains one

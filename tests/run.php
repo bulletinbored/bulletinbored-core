@@ -11,6 +11,9 @@
  *   php tests/run.php --coverage   # report source coverage after the run
  */
 
+// Start output buffering to prevent headers from being sent before tests run
+ob_start();
+
 require_once __DIR__ . '/harness.php';
 require_once __DIR__ . '/bootstrap.php';
 
@@ -39,11 +42,21 @@ foreach ($argv as $arg) {
 // (executed lines only), then fall back to a dependency-free "loaded files"
 // report after the run.
 $xdebugCoverage = $coverage && extension_loaded('xdebug') && function_exists('xdebug_start_code_coverage');
-$pcovCoverage = $coverage && !$xdebugCoverage && extension_loaded('pcov') && function_exists('\pcov\start');
+$pcovCoverage = $coverage && !$xdebugCoverage && extension_loaded('pcov') && function_exists('pcov\start');
 if ($xdebugCoverage) {
-    xdebug_start_code_coverage(XDEBUG_CC_UNUSED | XDEBUG_CC_DEAD_CODE);
+    if (defined('XDEBUG_CC_UNUSED') && defined('XDEBUG_CC_DEAD_CODE')) {
+        if (function_exists('xdebug_start_code_coverage')) {
+            xdebug_start_code_coverage(XDEBUG_CC_UNUSED | XDEBUG_CC_DEAD_CODE);
+        }
+    } else {
+        if (function_exists('xdebug_start_code_coverage')) {
+            xdebug_start_code_coverage();
+        }
+    }
 } elseif ($pcovCoverage) {
-    \pcov\start();
+    if (function_exists('pcov\start')) {
+        pcov\start();
+    }
 }
 
 $testFiles = array_merge(
@@ -177,12 +190,16 @@ function print_source_coverage(bool $xdebugCoverage, bool $pcovCoverage = false)
         }
         echo str_repeat('-', 60) . "\n";
         printf("  Line coverage: %.1f%% (%d/%d executable lines)\n", $totalExecutable ? 100 * $totalCovered / $totalExecutable : 0.0, $totalCovered, $totalExecutable);
-    } elseif ($pcovCoverage && function_exists('\pcov\collect')) {
+    } elseif ($pcovCoverage && function_exists('pcov\collect')) {
         // Coverage collection is informational: never let it fail the run.
         $data = [];
         try {
-            \pcov\stop();
-            $data = \pcov\collect(\pcov\all);
+            if (function_exists('pcov\stop')) {
+                pcov\stop();
+            }
+            if (function_exists('pcov\collect')) {
+                $data = pcov\collect();
+            }
         } catch (\Throwable $e) {
             $data = [];
         }

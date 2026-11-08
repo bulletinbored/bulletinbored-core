@@ -57,3 +57,32 @@ function excerpt(string $text, int $length = 110): string {
     if (mb_strlen($text) <= $length) return $text;
     return mb_substr($text, 0, $length) . '...';
 }
+
+/**
+ * Load a translation file as a plain array. Translation files are JSON only
+ * (no PHP include) so a malicious upload cannot achieve RCE: an uploaded lang
+ * file is parsed as data, never executed.
+ *
+ * @return array<string,string>
+ */
+function load_lang_file(string $path): array
+{
+    if (!file_exists($path)) {
+        return [];
+    }
+    $raw = file_get_contents($path);
+    if ($raw === false) {
+        return [];
+    }
+    $data = json_decode($raw, true);
+    if (!is_array($data)) {
+        return [];
+    }
+    $out = [];
+    foreach ($data as $k => $v) {
+        if (is_string($k) && is_string($v)) {
+            $out[$k] = $v;
+        }
+    }
+    return $out;
+}

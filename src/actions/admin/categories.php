@@ -24,8 +24,19 @@ function handle_admin_categories(string $method): \Bulletin\Response|bool
         } else {
             $name = validate_input($_POST['name'] ?? '');
             $description = validate_input($_POST['description'] ?? '');
+            $position = (int)($_POST['position'] ?? 0);
             if ($name !== '') {
-                $pdo->prepare("INSERT INTO categories (name, description, allowed_roles) VALUES (?, ?, ?)")->execute([$name, $description, $allowedRoles]);
+                // Check if category name already exists
+                $checkStmt = $pdo->prepare("SELECT COUNT(*) FROM categories WHERE name = ?");
+                $checkStmt->execute([$name]);
+                if ($checkStmt->fetchColumn() > 0) {
+                    throw new \Bulletin\ValidationException(['name' => 'Category name already exists']);
+                }
+                $stmt = $pdo->prepare("INSERT INTO categories (name, description, allowed_roles, position) VALUES (?, ?, ?, ?)");
+                $result = $stmt->execute([$name, $description, $allowedRoles, $position]);
+                if (!$result) {
+                    throw new \Bulletin\ValidationException(['name' => 'Category name already exists']);
+                }
                 log_admin_action('category_create', ['name' => $name]);
             }
         }

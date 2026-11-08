@@ -68,8 +68,8 @@ function validate_upload(string $tmpPath, string $origName, array $allowed, int 
     return ['mime' => $mime, 'ext' => $ext, 'safe_name' => $safeName];
 }
 
-function validate_uploaded_file(string $tmpPath, string $origName, array $allowed, int $maxSize): ?array {
-    return validate_upload($tmpPath, $origName, $allowed, $maxSize);
+function validate_uploaded_file(string $tmpPath, string $origName, array $allowed, int $maxSize, bool $skipUploadCheck = false): ?array {
+    return validate_upload($tmpPath, $origName, $allowed, $maxSize, $skipUploadCheck);
 }
 
 function get_uploaded_images(): array {

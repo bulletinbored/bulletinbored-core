@@ -107,10 +107,15 @@ class ThemeManager
     {
         $this->discover();
         if (!isset($this->themes[$this->activeTheme])) {
-            $this->activeTheme = '';
-            foreach ($this->themes as $name => $theme) {
-                $this->activeTheme = $name;
-                break;
+            // Fallback to freshbored as default theme
+            if (isset($this->themes['freshbored'])) {
+                $this->activeTheme = 'freshbored';
+            } else {
+                $this->activeTheme = '';
+                foreach ($this->themes as $name => $theme) {
+                    $this->activeTheme = $name;
+                    break;
+                }
             }
             $this->saveManifest();
         }
@@ -125,15 +130,20 @@ class ThemeManager
 
     public function activate(string $name): bool
     {
+        error_log("THEME DEBUG: activate($name) called, activeTheme before discover: " . $this->activeTheme);
         $this->discover();
+        error_log("THEME DEBUG: activate($name) after discover, themes: " . json_encode(array_keys($this->themes)));
         if (!isset($this->themes[$name])) {
+            error_log("THEME DEBUG: activate($name) - theme not found in discovered themes");
             return false;
         }
         $this->activeTheme = $name;
+        error_log("THEME DEBUG: activate($name) set activeTheme to: " . $this->activeTheme);
         foreach ($this->themes as $k => $theme) {
             $this->themes[$k]['active'] = ($k === $name);
         }
         $this->saveManifest();
+        error_log("THEME DEBUG: activate($name) after saveManifest, activeTheme: " . $this->activeTheme);
         return true;
     }
 
@@ -196,6 +206,7 @@ class ThemeManager
         if ($result['success']) {
             $this->themes = [];
             $this->discover();
+            $result['message'] = 'Theme installed';
         }
 
         return $result;
@@ -403,6 +414,8 @@ class ThemeManager
     {
         $this->discover();
         $removed = [];
+        
+        // Check themes discovered from filesystem
         foreach ($this->themes as $name => $theme) {
             $hasStyle = is_dir($theme['dir']) && file_exists($theme['css_file']);
             if (!$hasStyle) {
@@ -416,6 +429,23 @@ class ThemeManager
                 }
             }
         }
+        
+        // Also check manifest for themes that are listed but not discovered (ghost themes)
+        if (!empty($this->manifest['themes'])) {
+            foreach ($this->manifest['themes'] as $name => $themeData) {
+                if (!isset($this->themes[$name])) {
+                    // Theme is in manifest but not discovered - it's a ghost theme
+                    if ($this->activeTheme === $name) {
+                        $this->activeTheme = 'freshbored';
+                    }
+                    $removed[] = $name;
+                    if (isset($themeData['dir']) && is_dir($themeData['dir'])) {
+                        $this->installer->deleteDir($themeData['dir']);
+                    }
+                }
+            }
+        }
+        
         $this->saveManifest();
         return $removed;
     }

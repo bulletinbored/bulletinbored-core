@@ -176,37 +176,14 @@ if (!in_array($lang, $config['available_langs'] ?? ['en'])) {
 }
 setcookie('lang', $lang, time() + 365 * 24 * 60 * 60, '/');
 
+// Ensure load_lang_file is available (loaded via helpers.php in normal flow,
+// but may not be loaded in test subprocesses)
+if (!function_exists('load_lang_file')) {
+    require_once __DIR__ . '/Helpers/Text.php';
+}
+
 // Translation registry: scope => [key => text].
 $app->i18n = [];
-
-/**
- * Load a translation file as a plain array. Translation files are JSON only
- * (no PHP include) so a malicious upload cannot achieve RCE: an uploaded lang
- * file is parsed as data, never executed.
- *
- * @return array<string,string>
- */
-function load_lang_file(string $path): array
-{
-    if (!file_exists($path)) {
-        return [];
-    }
-    $raw = file_get_contents($path);
-    if ($raw === false) {
-        return [];
-    }
-    $data = json_decode($raw, true);
-    if (!is_array($data)) {
-        return [];
-    }
-    $out = [];
-    foreach ($data as $k => $v) {
-        if (is_string($k) && is_string($v)) {
-            $out[$k] = $v;
-        }
-    }
-    return $out;
-}
 
 $coreLangFile = __DIR__ . '/../lang/' . $lang . '.json';
 $app->i18n['core'] = load_lang_file($coreLangFile);

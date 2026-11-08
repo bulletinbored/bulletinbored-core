@@ -525,7 +525,7 @@ function test_router_middleware_chain(): Test
 
     $handlerCalled = false;
 
-    $router->middleware('auth', 'csrf')->post('/admin/action', function($params) use (&$handlerCalled) {
+    $router->middleware('auth', 'admin', 'csrf')->post('/admin/action', function($params) use (&$handlerCalled) {
         $handlerCalled = true;
         return new \Bulletin\Response(200, 'Action Done');
     });
@@ -956,6 +956,7 @@ function test_router_wants_json_false_for_html(): Test
     $_SERVER['SERVER_NAME'] = 'localhost';
     $_SERVER['HTTP_HOST'] = 'localhost';
     $_SERVER['HTTP_ACCEPT'] = 'text/html,application/xhtml+xml';
+    $_SERVER['CONTENT_TYPE'] = '';
 
     ob_start();
     $router->dispatch();

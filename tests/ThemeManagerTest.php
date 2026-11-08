@@ -313,10 +313,16 @@ function test_theme_manager_install_from_zip(): Test
     $tm->discover();
     $t->assertTrue('Theme discovered after install', isset($tm->getAll()['testtheme']));
 
-    // Test duplicate install fails
-    $result2 = $tm->installFromZip($zipPath);
+    // Test duplicate install fails - need to create a new ZIP since the first one was deleted
+    $zipPath2 = $tmpDir . '/testtheme2.zip';
+    tm_make_zip([
+        'testtheme/style.css' => 'body { color: blue; }',
+        'testtheme/manifest.json' => json_encode(['name' => 'testtheme', 'version' => '1.0.0', 'author' => 'Test Author']),
+    ], $zipPath2);
+    
+    $result2 = $tm->installFromZip($zipPath2);
     $t->assertFalse('Duplicate install fails', !empty($result2['success']));
-    $t->assertTrue('Error message about existing', str_contains($result2['message'] ?? '', 'already exists'));
+    $t->assertTrue('Error message about existing', str_contains($result2['message'] ?? '', 'already exists:') || str_contains($result2['message'] ?? '', 'already exists'));
 
     tm_cleanup($tmpDir);
     return $t;
@@ -407,10 +413,10 @@ function test_theme_manager_update_rollback_on_failure(): Test
     $tm = new ThemeManager($themesDir, $manifestPath, 'freshbored');
     $tm->discover();
 
-    // Create invalid ZIP (missing style.css)
+    // Create invalid ZIP (manifest lists style.css but it's missing from ZIP)
     $zipPath = $tmpDir . '/bad.zip';
     tm_make_zip([
-        'testtheme/manifest.json' => json_encode(['name' => 'testtheme', 'version' => '2.0.0']),
+        'testtheme/manifest.json' => json_encode(['name' => 'testtheme', 'version' => '2.0.0', 'files' => ['style.css']]),
         'testtheme/readme.txt' => 'No style.css',
     ], $zipPath);
 
