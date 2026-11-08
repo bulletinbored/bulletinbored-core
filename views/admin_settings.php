@@ -182,6 +182,63 @@
                 </div>
             </div>
         </div>
+
+        <!-- Row 3: Advanced Settings -->
+        <div class="row mb-4">
+            <div class="col-lg-6">
+                <div class="card shadow-sm h-100">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0"><i class="fas fa-cogs me-2"></i><?= t('advanced_settings') ?></h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label"><?= t('posts_per_page') ?></label>
+                            <input type="number" name="posts_per_page" class="form-control" value="<?= (int)($config['posts_per_page'] ?? 15) ?>" min="5" max="100">
+                            <div class="form-text"><?= t('posts_per_page_hint') ?></div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label"><?= t('rate_limit_gc_probability') ?></label>
+                            <input type="number" name="rate_limit_gc_probability" class="form-control" value="<?= (int)($config['rate_limit_gc_probability'] ?? 200) ?>" min="50" max="1000">
+                            <div class="form-text"><?= t('rate_limit_gc_probability_hint') ?></div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label"><?= t('rate_limit_gc_max_age') ?></label>
+                            <input type="number" name="rate_limit_gc_max_age" class="form-control" value="<?= (int)($config['rate_limit_gc_max_age'] ?? 86400) ?>" min="3600">
+                            <div class="form-text"><?= t('rate_limit_gc_max_age_hint') ?></div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label"><?= t('update_min_disk_space_mb') ?></label>
+                            <input type="number" name="update_min_disk_space_mb" class="form-control" value="<?= (int)($config['update_min_disk_space_mb'] ?? 50) ?>" min="10">
+                            <div class="form-text"><?= t('update_min_disk_space_mb_hint') ?></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-6">
+                <div class="card shadow-sm h-100">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0"><i class="fas fa-images me-2"></i><?= t('upload_limits') ?></h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label"><?= t('image_max_size_mb') ?></label>
+                            <input type="number" name="image_max_size_mb" class="form-control" value="<?= (int)($config['image_max_size_mb'] ?? 5) ?>" min="1" max="100">
+                            <div class="form-text"><?= t('image_max_size_mb_hint') ?></div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label"><?= t('avatar_max_size_mb') ?></label>
+                            <input type="number" name="avatar_max_size_mb" class="form-control" value="<?= (int)($config['avatar_max_size_mb'] ?? 2) ?>" min="1" max="50">
+                            <div class="form-text"><?= t('avatar_max_size_mb_hint') ?></div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label"><?= t('site_image_max_size_mb') ?></label>
+                            <input type="number" name="site_image_max_size_mb" class="form-control" value="<?= (int)($config['site_image_max_size_mb'] ?? 2) ?>" min="1" max="50">
+                            <div class="form-text"><?= t('site_image_max_size_mb_hint') ?></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </form>
 </div>
 

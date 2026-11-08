@@ -1195,6 +1195,14 @@ function test_admin_settings_update(): Test
     $_POST['allow_catalog_only'] = '1';
     $_POST['plugin_verify_files'] = '1';
     $_POST['telemetry'] = '1';
+    // New P3-3 fields
+    $_POST['posts_per_page'] = '25';
+    $_POST['rate_limit_gc_probability'] = '100';
+    $_POST['rate_limit_gc_max_age'] = '3600';
+    $_POST['update_min_disk_space_mb'] = '100';
+    $_POST['image_max_size_mb'] = '10';
+    $_POST['avatar_max_size_mb'] = '5';
+    $_POST['site_image_max_size_mb'] = '3';
     $_POST['csrf_token'] = $_SESSION['csrf_token'];
 
     $result = handle_admin_settings_post();
@@ -1207,6 +1215,14 @@ function test_admin_settings_update(): Test
     $t->assertEquals('Catalog only enabled', 1, (int)$config['allow_catalog_only']);
     $t->assertEquals('Plugin verify files enabled', 1, (int)$config['plugin_verify_files']);
     $t->assertEquals('Telemetry enabled', 1, (int)$config['telemetry']);
+    // New P3-3 fields
+    $t->assertEquals('Posts per page updated', 25, (int)$config['posts_per_page']);
+    $t->assertEquals('Rate limit GC probability updated', 100, (int)$config['rate_limit_gc_probability']);
+    $t->assertEquals('Rate limit GC max age updated', 3600, (int)$config['rate_limit_gc_max_age']);
+    $t->assertEquals('Update min disk space updated', 100, (int)$config['update_min_disk_space_mb']);
+    $t->assertEquals('Image max size updated', 10, (int)$config['image_max_size_mb']);
+    $t->assertEquals('Avatar max size updated', 5, (int)$config['avatar_max_size_mb']);
+    $t->assertEquals('Site image max size updated', 3, (int)$config['site_image_max_size_mb']);
 
     admin_cleanup($tmpDir);
     return $t;

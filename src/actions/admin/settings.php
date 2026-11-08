@@ -24,6 +24,15 @@ function handle_admin_settings_post(): \Bulletin\Response|string|null
     $pluginVerifyFiles = !empty($_POST['plugin_verify_files']) ? 1 : 0;
     $telemetry = !empty($_POST['telemetry']) ? 1 : 0;
 
+    // Advanced settings
+    $postsPerPage = (int)($_POST['posts_per_page'] ?? $config['posts_per_page'] ?? 15);
+    $rateLimitGcProbability = (int)($_POST['rate_limit_gc_probability'] ?? $config['rate_limit_gc_probability'] ?? 200);
+    $rateLimitGcMaxAge = (int)($_POST['rate_limit_gc_max_age'] ?? $config['rate_limit_gc_max_age'] ?? 86400);
+    $updateMinDiskSpaceMb = (int)($_POST['update_min_disk_space_mb'] ?? $config['update_min_disk_space_mb'] ?? 50);
+    $imageMaxSizeMb = (int)($_POST['image_max_size_mb'] ?? $config['image_max_size_mb'] ?? 5);
+    $avatarMaxSizeMb = (int)($_POST['avatar_max_size_mb'] ?? $config['avatar_max_size_mb'] ?? 2);
+    $siteImageMaxSizeMb = (int)($_POST['site_image_max_size_mb'] ?? $config['site_image_max_size_mb'] ?? 2);
+
     $config['site_name'] = $siteName;
     $config['site_tagline'] = $siteTagline;
     $config['site_icon'] = $siteIcon;
@@ -36,6 +45,13 @@ function handle_admin_settings_post(): \Bulletin\Response|string|null
     $config['allow_catalog_only'] = $allowCatalogOnly;
     $config['plugin_verify_files'] = $pluginVerifyFiles;
     $config['telemetry'] = $telemetry;
+    $config['posts_per_page'] = max(5, min(100, $postsPerPage));
+    $config['rate_limit_gc_probability'] = max(50, min(1000, $rateLimitGcProbability));
+    $config['rate_limit_gc_max_age'] = max(3600, $rateLimitGcMaxAge);
+    $config['update_min_disk_space_mb'] = max(10, $updateMinDiskSpaceMb);
+    $config['image_max_size_mb'] = max(1, min(100, $imageMaxSizeMb));
+    $config['avatar_max_size_mb'] = max(1, min(50, $avatarMaxSizeMb));
+    $config['site_image_max_size_mb'] = max(1, min(50, $siteImageMaxSizeMb));
 
     if (isset($_POST['remove_logo'])) {
         $config['site_logo'] = '';

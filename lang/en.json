@@ -477,5 +477,21 @@
     "error_occurred": "An error occurred",
     "upload_new_image": "Upload New Image",
     "image_library": "Image Library",
-    "back_to_settings": "Back to Settings"
+    "back_to_settings": "Back to Settings",
+    "advanced_settings": "Advanced Settings",
+    "posts_per_page": "Posts per Page",
+    "posts_per_page_hint": "Number of posts displayed per page in thread view (5-100).",
+    "rate_limit_gc_probability": "Rate Limiter GC Probability",
+    "rate_limit_gc_probability_hint": "Garbage collection runs 1 in N requests (50-1000). Lower = more frequent cleanup.",
+    "rate_limit_gc_max_age": "Rate Limiter GC Max Age (seconds)",
+    "rate_limit_gc_max_age_hint": "Maximum age of rate limit buckets before cleanup (minimum 3600 seconds / 1 hour).",
+    "update_min_disk_space_mb": "Minimum Disk Space for Updates (MB)",
+    "update_min_disk_space_mb_hint": "Minimum free disk space required before applying updates (minimum 10 MB).",
+    "upload_limits": "Upload Size Limits",
+    "image_max_size_mb": "Image Upload Max Size (MB)",
+    "image_max_size_mb_hint": "Maximum size for image attachments in posts (1-100 MB).",
+    "avatar_max_size_mb": "Avatar Upload Max Size (MB)",
+    "avatar_max_size_mb_hint": "Maximum size for user avatar uploads (1-50 MB).",
+    "site_image_max_size_mb": "Site Image Upload Max Size (MB)",
+    "site_image_max_size_mb_hint": "Maximum size for site logo/favicon uploads (1-50 MB)."
 }
