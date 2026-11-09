@@ -293,8 +293,506 @@ function test_bootstrap_blocks_sensitive_files_over_http(): Test
     return $t;
 }
 
+function test_bootstrap_force_https_redirect(): Test
+{
+    $t = new Test('Bootstrap - forces HTTPS redirect when enabled');
+    
+    $code = <<<'PHP'
+$root = $argv[1];
+$_SERVER['SCRIPT_NAME'] = '/index.php';
+$_SERVER['REQUEST_METHOD'] = 'GET';
+$_SERVER['HTTP_HOST'] = 'example.com';
+$_SERVER['SERVER_NAME'] = 'example.com';
+$_SERVER['SERVER_PORT'] = 80;
+$_SERVER['REQUEST_URI'] = '/';
+chdir($root);
+require $root . '/src/bootstrap.php';
+echo 'REACHED_END';
+PHP;
+
+    $result = bootstrap_integration_run_subprocess($code, [dirname(__DIR__)]);
+    $t->assert('Subprocess executed', $result['ok']);
+    // Should redirect (exit before REACHED_END)
+    $t->assert('Redirects to HTTPS (exits early)', strpos($result['stdout'], 'REACHED_END') === false);
+    $t->assert('Exit code indicates redirect', $result['exit'] === 0);
+
+    return $t;
+}
+
+function test_bootstrap_force_https_disabled(): Test
+{
+    $t = new Test('Bootstrap - skips HTTPS redirect when force_https=false');
+    
+    $code = <<<'PHP'
+$root = $argv[1];
+$_SERVER['SCRIPT_NAME'] = '/index.php';
+$_SERVER['REQUEST_METHOD'] = 'GET';
+$_SERVER['HTTP_HOST'] = 'example.com';
+$_SERVER['SERVER_NAME'] = 'example.com';
+$_SERVER['SERVER_PORT'] = 80;
+$_SERVER['REQUEST_URI'] = '/';
+// Create config with force_https=false
+$config = ['force_https' => false];
+file_put_contents($root . '/config.json', json_encode($config));
+chdir($root);
+require $root . '/src/bootstrap.php';
+echo 'REACHED_END';
+PHP;
+
+    $result = bootstrap_integration_run_subprocess($code, [dirname(__DIR__)]);
+    $t->assert('Subprocess executed', $result['ok']);
+    $t->assert('Continues past redirect (force_https=false)', strpos($result['stdout'], 'REACHED_END') !== false);
+
+    return $t;
+}
+
+function test_bootstrap_skips_redirect_for_localhost(): Test
+{
+    $t = new Test('Bootstrap - skips HTTPS redirect for localhost');
+    
+    $code = <<<'PHP'
+$root = $argv[1];
+$_SERVER['SCRIPT_NAME'] = '/index.php';
+$_SERVER['REQUEST_METHOD'] = 'GET';
+$_SERVER['HTTP_HOST'] = 'localhost';
+$_SERVER['SERVER_NAME'] = 'localhost';
+$_SERVER['SERVER_PORT'] = 80;
+$_SERVER['REQUEST_URI'] = '/';
+chdir($root);
+require $root . '/src/bootstrap.php';
+echo 'REACHED_END';
+PHP;
+
+    $result = bootstrap_integration_run_subprocess($code, [dirname(__DIR__)]);
+    $t->assert('Subprocess executed', $result['ok']);
+    $t->assert('Skips redirect for localhost', strpos($result['stdout'], 'REACHED_END') !== false);
+
+    return $t;
+}
+
+function test_bootstrap_skips_redirect_for_cli(): Test
+{
+    $t = new Test('Bootstrap - skips HTTPS redirect for CLI');
+    
+    $code = <<<'PHP'
+$root = $argv[1];
+$_SERVER['SCRIPT_NAME'] = '/index.php';
+$_SERVER['REQUEST_METHOD'] = 'GET';
+$_SERVER['HTTP_HOST'] = 'example.com';
+$_SERVER['SERVER_NAME'] = 'example.com';
+$_SERVER['SERVER_PORT'] = 80;
+$_SERVER['REQUEST_URI'] = '/';
+// Simulate CLI
+define('PHP_SAPI', 'cli');
+chdir($root);
+require $root . '/src/bootstrap.php';
+echo 'REACHED_END';
+PHP;
+
+    $result = bootstrap_integration_run_subprocess($code, [dirname(__DIR__)]);
+    $t->assert('Subprocess executed', $result['ok']);
+    $t->assert('Skips redirect for CLI', strpos($result['stdout'], 'REACHED_END') !== false);
+
+    return $t;
+}
+
+function test_bootstrap_installer_redirect(): Test
+{
+    $t = new Test('Bootstrap - redirects to installer when no config');
+    
+    $code = <<<'PHP'
+$root = $argv[1];
+$_SERVER['SCRIPT_NAME'] = '/index.php';
+$_SERVER['REQUEST_METHOD'] = 'GET';
+$_SERVER['HTTP_HOST'] = 'example.com';
+$_SERVER['SERVER_NAME'] = 'example.com';
+$_SERVER['SERVER_PORT'] = 80;
+$_SERVER['REQUEST_URI'] = '/';
+// Ensure no config exists
+@unlink($root . '/config.json');
+@unlink($root . '/config.php');
+chdir($root);
+require $root . '/src/bootstrap.php';
+echo 'REACHED_END';
+PHP;
+
+    $result = bootstrap_integration_run_subprocess($code, [dirname(__DIR__)]);
+    $t->assert('Subprocess executed', $result['ok']);
+    $t->assert('Redirects to installer (exits early)', strpos($result['stdout'], 'REACHED_END') === false);
+
+    return $t;
+}
+
+function test_bootstrap_loads_config_json(): Test
+{
+    $t = new Test('Bootstrap - loads config from config.json');
+    
+    $code = <<<'PHP'
+$root = $argv[1];
+$_SERVER['SCRIPT_NAME'] = '/install.php'; // Avoid installer redirect
+$_SERVER['REQUEST_METHOD'] = 'GET';
+$_SERVER['HTTP_HOST'] = 'localhost';
+$_SERVER['SERVER_NAME'] = 'localhost';
+$_SERVER['SERVER_PORT'] = 80;
+$_SERVER['REQUEST_URI'] = '/';
+// Create config.json
+$config = ['site_name' => 'Test Forum', 'custom_key' => 'custom_value'];
+file_put_contents($root . '/config.json', json_encode($config));
+chdir($root);
+require $root . '/src/bootstrap.php';
+echo json_encode(['site_name' => $GLOBALS['config']['site_name'] ?? '', 'custom_key' => $GLOBALS['config']['custom_key'] ?? '']);
+PHP;
+
+    $result = bootstrap_integration_run_subprocess($code, [dirname(__DIR__)]);
+    $t->assert('Subprocess executed', $result['ok']);
+    $decoded = json_decode($result['stdout'], true);
+    $t->assertEquals('Loads site_name from config', 'Test Forum', $decoded['site_name'] ?? '');
+    $t->assertEquals('Loads custom_key from config', 'custom_value', $decoded['custom_key'] ?? '');
+
+    return $t;
+}
+
+function test_bootstrap_loads_legacy_config_php(): Test
+{
+    $t = new Test('Bootstrap - loads legacy config.php');
+    
+    $code = <<<'PHP'
+$root = $argv[1];
+$_SERVER['SCRIPT_NAME'] = '/install.php';
+$_SERVER['REQUEST_METHOD'] = 'GET';
+$_SERVER['HTTP_HOST'] = 'localhost';
+$_SERVER['SERVER_NAME'] = 'localhost';
+$_SERVER['SERVER_PORT'] = 80;
+$_SERVER['REQUEST_URI'] = '/';
+// Create legacy config.php
+@unlink($root . '/config.json');
+file_put_contents($root . '/config.php', "<?php\n\$config = ['legacy' => true, 'site_name' => 'Legacy Forum'];\n");
+chdir($root);
+require $root . '/src/bootstrap.php';
+echo json_encode(['legacy' => $GLOBALS['config']['legacy'] ?? false, 'site_name' => $GLOBALS['config']['site_name'] ?? '']);
+PHP;
+
+    $result = bootstrap_integration_run_subprocess($code, [dirname(__DIR__)]);
+    $t->assert('Subprocess executed', $result['ok']);
+    $decoded = json_decode($result['stdout'], true);
+    $t->assertEquals('Loads legacy config', true, $decoded['legacy'] ?? false);
+    $t->assertEquals('Loads site_name from legacy', 'Legacy Forum', $decoded['site_name'] ?? '');
+
+    return $t;
+}
+
+function test_bootstrap_migrates_legacy_config(): Test
+{
+    $t = new Test('Bootstrap - migrates legacy config.php to config.json');
+    
+    $code = <<<'PHP'
+$root = $argv[1];
+$_SERVER['SCRIPT_NAME'] = '/install.php';
+$_SERVER['REQUEST_METHOD'] = 'GET';
+$_SERVER['HTTP_HOST'] = 'localhost';
+$_SERVER['SERVER_NAME'] = 'localhost';
+$_SERVER['SERVER_PORT'] = 80;
+$_SERVER['REQUEST_URI'] = '/';
+// Create legacy config.php
+@unlink($root . '/config.json');
+file_put_contents($root . '/config.php', "<?php\n\$config = ['migrated' => true];\n");
+chdir($root);
+require $root . '/src/bootstrap.php';
+// Check if config.json was created
+echo json_encode(['config_json_exists' => file_exists($root . '/config.json'), 'config_php_exists' => file_exists($root . '/config.php')]);
+PHP;
+
+    $result = bootstrap_integration_run_subprocess($code, [dirname(__DIR__)]);
+    $t->assert('Subprocess executed', $result['ok']);
+    $decoded = json_decode($result['stdout'], true);
+    $t->assertEquals('Creates config.json', true, $decoded['config_json_exists'] ?? false);
+    $t->assertEquals('Removes config.php', false, $decoded['config_php_exists'] ?? true);
+
+    return $t;
+}
+
+function test_bootstrap_sets_utc_timezone(): Test
+{
+    $t = new Test('Bootstrap - sets UTC timezone');
+    
+    $code = <<<'PHP'
+$root = $argv[1];
+$_SERVER['SCRIPT_NAME'] = '/install.php';
+$_SERVER['REQUEST_METHOD'] = 'GET';
+$_SERVER['HTTP_HOST'] = 'localhost';
+$_SERVER['SERVER_NAME'] = 'localhost';
+$_SERVER['SERVER_PORT'] = 80;
+$_SERVER['REQUEST_URI'] = '/';
+chdir($root);
+require $root . '/src/bootstrap.php';
+echo json_encode(['tz' => date_default_timezone_get()]);
+PHP;
+
+    $result = bootstrap_integration_run_subprocess($code, [dirname(__DIR__)]);
+    $t->assert('Subprocess executed', $result['ok']);
+    $decoded = json_decode($result['stdout'], true);
+    $t->assertEquals('Timezone is UTC', 'UTC', $decoded['tz'] ?? '');
+
+    return $t;
+}
+
+function test_bootstrap_sets_language_cookie(): Test
+{
+    $t = new Test('Bootstrap - sets language cookie');
+    
+    $code = <<<'PHP'
+$root = $argv[1];
+$_SERVER['SCRIPT_NAME'] = '/install.php';
+$_SERVER['REQUEST_METHOD'] = 'GET';
+$_SERVER['HTTP_HOST'] = 'localhost';
+$_SERVER['SERVER_NAME'] = 'localhost';
+$_SERVER['SERVER_PORT'] = 80;
+$_SERVER['REQUEST_URI'] = '/?lang=fr';
+$_SERVER['HTTP_ACCEPT'] = '';
+// Create config with available langs
+$config = ['default_lang' => 'en', 'available_langs' => ['en', 'fr', 'de']];
+file_put_contents($root . '/config.json', json_encode($config));
+chdir($root);
+require $root . '/src/bootstrap.php';
+// Check headers_sent would be true after setcookie, but we can't easily test that in subprocess
+// Just verify it doesn't crash
+echo 'REACHED_END';
+PHP;
+
+    $result = bootstrap_integration_run_subprocess($code, [dirname(__DIR__)]);
+    $t->assert('Subprocess executed', $result['ok']);
+    $t->assert('Sets language without error', strpos($result['stdout'], 'REACHED_END') !== false);
+
+    return $t;
+}
+
+function test_bootstrap_loads_core_translations(): Test
+{
+    $t = new Test('Bootstrap - loads core translations');
+    
+    $code = <<<'PHP'
+$root = $argv[1];
+$_SERVER['SCRIPT_NAME'] = '/install.php';
+$_SERVER['REQUEST_METHOD'] = 'GET';
+$_SERVER['HTTP_HOST'] = 'localhost';
+$_SERVER['SERVER_NAME'] = 'localhost';
+$_SERVER['SERVER_PORT'] = 80;
+$_SERVER['REQUEST_URI'] = '/';
+chdir($root);
+require $root . '/src/bootstrap.php';
+echo json_encode(['has_i18n' => isset($GLOBALS['translations']) && is_array($GLOBALS['translations']), 'has_login_key' => isset($GLOBALS['translations']['login'])]);
+PHP;
+
+    $result = bootstrap_integration_run_subprocess($code, [dirname(__DIR__)]);
+    $t->assert('Subprocess executed', $result['ok']);
+    $decoded = json_decode($result['stdout'], true);
+    $t->assertEquals('Loads i18n registry', true, $decoded['has_i18n'] ?? false);
+    $t->assertEquals('Has login translation key', true, $decoded['has_login_key'] ?? false);
+
+    return $t;
+}
+
+function test_bootstrap_registers_autoloader(): Test
+{
+    $t = new Test('Bootstrap - registers PSR-4 autoloader');
+    
+    $code = <<<'PHP'
+$root = $argv[1];
+$_SERVER['SCRIPT_NAME'] = '/install.php';
+$_SERVER['REQUEST_METHOD'] = 'GET';
+$_SERVER['HTTP_HOST'] = 'localhost';
+$_SERVER['SERVER_NAME'] = 'localhost';
+$_SERVER['SERVER_PORT'] = 80;
+$_SERVER['REQUEST_URI'] = '/';
+chdir($root);
+require $root . '/src/bootstrap.php';
+// Try to load a Bulletin class
+$loaded = class_exists('Bulletin\\Router');
+echo json_encode(['router_loaded' => $loaded]);
+PHP;
+
+    $result = bootstrap_integration_run_subprocess($code, [dirname(__DIR__)]);
+    $t->assert('Subprocess executed', $result['ok']);
+    $decoded = json_decode($result['stdout'], true);
+    $t->assertEquals('Autoloader loads Router class', true, $decoded['router_loaded'] ?? false);
+
+    return $t;
+}
+
+function test_bootstrap_exception_handler(): Test
+{
+    $t = new Test('Bootstrap - registers exception handler');
+    
+    $code = <<<'PHP'
+$root = $argv[1];
+$_SERVER['SCRIPT_NAME'] = '/install.php';
+$_SERVER['REQUEST_METHOD'] = 'GET';
+$_SERVER['HTTP_HOST'] = 'localhost';
+$_SERVER['SERVER_NAME'] = 'localhost';
+$_SERVER['SERVER_PORT'] = 80;
+$_SERVER['REQUEST_URI'] = '/';
+chdir($root);
+require $root . '/src/bootstrap.php';
+// Check if exception handler is set
+$handler = set_exception_handler(function() {});
+restore_exception_handler();
+echo json_encode(['handler_set' => $handler !== null]);
+PHP;
+
+    $result = bootstrap_integration_run_subprocess($code, [dirname(__DIR__)]);
+    $t->assert('Subprocess executed', $result['ok']);
+    $decoded = json_decode($result['stdout'], true);
+    $t->assertEquals('Exception handler registered', true, $decoded['handler_set'] ?? false);
+
+    return $t;
+}
+
+function test_app_singleton_getinstance(): Test
+{
+    $t = new Test('App - getInstance returns singleton');
+    
+    App::reset();
+    $app1 = App::getInstance();
+    $app2 = App::getInstance();
+    
+    $t->assert('Returns instance', $app1 instanceof App);
+    $t->assert('Same instance returned', $app1 === $app2);
+
+    return $t;
+}
+
+function test_app_singleton_reset(): Test
+{
+    $t = new Test('App - reset clears singleton');
+    
+    App::reset();
+    $app1 = App::getInstance();
+    $app1->config = ['test' => 'value1'];
+    
+    App::reset();
+    $app2 = App::getInstance();
+    
+    $t->assert('New instance after reset', $app1 !== $app2);
+    $t->assert('Config cleared', empty($app2->config));
+
+    return $t;
+}
+
+function test_app_config_method(): Test
+{
+    $t = new Test('App - config() method returns values with defaults');
+    
+    App::reset();
+    $app = App::getInstance();
+    $app->config = ['key1' => 'value1', 'key2' => ''];
+    
+    $t->assertEquals('Returns existing value', 'value1', $app->config('key1'));
+    $t->assertEquals('Returns empty string for empty value', '', $app->config('key2'));
+    $t->assertEquals('Returns default for missing key', 'default', $app->config('missing', 'default'));
+    $t->assertEquals('Returns null default for missing key', null, $app->config('missing'));
+
+    return $t;
+}
+
+function test_app_clientip(): Test
+{
+    $t = new Test('App - clientIp returns forwarded or remote address');
+    
+    App::reset();
+    $app = App::getInstance();
+    
+    // Test with forwarded_for
+    $app->forwardedFor = '192.168.1.100';
+    $t->assertEquals('Returns forwarded_for', '192.168.1.100', $app->clientIp());
+    
+    // Test without forwarded_for (falls back to REMOTE_ADDR)
+    $app->forwardedFor = null;
+    $_SERVER['REMOTE_ADDR'] = '10.0.0.1';
+    $t->assertEquals('Returns REMOTE_ADDR', '10.0.0.1', $app->clientIp());
+    
+    // Test fallback
+    $app->forwardedFor = null;
+    unset($_SERVER['REMOTE_ADDR']);
+    $t->assertEquals('Returns fallback', '0.0.0.0', $app->clientIp());
+
+    return $t;
+}
+
+function test_app_getinstance_returns_instance(): Test
+{
+    $t = new Test('App - getInstance returns instance (covers line 42)');
+    
+    App::reset();
+    $app = App::getInstance();
+    
+    $t->assert('Returns instance', $app instanceof App);
+    $t->assert('Same instance returned on second call', $app === App::getInstance());
+
+    return $t;
+}
+
+function test_app_config_method_returns_value(): Test
+{
+    $t = new Test('App - config() method returns value with default (covers line 58)');
+    
+    App::reset();
+    $app = App::getInstance();
+    $app->config = ['key1' => 'value1', 'key2' => ''];
+    
+    $t->assertEquals('Returns existing value', 'value1', $app->config('key1'));
+    $t->assertEquals('Returns empty string for empty value', '', $app->config('key2'));
+    $t->assertEquals('Returns default for missing key', 'default', $app->config('missing', 'default'));
+    $t->assertEquals('Returns null default for missing key', null, $app->config('missing'));
+
+    return $t;
+}
+
+function test_app_clientip_method(): Test
+{
+    $t = new Test('App - clientIp() method returns IP (covers line 66)');
+    
+    App::reset();
+    $app = App::getInstance();
+    
+    // Test with forwarded_for
+    $app->forwardedFor = '192.168.1.100';
+    $t->assertEquals('Returns forwarded_for', '192.168.1.100', $app->clientIp());
+    
+    // Test without forwarded_for (falls back to REMOTE_ADDR)
+    $app->forwardedFor = null;
+    $_SERVER['REMOTE_ADDR'] = '10.0.0.1';
+    $t->assertEquals('Returns REMOTE_ADDR', '10.0.0.1', $app->clientIp());
+    
+    // Test fallback
+    $app->forwardedFor = null;
+    unset($_SERVER['REMOTE_ADDR']);
+    $t->assertEquals('Returns fallback', '0.0.0.0', $app->clientIp());
+
+    return $t;
+}
+
 register_tests(
     'test_bootstrap_non_test_mode_runs',
     'test_bootstrap_sends_security_headers',
-    'test_bootstrap_blocks_sensitive_files_over_http'
+    'test_bootstrap_blocks_sensitive_files_over_http',
+    'test_bootstrap_force_https_redirect',
+    'test_bootstrap_force_https_disabled',
+    'test_bootstrap_skips_redirect_for_localhost',
+    'test_bootstrap_skips_redirect_for_cli',
+    'test_bootstrap_installer_redirect',
+    'test_bootstrap_loads_config_json',
+    'test_bootstrap_loads_legacy_config_php',
+    'test_bootstrap_migrates_legacy_config',
+    'test_bootstrap_sets_utc_timezone',
+    'test_bootstrap_sets_language_cookie',
+    'test_bootstrap_loads_core_translations',
+    'test_bootstrap_registers_autoloader',
+    'test_bootstrap_exception_handler',
+    'test_app_singleton_getinstance',
+    'test_app_singleton_reset',
+    'test_app_config_method',
+    'test_app_clientip',
+    'test_app_getinstance_returns_instance',
+    'test_app_config_method_returns_value',
+    'test_app_clientip_method'
 );

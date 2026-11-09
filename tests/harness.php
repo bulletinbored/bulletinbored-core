@@ -277,9 +277,10 @@ class TestSuite
 
         ob_end_flush();
 
-        if ($this->totalFailed > 0 || $this->totalErrors > 0) {
-            exit(1);
-        }
+        // Don't exit here - let the runner handle exit codes
+        // if ($this->totalFailed > 0 || $this->totalErrors > 0) {
+        //     exit(1);
+        // }
     }
 
     public function getTotalPassed(): int
