@@ -4,6 +4,10 @@
             <h1 class="auth-title"><?= t('register') ?></h1>
             <p class="auth-subtitle"><?= t('register_subtitle') ?></p>
 
+            <?php if (!empty($error)): ?>
+                <div class="alert alert-danger"><i class="fas fa-exclamation-circle me-2"></i><?= escape(t($error)) ?></div>
+            <?php endif; ?>
+
             <form method="POST" action="<?= url('do_register') ?>">
                 <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                 <div class="mb-3">
@@ -16,8 +20,8 @@
                 </div>
                 <div class="mb-3">
                     <label class="form-label"><?= t('password') ?></label>
-                    <input type="password" name="password" class="form-control" required minlength="10">
-                    <div class="form-text"><?= t('password_min') ?></div>
+                    <input type="password" name="password" class="form-control" required minlength="10" pattern="(?=.*\d)(?=.*[a-z])(?=.*[A-Z]).{10,}" title="<?= t('password_pattern_title') ?>">
+                    <div class="form-text"><?= t('password_requirements') ?></div>
                 </div>
                 <button type="submit" class="btn btn-brand w-100"><?= t('register') ?></button>
             </form>

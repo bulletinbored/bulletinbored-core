@@ -196,6 +196,8 @@
     "password_no_lowercase": "Password must contain at least one lowercase letter.",
     "password_no_uppercase": "Password must contain at least one uppercase letter.",
     "password_no_number": "Password must contain at least one number.",
+    "password_pattern_title": "Password must be at least 10 characters and include uppercase, lowercase, and a number.",
+    "password_requirements": "Minimum 10 characters, with at least one uppercase letter, one lowercase letter, and one number.",
     "verify_email": "Verify Email",
     "verify_email_success": "Your email has been verified successfully! You can now login.",
     "verify_email_invalid": "Invalid or expired verification link.",
