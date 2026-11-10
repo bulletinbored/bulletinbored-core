@@ -184,6 +184,42 @@ if (file_exists($coreLangFile)) {
 }
 $translations = &$app->i18n['core'];
 
+// Define t() function for tests (from src/bootstrap.php)
+function t($key, $params = [], $scope = 'core') {
+    $registry = App::getInstance()->i18n;
+    $text = $registry[$scope][$key] ?? $key;
+    foreach ($params as $k => $v) {
+        $text = str_replace('{' . $k . '}', $v, $text);
+    }
+    return $text;
+}
+
+// Plugin-scoped translation
+function pt($pluginName, $key, $params = []) {
+    return t($key, $params, 'plugin:' . strtolower($pluginName));
+}
+
+// Theme-scoped translation
+function tt($themeName, $key, $params = []) {
+    return t($key, $params, 'theme:' . strtolower($themeName));
+}
+
+// Mock render_header to prevent redeclaration errors when views are included multiple times
+if (!function_exists('render_header')) {
+    function render_header($title = 'bulletinbored', $options = []) {
+        global $config, $lang;
+        $siteName = $config['site_name'] ?? 'bulletinbored';
+        $siteTagline = $config['site_tagline'] ?? '';
+        $siteLogo = $config['site_logo'] ?? '';
+        $siteFavicon = $config['site_favicon'] ?? '';
+        $options  = is_array($options) ? $options : [];
+        $showSidebar = $options['sidebar'] ?? true;
+        $GLOBALS['layoutOptions'] = $options;
+        // Don't output HTML in tests
+        return '';
+    }
+}
+
 // Helper functions for tests
 function get_test_config(): array
 {
