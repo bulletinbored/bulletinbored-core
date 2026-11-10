@@ -20,7 +20,7 @@
                 </div>
                 <div class="mb-3">
                     <label class="form-label"><?= t('password') ?></label>
-                    <input type="password" name="password" class="form-control" required minlength="10" pattern="(?=.*\d)(?=.*[a-z])(?=.*[A-Z]).{10,}" title="<?= t('password_pattern_title') ?>">
+                    <input type="password" name="password" class="form-control" required minlength="10" pattern="(?=.*[0-9])(?=.*[a-z])(?=.*[A-Z]).{10,}" title="<?= t('password_pattern_title') ?>">
                     <div class="form-text"><?= t('password_requirements') ?></div>
                 </div>
                 <button type="submit" class="btn btn-brand w-100"><?= t('register') ?></button>
