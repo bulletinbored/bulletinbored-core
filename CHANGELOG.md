@@ -62,6 +62,9 @@ The version in this file must always match the `VERSION` file (enforced by
   no longer turns every request into a 500.
 - **`src/setup.php` no longer reads `db_path` on MySQL installations**, which
   raised "Undefined array key db_path" warnings on every request.
+- **`tools/diag.php`** (not shipped in the release package): a one-file remote
+  diagnostic that prints PHP extensions, permissions, the database connection
+  and the migration state, for installations without access to logs.
 - **The web installer's MySQL DDL is MySQL 8 compatible too**: `allowed_roles`
   is `TEXT` without a default, like the migration. The dialect guard now also
   scans the installer's MySQL statements.

@@ -171,6 +171,14 @@ If and when a community forms, any future change to the license will be decided 
 
 Contributions are accepted under the terms of the [CLA.md](CLA.md).
 
+## Troubleshooting a 500
+
+Unhandled errors are written to `data/logs/error.log` (message, file/line,
+request URI, PHP version, database driver — never passwords). If you cannot
+reach that file, upload `tools/diag.php` to the forum root as `diag.php` and open
+it: it reports PHP extensions, config sanity, directory permissions, the
+database connection and the migration state. **Delete it right after use.**
+
 ## Testing notes
 
 Run the full CLI test suite with:
