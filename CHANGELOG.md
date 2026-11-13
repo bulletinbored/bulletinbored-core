@@ -50,6 +50,21 @@ The version in this file must always match the `VERSION` file (enforced by
 - `whereIn('column', [])` matches nothing (it previously relied on the string
   `'1'` being accepted as a column name).
 
+### Fixed (MySQL 8 compatibility)
+
+- **Fresh MySQL 8 installations failed at the initial schema.** The MySQL branch
+  of `20260829_initial_schema.php` and `20260831_upgrade_05x.php` declared
+  `allowed_roles TEXT DEFAULT NULL`. MySQL rejects a default on BLOB/TEXT
+  columns (error 1101) while MariaDB and SQLite accept it, so the migration
+  aborted on MySQL and a 0.5.x database could not be upgraded either.
+  `BbPdo::normalizeForMysql()` now strips such defaults for any statement
+  (protecting plugin migrations written for SQLite), and
+  `tests/MySqlDialectTest.php` guards the MySQL code paths of the migrations
+  statically, so this cannot come back unnoticed.
+- The new driver-aware upgrade test now runs the migration chain through
+  `BbPdo` (like `src/setup.php` does) and drops the shared test schema with
+  `FOREIGN_KEY_CHECKS = 0`, so it also verifies the real MySQL path in CI.
+
 ### Fixed (review of develop)
 
 - **CI now runs on `develop`** (`push` and `pull_request`), so the branch is

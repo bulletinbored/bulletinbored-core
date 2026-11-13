@@ -44,14 +44,21 @@ function upgrade_compat_pdo(): ?PDO
         $name = $_ENV['DB_NAME'] ?? getenv('DB_NAME') ?: 'bulletinbored_test';
         $user = $_ENV['DB_USER'] ?? getenv('DB_USER') ?: 'root';
         $pass = $_ENV['DB_PASS'] ?? getenv('DB_PASS') ?: '';
-        $pdo = new PDO("mysql:host={$host};port={$port};dbname={$name};charset=utf8mb4", $user, $pass, [
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        ]);
+        // BbPdo, not a plain PDO: the migrations rely on its dialect
+        // normalisation, and the test must exercise the same code path as
+        // src/setup.php does in production.
+        $pdo = new BbPdo("mysql:host={$host};port={$port};dbname={$name};charset=utf8mb4", $user, $pass);
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+
         // The server database is shared: start from an empty schema.
+        // Foreign keys must be disabled, otherwise DROP TABLE fails on a
+        // populated schema in dependency order.
+        $pdo->exec('SET FOREIGN_KEY_CHECKS = 0');
         foreach ($pdo->query('SHOW TABLES')->fetchAll(PDO::FETCH_COLUMN) as $table) {
             $pdo->exec('DROP TABLE IF EXISTS `' . str_replace('`', '', (string)$table) . '`');
         }
+        $pdo->exec('SET FOREIGN_KEY_CHECKS = 1');
         return $pdo;
     } catch (PDOException $e) {
         return null;

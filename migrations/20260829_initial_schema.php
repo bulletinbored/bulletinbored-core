@@ -79,7 +79,8 @@ class InitialSchema
                 name VARCHAR(255) NOT NULL UNIQUE,
                 description TEXT,
                 position INT DEFAULT 0,
-                allowed_roles TEXT DEFAULT NULL
+                -- TEXT columns cannot carry a default value on MySQL (error 1101)
+                allowed_roles TEXT
             ) $charset
         ");
 

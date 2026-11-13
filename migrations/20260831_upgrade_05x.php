@@ -42,7 +42,9 @@ class Upgrade05x
     {
         $driver = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
         $intType = $driver === 'mysql' ? 'INTEGER DEFAULT 0' : 'INTEGER DEFAULT 0';
-        $textType = $driver === 'mysql' ? 'TEXT DEFAULT NULL' : 'TEXT DEFAULT NULL';
+        // MySQL rejects an explicit DEFAULT on TEXT/BLOB columns (error 1101),
+        // MariaDB and SQLite accept it. TEXT is nullable anyway.
+        $textType = $driver === 'mysql' ? 'TEXT' : 'TEXT DEFAULT NULL';
 
         // users.email_verified
         if (!$this->columnExists($pdo, 'users', 'email_verified')) {
