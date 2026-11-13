@@ -116,10 +116,11 @@ function rate_limit_sensitive_actions(): array
 {
     return [
         'login', 'register', 'forgot_password', 'reset_password',
-        'edit_profile', 'remove_avatar', 'upload_image', 'editbored_upload',
+        'edit_profile', 'remove_avatar', 'upload_image', 'editbored_upload', 'logout_others',
         'edit_post', 'delete_post', 'edit_thread', 'delete_thread',
         'admin_ban_user', 'admin_unban_user', 'admin_suspend_user',
         'admin_create_user', 'admin_delete_user', 'admin_user_edit', 'admin_roles_action',
+        'admin_disconnect_user',
         'admin_categories', 'admin_delete_category', 'admin_category_order',
         'admin_dashboard_settings', 'admin_settings', 'admin_smtp', 'admin_upload_site_image',
         'admin_catalog', 'admin_langs', 'admin_moderate', 'admin_front_moderate',

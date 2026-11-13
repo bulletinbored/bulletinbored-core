@@ -184,6 +184,41 @@ function handle_admin_create_user_post(): \Bulletin\Response|bool
     return redirect(url('admin_users'));
 }
 
+/**
+ * Invalidate every session of a user without touching the account itself.
+ *
+ * Note: an administrator cannot disconnect another administrator (the same rule
+ * as delete/ban) — use the role editor if the account must lose its privileges.
+ */
+function handle_admin_disconnect_user_post(): \Bulletin\Response|bool
+{
+    $pdo = App::getInstance()->pdo;
+
+    if (!csrf_validate_request()) {
+        throw new \Bulletin\ForbiddenException('CSRF token invalid');
+    }
+    if (!rate_limit('admin_disconnect_user', 20, 3600, (string)($_SESSION['user_id'] ?? 0))) {
+        throw new \Bulletin\TooManyRequestsException('You are disconnecting too many users. Please try again later.');
+    }
+
+    $userId = (int)($_POST['id'] ?? $_GET['id'] ?? 0);
+    if ($userId <= 0) {
+        $_SESSION['admin_error'] = t('invalid_user_id') ?? 'Invalid user id.';
+        return redirect(url('admin_users'));
+    }
+
+    $stmt = $pdo->prepare("UPDATE users SET session_version = COALESCE(session_version, 0) + 1 WHERE id = ? AND role <> 'admin'");
+    $stmt->execute([$userId]);
+
+    if ($stmt->rowCount() === 0) {
+        $_SESSION['admin_error'] = 'Sessions could not be invalidated (user does not exist or is an admin).';
+    } else {
+        log_admin_action('user_disconnect', ['target_id' => $userId]);
+    }
+
+    return redirect(url('admin_users'));
+}
+
 function handle_delete_user_post(): \Bulletin\Response|bool
 {
     $pdo = App::getInstance()->pdo;

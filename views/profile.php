@@ -45,6 +45,13 @@ $stats       = $profileStats ?? ['threads' => 0, 'posts' => 0];
         <div class="profile-head-actions">
             <?php if ($isSelf): ?>
                 <a href="<?= url('edit_profile') ?>" class="btn btn-brand btn-sm"><i class="fas fa-pen me-2"></i><?= t('edit_profile') ?></a>
+                <form method="POST" action="<?= url('logout_others') ?>" class="d-inline"
+                      data-confirm="<?= t('logout_others') ?>?">
+                    <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                    <button type="submit" class="btn btn-outline-soft btn-sm" title="<?= t('logout_others_hint') ?>">
+                        <i class="fas fa-right-from-bracket me-1"></i><?= t('logout_others') ?>
+                    </button>
+                </form>
             <?php elseif (function_exists('is_logged_in') && is_logged_in()): ?>
                 <button class="btn btn-outline-soft btn-sm textmebored-send-msg-btn"
                         data-user-id="<?= (int)$profileUser['id'] ?>"

@@ -126,22 +126,6 @@ placeholder such as `changeme123`. After the first login, change it from your pr
 | **LiteSpeed** | `.htaccess` (included) | ✅ Automatic | ✅ Automatic | Apache-compatible |
 | **PHP built-in** | None needed | ✅ Internal | N/A | Development only |
 
-## HTTPS behind a reverse proxy
-
-If you run Nginx or another reverse proxy that terminates SSL in front of PHP-FPM, set this header so bulletinbored detects HTTPS correctly:
-
-```nginx
-proxy_set_header X-Forwarded-Proto $scheme;
-```
-
-Without it, the `force_https` redirect may loop. You can also disable HTTPS forcing in `config.json`:
-
-```json
-{
-    "force_https": false
-}
-```
-
 ## Documentation
 
 Full documentation lives in the separate [`docs`](https://github.com/bulletinbored/docs) repository (published at https://docs.bulletinbored.net):
@@ -269,7 +253,16 @@ Upgrading an existing installation:
 `force_https` (default `true`) redirects plain-HTTP visitors to HTTPS, and the
 `Secure` session cookie is controlled by `cookie_secure`. Both decisions use the
 forwarded headers validated against `trusted_proxies`, so reverse-proxy setups
-work without extra configuration.
+work without extra configuration: behind Nginx or another TLS terminator, forward
+the scheme and make sure the proxy address is listed in `trusted_proxies`.
+
+```nginx
+proxy_set_header X-Forwarded-Proto $scheme;
+```
+
+Without the header the `force_https` redirect may loop on a proxy that terminates
+TLS; `"force_https": false` is the escape hatch (for example while a certificate
+is being issued).
 
 HSTS is sent only when the visitor is actually on HTTPS (directly or through a
 trusted proxy):
@@ -287,6 +280,40 @@ password is only base64-encoded on the wire: bulletinbored logs a warning and
 keeps working, and `mail_require_tls_for_auth: true` makes it refuse instead.
 Server certificates are always verified — a self-signed or expired certificate
 makes the delivery fail rather than sending credentials to an unknown host.
+
+## API scope (1.0)
+
+bulletinbored 1.0 is **HTML-first**. The router can emit JSON (when the request
+path starts with `api/` or the client sends `Accept: application/json`), and some
+handlers return arrays that are serialised automatically, but that is a
+convenience of the front controller, **not a versioned public API**:
+
+- there is no `/api/v1` namespace, no OpenAPI schema and no compatibility
+  promise on the JSON shape;
+- the only endpoint under `api/` is `api/install.php`, an admin-only action
+  guarded by a database-backed administrator check;
+- server-to-server clients should use a plugin that registers its own routes
+  (`$router->api()`), where the route is part of the plugin's contract.
+
+API tokens, scopes and a stable JSON surface are potential 1.x work, not 1.0
+features. If your integration needs one today, implement it as a plugin.
+
+## Session contract
+
+Everything a plugin needs to know about authentication:
+
+- `$_SESSION['user_id']`, `user_role`, `user_status` and `session_version` are set
+  at login. Nothing else in the session is authoritative.
+- `users.session_version` is incremented whenever credentials, role or status
+  change (password reset, role edit, ban, suspend, unban, "log out other
+  devices", admin "disconnect sessions"). Every stored session with an older
+  value is invalidated on its next `is_logged_in()` call.
+- `is_logged_in()` re-reads `session_version` from the database and destroys the
+  session when the row is gone or the version is stale.
+- Code that runs outside `src/bootstrap.php` must not trust `$_SESSION['user_role']`:
+  call `AdminAuth::verifySession($pdo, $_SESSION)` first (or use the router's
+  `admin` middleware). `tests/RouteAuthorizationTest.php` fails the build when a
+  route is registered outside the group it needs.
 
 ## Security model & known risks
 

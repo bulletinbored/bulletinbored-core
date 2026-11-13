@@ -15,6 +15,8 @@
  *   plugin:enable <name> Enable a plugin
  *   plugin:disable <name> Disable a plugin
  *   cache:flush          Flush all caches
+ *   ratelimit:stats      Show the rate-limit buckets (size, age, top offenders)
+ *   ratelimit:gc         Remove expired rate-limit buckets now
  *   doctor               Run system diagnostics
  *   help                 Show this help
  *
@@ -55,6 +57,7 @@ if (file_exists($configPath)) {
 }
 
 require_once BB_ROOT . '/lib/BbPdo.php';
+require_once BB_ROOT . '/src/Security.php';
 require_once BB_ROOT . '/lib/DbQuery.php';
 require_once BB_ROOT . '/lib/PluginManager.php';
 require_once BB_ROOT . '/lib/Migrator.php';
@@ -345,6 +348,66 @@ $registry->register('cache:flush', 'Flush all caches', function($args) {
 
     output('');
     output('Cache flushed.');
+});
+
+$registry->register('ratelimit:stats', 'Show the rate-limit buckets', function($args) {
+    $dir = BB_ROOT . '/data/ratelimit';
+    output('');
+    output('=== rate limit buckets ===');
+
+    $files = is_dir($dir) ? (glob($dir . '/*.json') ?: []) : [];
+    if ($files === []) {
+        output('  No bucket files: no action is currently rate limited.');
+        return;
+    }
+
+    $now = time();
+    $totalSize = 0;
+    $rows = [];
+    foreach ($files as $file) {
+        $size = (int)@filesize($file);
+        $totalSize += $size;
+        $data = json_decode((string)@file_get_contents($file), true);
+        $hits = is_array($data) ? count($data) : 0;
+        $mtime = (int)@filemtime($file);
+        $rows[] = [
+            'bucket' => basename($file, '.json'),
+            'hits' => $hits,
+            'size' => $size,
+            'age' => max(0, $now - $mtime),
+        ];
+    }
+
+    usort($rows, fn($a, $b) => $b['hits'] <=> $a['hits']);
+
+    output(sprintf('  %d bucket(s), %s total', count($rows), number_format($totalSize) . ' bytes'));
+    output('');
+    table(['bucket', 'hits', 'size', 'idle'], array_map(fn($r) => [
+        strlen($r['bucket']) > 40 ? substr($r['bucket'], 0, 37) . '...' : $r['bucket'],
+        $r['hits'],
+        $r['size'] . ' B',
+        floor($r['age'] / 60) . 'm',
+    ], array_slice($rows, 0, 15)));
+
+    $sensitive = rate_limit_sensitive_actions();
+    output('');
+    output('  ' . count($sensitive) . ' sensitive action(s) fail closed when the limiter cannot write.');
+    output('  Remove buckets that are no longer relevant with: php bb.php ratelimit:gc');
+});
+
+$registry->register('ratelimit:gc', 'Remove expired rate-limit buckets', function($args) {
+    $dir = BB_ROOT . '/data/ratelimit';
+    $maxAge = isset($args[0]) && is_numeric($args[0]) ? max(60, (int)$args[0]) : 86400;
+
+    output('');
+    $removed = rate_limit_gc($dir, $maxAge);
+    if ($removed === 0) {
+        output('  Nothing to remove.');
+    } else {
+        success("Removed {$removed} bucket(s) idle for more than " . (int)($maxAge / 3600) . 'h.');
+    }
+    $remaining = is_dir($dir) ? count(glob($dir . '/*.json') ?: []) : 0;
+    output("  {$remaining} bucket(s) left.");
 });
 
 $registry->register('doctor', 'Run system diagnostics', function($args) use ($pdo, $config) {

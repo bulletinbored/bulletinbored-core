@@ -255,6 +255,8 @@ function test_dbquery_raw(): Test
 }
 
 register_tests(
+    'test_dbquery_joins',
+    'test_dbquery_null_and_between',
     'test_dbquery_insert_and_select',
     'test_dbquery_where',
     'test_dbquery_update_delete',
@@ -265,3 +267,70 @@ register_tests(
     'test_dbquery_pluck',
     'test_dbquery_raw'
 );
+
+function test_dbquery_joins(): Test
+{
+    $t = new Test('DbQuery - Joins');
+
+    $pdo = new BbPdo('sqlite::memory:');
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    $db = new DbQuery($pdo);
+
+    $pdo->exec("CREATE TABLE threads (id INTEGER PRIMARY KEY, title TEXT, user_id INTEGER)");
+    $pdo->exec("CREATE TABLE posts (id INTEGER PRIMARY KEY, thread_id INTEGER, content TEXT)");
+
+    $db->table('threads')->insert(['id' => 1, 'title' => 'First', 'user_id' => 7]);
+    $db->table('threads')->insert(['id' => 2, 'title' => 'Second', 'user_id' => 8]);
+    $db->table('posts')->insert(['id' => 10, 'thread_id' => 1, 'content' => 'a']);
+    $db->table('posts')->insert(['id' => 11, 'thread_id' => 1, 'content' => 'b']);
+
+    $rows = $db->table('threads')
+        ->join('posts', 'posts.thread_id', '=', 'threads.id')
+        ->select('threads.title', 'posts.content')
+        ->orderBy('posts.id')
+        ->get();
+    $t->assertCount('INNER JOIN returns matching rows only', 2, $rows);
+    $t->assertEquals('Joined column available', 'First', $rows[0]['title'] ?? null);
+
+    $left = $db->table('threads')
+        ->leftJoin('posts', 'posts.thread_id', '=', 'threads.id')
+        ->select('threads.id')
+        ->orderBy('threads.id')
+        ->get();
+    $t->assertCount('LEFT JOIN keeps unmatched rows', 3, $left);
+    $t->assertEquals('LEFT JOIN count matches', 3, $db->table('threads')->leftJoin('posts', 'posts.thread_id', '=', 'threads.id')->count());
+
+    // Table alias.
+    $aliased = $db->table('threads')->join('posts AS p', 'p.thread_id', '=', 'threads.id')->select('p.id')->get();
+    $t->assertCount('Join with alias works', 2, $aliased);
+
+    return $t;
+}
+
+function test_dbquery_null_and_between(): Test
+{
+    $t = new Test('DbQuery - whereNull / whereBetween');
+
+    $pdo = new BbPdo('sqlite::memory:');
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    $db = new DbQuery($pdo);
+
+    $pdo->exec("CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT, deleted_at TEXT, score INTEGER)");
+    $db->table('items')->insert(['name' => 'a', 'deleted_at' => null, 'score' => 5]);
+    $db->table('items')->insert(['name' => 'b', 'deleted_at' => '2026-01-01', 'score' => 15]);
+    $db->table('items')->insert(['name' => 'c', 'deleted_at' => null, 'score' => 25]);
+
+    $t->assertCount('whereNull matches NULL rows', 2, $db->table('items')->whereNull('deleted_at')->get());
+    $t->assertCount('whereNotNull matches the rest', 1, $db->table('items')->whereNotNull('deleted_at')->get());
+    $t->assertCount('whereBetween is inclusive', 2, $db->table('items')->whereBetween('score', 5, 15)->get());
+    $t->assertEquals('Two BETWEEN parameters are bound', 2, $db->table('items')->whereBetween('score', 5, 15)->count());
+    $t->assertCount('Empty range matches nothing', 0, $db->table('items')->whereBetween('score', 100, 200)->get());
+
+    $t->assertThrows('whereNull validates the column', fn() => $db->table('items')->whereNull('x IS NULL OR 1'), InvalidArgumentException::class);
+    $t->assertThrows('whereBetween validates the column', fn() => $db->table('items')->whereBetween('score) OR (1', 1, 2), InvalidArgumentException::class);
+    $t->assertThrows('join validates the table', fn() => $db->table('items')->join('x; DROP TABLE items', 'a', '=', 'b'), InvalidArgumentException::class);
+    $t->assertThrows('join validates the columns', fn() => $db->table('items')->join('other', 'a', '=', 'b OR 1=1'), InvalidArgumentException::class);
+    $t->assertThrows('join validates the operator', fn() => $db->table('items')->join('other', 'a', '= 1 OR 1', 'b'), InvalidArgumentException::class);
+
+    return $t;
+}

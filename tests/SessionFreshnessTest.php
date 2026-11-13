@@ -13,6 +13,7 @@
 require_once __DIR__ . '/harness.php';
 require_once __DIR__ . '/../src/helpers.php';
 require_once __DIR__ . '/../src/Security.php';
+require_once __DIR__ . '/../src/actions/users.php';
 require_once __DIR__ . '/../src/actions/admin/users.php';
 
 function session_freshness_pdo(): PDO
@@ -200,7 +201,85 @@ function test_ban_bumps_session_version(): Test
     return $t;
 }
 
+function test_logout_other_devices(): Test
+{
+    $t = new Test('Session freshness - logout of other devices');
+
+    $pdo = session_freshness_pdo();
+    App::getInstance()->pdo = $pdo;
+
+    $user = session_freshness_login($pdo, 'multi', 'user');
+    $_SESSION['csrf_token'] = 'csrf-token-value';
+    $_POST = ['csrf_token' => 'csrf-token-value'];
+    $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
+
+    $response = handle_logout_others_post();
+    $t->assertTrue('Handler returns a redirect', $response instanceof \Bulletin\Response);
+
+    $stmt = $pdo->prepare("SELECT session_version FROM users WHERE id = ?");
+    $stmt->execute([$user['id']]);
+    $newVersion = (int)$stmt->fetchColumn();
+    $t->assertEquals('session_version bumped once', 2, $newVersion);
+    $t->assertEquals('The current device keeps the new version', $newVersion, (int)$_SESSION['session_version']);
+    $t->assertTrue('The current device stays signed in', is_logged_in());
+
+    // Another device still holds the old cookie.
+    $otherDevice = $_SESSION;
+    $_SESSION = ['user_id' => $user['id'], 'user_role' => 'user', 'session_version' => 1];
+    $t->assertFalse('Other devices are signed out', is_logged_in());
+
+    $_SESSION = $otherDevice;
+    $t->assertTrue('Current device unaffected by the other one', is_logged_in());
+
+    $_POST = [];
+    $_SESSION = [];
+    App::reset();
+    return $t;
+}
+
+function test_admin_disconnects_user_sessions(): Test
+{
+    $t = new Test('Session freshness - admin disconnects a user');
+
+    $pdo = session_freshness_pdo();
+    App::getInstance()->pdo = $pdo;
+
+    $target = session_freshness_login($pdo, 'target', 'user');
+    $_SESSION['csrf_token'] = 'csrf-token-value';
+    $_POST = ['id' => $target['id'], 'csrf_token' => 'csrf-token-value'];
+    $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
+
+    $response = handle_admin_disconnect_user_post();
+    $t->assertTrue('Handler returns a redirect', $response instanceof \Bulletin\Response);
+
+    $stmt = $pdo->prepare("SELECT session_version, status, role FROM users WHERE id = ?");
+    $stmt->execute([$target['id']]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    $t->assertEquals('session_version bumped', 2, (int)$row['session_version']);
+    $t->assertEquals('Account status untouched', 'active', $row['status']);
+    $t->assertEquals('Role untouched', 'user', $row['role']);
+
+    $_SESSION = ['user_id' => $target['id'], 'user_role' => 'user', 'session_version' => 1];
+    $t->assertFalse('The user session is invalid', is_logged_in());
+
+    // Admins cannot be disconnected through this action.
+    $admin = session_freshness_login($pdo, 'other_admin', 'admin');
+    $_SESSION['csrf_token'] = 'csrf-token-value';
+    $_POST = ['id' => $admin['id'], 'csrf_token' => $_SESSION['csrf_token']];
+    handle_admin_disconnect_user_post();
+    $stmt = $pdo->prepare("SELECT session_version FROM users WHERE id = ?");
+    $stmt->execute([$admin['id']]);
+    $t->assertEquals('Admin session_version unchanged', 1, (int)$stmt->fetchColumn());
+
+    $_POST = [];
+    $_SESSION = [];
+    App::reset();
+    return $t;
+}
+
 register_tests(
+    'test_logout_other_devices',
+    'test_admin_disconnects_user_sessions',
     'test_deleted_user_session_invalidated',
     'test_session_version_change_invalidates',
     'test_admin_demotion_invalidates_session',

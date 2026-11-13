@@ -153,6 +153,7 @@ $router->middleware('auth')->group(function($router) {
     $router->post('/unwatch', fn() => handle_unwatch());
     $router->post('/upload-image', fn() => handle_upload_image());
     $router->post('/logout', fn() => handle_logout());
+    $router->post('/logout-others', fn() => handle_logout_others_post());
     $router->get('/edit-profile', fn() => handle_edit_profile('GET'));
     $router->post('/edit-profile', fn() => handle_edit_profile('POST'));
     $router->post('/remove-avatar', fn() => handle_remove_avatar('POST'));
@@ -199,6 +200,7 @@ $router->middleware('admin')->group(function($router) {
     $router->post('/admin/ban-user', fn() => handle_ban_user_post());
     $router->post('/admin/unban-user', fn() => handle_unban_user_post());
     $router->post('/admin/suspend-user', fn() => handle_suspend_user_post());
+    $router->post('/admin/disconnect-user', fn() => handle_admin_disconnect_user_post());
 });
 
 // --- Permission-based routes (moderators + admins) ---

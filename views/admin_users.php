@@ -149,6 +149,12 @@ $users = $pdo->query("SELECT * FROM users ORDER BY id ASC")->fetchAll();
                                         <button type="submit" class="btn btn-sm btn-info" title="<?= t('suspend') ?>"><i class="fas fa-lock"></i></button>
                                     </form>
                                     <?php endif; ?>
+                                    <form method="POST" action="<?= url('disconnect_user', ['id' => $u['id']]) ?>" class="d-flex m-0" data-confirm='<?= t('disconnect_confirm') ?>'>
+                                        <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                                        <input type="hidden" name="id" value="<?= (int)$u['id'] ?>">
+                                        <input type="hidden" name="redirect" value="/admin/users">
+                                        <button type="submit" class="btn btn-sm btn-secondary w-100" title="<?= t('disconnect_user') ?>"><i class="fas fa-power-off"></i></button>
+                                    </form>
                                     <form method="POST" action="<?= url('delete_user', ['id' => $u['id']]) ?>" class="d-flex m-0" data-confirm='<?= t('delete_confirm') ?>?'>
                                         <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                                         <input type="hidden" name="id" value="<?= (int)$u['id'] ?>">

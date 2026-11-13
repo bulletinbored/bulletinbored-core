@@ -19,8 +19,13 @@
  * through the $params argument instead). Everything they return is still safe;
  * only the statement text is the caller's responsibility.
  *
+ * The builder covers the constructs plugins actually need without escaping to
+ * raw SQL: joins, NULL checks and ranges are all first-class and validated.
+ *
  * Usage:
  *   $db = new DbQuery($pdo);
+ *   $db->table('threads')->leftJoin('posts', 'posts.thread_id', '=', 'threads.id')
+ *      ->select('threads.*')->whereNull('posts.deleted_at')->get();
  *   $user = $db->table('users')->where('id', 42)->first();
  *   $db->table('users')->insert(['username' => 'alice', 'email' => 'a@b.com']);
  *   $db->table('users')->where('id', 42)->update(['email' => 'new@b.com']);
@@ -34,6 +39,7 @@ class DbQuery
 
     private PDO $pdo;
     private string $table = '';
+    private array $joins = [];
     private array $wheres = [];
     private array $params = [];
     private ?int $limitVal = null;
@@ -95,6 +101,7 @@ class DbQuery
 
     private function reset(): void
     {
+        $this->joins = [];
         $this->wheres = [];
         $this->params = [];
         $this->limitVal = null;
@@ -179,6 +186,71 @@ class DbQuery
         return $clone;
     }
 
+    /**
+     * INNER JOIN with validated identifiers on both sides.
+     *
+     * $table may be "posts" or "posts AS p"; $first and $second are columns
+     * (optionally qualified) and $operator must be one of the comparison
+     * operators accepted by where().
+     */
+    public function join(string $table, string $first, string $operator, string $second): self
+    {
+        return $this->addJoin('INNER', $table, $first, $operator, $second);
+    }
+
+    /**
+     * LEFT JOIN — see join() for the accepted arguments.
+     */
+    public function leftJoin(string $table, string $first, string $operator, string $second): self
+    {
+        return $this->addJoin('LEFT', $table, $first, $operator, $second);
+    }
+
+    private function addJoin(string $type, string $table, string $first, string $operator, string $second): self
+    {
+        $clone = clone $this;
+        $clone->joins[] = $type . ' JOIN ' . self::assertColumnExpression($table)
+            . ' ON ' . self::assertIdentifier($first, 'join column')
+            . ' ' . self::assertOperator($operator)
+            . ' ' . self::assertIdentifier($second, 'join column');
+        return $clone;
+    }
+
+    /**
+     * WHERE column IS NULL (no parameter, no raw SQL needed).
+     */
+    public function whereNull(string $column): self
+    {
+        $clone = clone $this;
+        $clone->wheres[] = self::assertIdentifier($column, 'column') . ' IS NULL';
+        return $clone;
+    }
+
+    /**
+     * WHERE column IS NOT NULL.
+     */
+    public function whereNotNull(string $column): self
+    {
+        $clone = clone $this;
+        $clone->wheres[] = self::assertIdentifier($column, 'column') . ' IS NOT NULL';
+        return $clone;
+    }
+
+    /**
+     * WHERE column BETWEEN min AND max (both bound).
+     */
+    public function whereBetween(string $column, $min, $max): self
+    {
+        $clone = clone $this;
+        $column = self::assertIdentifier($column, 'column');
+        $from = ':between_a' . count($clone->params);
+        $clone->params[$from] = $min;
+        $to = ':between_b' . count($clone->params);
+        $clone->params[$to] = $max;
+        $clone->wheres[] = "{$column} BETWEEN {$from} AND {$to}";
+        return $clone;
+    }
+
     public function limit(int $limit): self
     {
         $clone = clone $this;
@@ -191,6 +263,14 @@ class DbQuery
         $clone = clone $this;
         $clone->offsetVal = $offset;
         return $clone;
+    }
+
+    private function buildJoins(): string
+    {
+        if (empty($this->joins)) {
+            return '';
+        }
+        return ' ' . implode(' ', $this->joins);
     }
 
     private function buildWhere(): string
@@ -229,6 +309,7 @@ class DbQuery
         }
         $cols = implode(', ', $validatedCols);
         $sql = "SELECT {$cols} FROM {$this->table}"
+            . $this->buildJoins()
             . $this->buildWhere()
             . $this->buildOrder()
             . $this->buildLimit();
@@ -248,7 +329,7 @@ class DbQuery
 
     public function count(): int
     {
-        $sql = "SELECT COUNT(*) FROM {$this->table}" . $this->buildWhere();
+        $sql = "SELECT COUNT(*) FROM {$this->table}" . $this->buildJoins() . $this->buildWhere();
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($this->params);
         return (int) $stmt->fetchColumn();

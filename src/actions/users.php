@@ -196,6 +196,43 @@ function handle_register(string $method): \Bulletin\Response|bool
     return true;
 }
 
+/**
+ * Sign out every other device of the current user.
+ *
+ * session_version is bumped (all cookies become stale) and the value stored in
+ * the current session is refreshed, so this device stays signed in: exactly the
+ * "log out my other devices" behaviour.
+ */
+function handle_logout_others_post(): \Bulletin\Response|bool
+{
+    if (!csrf_validate_request()) {
+        throw new \Bulletin\ForbiddenException('CSRF token invalid');
+    }
+
+    $userId = (int)($_SESSION['user_id'] ?? 0);
+    if ($userId <= 0) {
+        return redirect(url('login'));
+    }
+    if (!rate_limit('logout_others', 5, 3600, (string)$userId)) {
+        throw new \Bulletin\TooManyRequestsException('Too many requests. Please try again later.');
+    }
+
+    $pdo = App::getInstance()->pdo;
+    $pdo->prepare("UPDATE users SET session_version = COALESCE(session_version, 0) + 1 WHERE id = ?")
+        ->execute([$userId]);
+
+    $stmt = $pdo->prepare("SELECT session_version FROM users WHERE id = ?");
+    $stmt->execute([$userId]);
+    $version = $stmt->fetchColumn();
+    if ($version !== false) {
+        // Keep this device signed in with the new version.
+        $_SESSION['session_version'] = (int)$version;
+    }
+
+    log_security_event('logout_other_devices', ['user_id' => $userId]);
+    return redirect(url('edit_profile'));
+}
+
 function handle_logout(): \Bulletin\Response|bool
 {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
