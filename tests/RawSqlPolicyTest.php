@@ -19,10 +19,66 @@ require_once __DIR__ . '/harness.php';
 const RAW_SQL_METHODS = ['raw', 'rawFirst', 'rawExec', 'whereRaw'];
 
 /**
+ * Regex fallback for builds without the tokenizer extension.
+ *
+ * Less precise than the token walker (it works line by line and cannot see
+ * multi-line string concatenation), but it still rejects a variable, a
+ * concatenation or a function call as the statement.
+ *
+ * @return string[] human readable violations ("file:line method")
+ */
+function raw_sql_violations_regex(string $code, string $label): array
+{
+    $violations = [];
+    $lines = preg_split('/\R/', $code) ?: [];
+
+    foreach ($lines as $index => $line) {
+        if (!preg_match_all('/->(raw|rawFirst|rawExec|whereRaw)\s*\(/', $line, $matches, PREG_OFFSET_CAPTURE)) {
+            continue;
+        }
+
+        foreach ($matches[0] as $hit) {
+            $method = $hit[0];
+            $rest = ltrim(substr($line, $hit[1] + strlen($method)));
+            $ok = false;
+
+            if ($rest !== '' && ($rest[0] === "'" || $rest[0] === '"')) {
+                $quote = $rest[0];
+                $length = strlen($rest);
+                for ($i = 1; $i < $length; $i++) {
+                    if ($rest[$i] === '\\') { // escaped character
+                        $i++;
+                        continue;
+                    }
+                    if ($rest[$i] === $quote) {
+                        $after = ltrim(substr($rest, $i + 1));
+                        $ok = $after !== '' && ($after[0] === ',' || $after[0] === ')');
+                        break;
+                    }
+                }
+            }
+
+            if (!$ok) {
+                $violations[] = $label . ':' . ($index + 1) . ' ' . preg_replace('/\s+/', '', $method)
+                    . ' with a non-literal statement (tokenizer missing)';
+            }
+        }
+    }
+
+    return $violations;
+}
+
+/**
  * @return string[] human readable violations ("file:line method")
  */
 function raw_sql_violations(string $code, string $label): array
 {
+    if (!function_exists('token_get_all')) {
+        // The tokenizer extension is not compiled in everywhere (notably some
+        // CI images): fall back instead of failing the suite.
+        return raw_sql_violations_regex($code, $label);
+    }
+
     $tokens = token_get_all($code);
     $count = count($tokens);
     $violations = [];
@@ -143,6 +199,11 @@ function test_raw_sql_uses_literals(): Test
 
     $good = "<?php\n\$db->raw('SELECT 1');\n\$db->whereRaw('a = :a', ['a' => 1]);\n\$db->rawExec(\"DELETE FROM t WHERE id = ?\", [1]);\n";
     $t->assertCount('Accepts literal statements', 0, raw_sql_violations($good, 'sample.php'));
+
+    // The regex fallback (used when the tokenizer extension is missing) must
+    // reach the same verdict on the same samples.
+    $t->assertCount('Fallback detects the bad samples', 3, raw_sql_violations_regex($bad, 'sample.php'));
+    $t->assertCount('Fallback accepts the good samples', 0, raw_sql_violations_regex($good, 'sample.php'));
 
     return $t;
 }

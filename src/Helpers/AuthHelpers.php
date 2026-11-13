@@ -84,7 +84,10 @@ const BB_USERNAME_MAX_LENGTH = 191;
  */
 function validate_username_length(string $username): array
 {
-    if (mb_strlen($username) > BB_USERNAME_MAX_LENGTH) {
+    // mbstring is optional on minimal PHP builds: fall back to byte length so
+    // the check never turns into a fatal error.
+    $length = function_exists('mb_strlen') ? mb_strlen($username) : strlen($username);
+    if ($length > BB_USERNAME_MAX_LENGTH) {
         return ['username_too_long'];
     }
     return [];
