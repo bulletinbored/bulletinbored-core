@@ -213,13 +213,13 @@ Version numbers live in `VERSION` and must match `config-sample.json`
 the repository: the release workflow generates them on the GitHub Release, so
 the tag, `VERSION` and the published notes always refer to the same commit.
 
-Pre-releases use SemVer suffixes: `VERSION` is `1.0.0-rc-2`, the tag is
-`v1.0.0-rc-2`, and the GitHub release is published as a **prerelease** so the
+Pre-releases use SemVer suffixes: `VERSION` is `1.0.0-rc.2`, the tag is
+`v1.0.0-rc.2`, and the GitHub release is published as a **prerelease** so the
 update checker (`/releases/latest`, which skips prereleases) never offers it to
 stable installations. A stable installation that wants prereleases can set
 `allow_prerelease_updates: true`; an installation already running a prerelease
 follows the next ones automatically. `version_compare()` keeps the SemVer
-ordering (`1.0.0-rc-2 < 1.0.0`), while extension requirements (`"core":
+ordering (`1.0.0-rc.2 < 1.0.0`), while extension requirements (`"core":
 ">=1.0.0"`) are matched against the base version so plugins can be tested on a
 release candidate.
 

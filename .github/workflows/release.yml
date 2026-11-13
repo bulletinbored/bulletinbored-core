@@ -66,7 +66,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ steps.release_kind.outputs.version }}
-          # Prereleases (1.0.0-rc-2, 1.0.0-beta.1, ...) are published as GitHub
+          # Prereleases (1.0.0-rc.2, 1.0.0-beta.1, ...) are published as GitHub
           # prereleases, so the update checker (/releases/latest) never offers
           # them to stable installations.
           prerelease: ${{ steps.release_kind.outputs.prerelease == 'true' }}
