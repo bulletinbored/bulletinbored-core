@@ -123,6 +123,46 @@ spl_autoload_register(function ($class) {
     }
 });
 
+/**
+ * Append an unhandled error to data/logs/error.log.
+ * Best effort: logging must never throw inside the exception handler.
+ */
+function bb_log_unhandled_error(string $summary, \Throwable $e): void
+{
+    try {
+        $dir = __DIR__ . '/../data/logs';
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0755, true);
+        }
+        if (!is_dir($dir) || !is_writable($dir)) {
+            return;
+        }
+        $file = $dir . '/error.log';
+        // Keep the file bounded: a broken install can 500 on every request.
+        if (is_file($file) && filesize($file) > 2097152) {
+            @file_put_contents($file, '');
+        }
+        $config = isset($GLOBALS['config']) && is_array($GLOBALS['config']) ? $GLOBALS['config'] : [];
+        $context = [
+            'uri' => $_SERVER['REQUEST_URI'] ?? '-',
+            'method' => $_SERVER['REQUEST_METHOD'] ?? '-',
+            'php' => PHP_VERSION,
+            'db_driver' => $config['db_driver'] ?? 'unknown',
+            'db_host' => $config['db_host'] ?? '',
+            'db_name' => $config['db_name'] ?? '',
+        ];
+        if ($e instanceof \PDOException) {
+            $context['sql_state'] = (string)($e->errorInfo[0] ?? $e->getCode());
+        }
+        $entry = '[' . date('c') . '] ' . $summary . PHP_EOL
+            . '  ' . json_encode($context, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . PHP_EOL
+            . $e->getTraceAsString() . PHP_EOL . PHP_EOL;
+        @file_put_contents($file, $entry, FILE_APPEND | LOCK_EX);
+    } catch (\Throwable $ignored) {
+        // Never let logging break the error response.
+    }
+}
+
 // --- Global exception safety net -------------------------------------------
 // The router only converts HttpException into a response; anything else
 // (PDOException, TypeError, ...) would otherwise become an uncaught fatal,
@@ -130,13 +170,20 @@ spl_autoload_register(function ($class) {
 // return a generic 500 instead. Not registered in test mode (handlers must be
 // able to throw so assertThrows() works).
 set_exception_handler(function (\Throwable $e): void {
-    @error_log(sprintf(
+    $summary = sprintf(
         'bulletinbored unhandled %s: %s in %s:%d',
         get_class($e),
         $e->getMessage(),
         $e->getFile(),
         $e->getLine()
-    ));
+    );
+    @error_log($summary);
+
+    // Shared hosting rarely exposes the PHP error log. Keep a copy inside
+    // data/logs (denied by the shipped server configs) so the administrator can
+    // read the real cause of a 500 instead of guessing.
+    bb_log_unhandled_error($summary, $e);
+
     if (!headers_sent()) {
         http_response_code(500);
     }

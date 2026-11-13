@@ -151,7 +151,18 @@ function test_migration_mysql_paths_are_valid_mysql(): Test
             }
         }
 
-        // 2. Driver ternaries that hand MySQL a SQLite type.
+        // 2. The web installer ships its own MySQL DDL: every line that creates
+        // a MySQL table (marked by AUTO_INCREMENT) must be MySQL-valid too.
+        foreach (explode("\n", $code) as $number => $line) {
+            if (!str_contains($line, 'AUTO_INCREMENT')) {
+                continue;
+            }
+            if (preg_match('/\b(?:TINYTEXT|TEXT|MEDIUMTEXT|LONGTEXT|TINYBLOB|BLOB|MEDIUMBLOB|LONGBLOB)\b[^,;)\n]*\bDEFAULT\b/i', $line)) {
+                $problems[] = $name . ':' . ($number + 1) . ' (installer MySQL DDL): TEXT/BLOB column with a DEFAULT';
+            }
+        }
+
+        // 3. Driver ternaries that hand MySQL a SQLite type.
         if (preg_match("/===\\s*'mysql'\\s*\\?\\s*'[^']*(?:TEXT|BLOB)[^']*DEFAULT[^']*'/i", $code, $m)) {
             $problems[] = "{$name}: MySQL branch uses " . $m[0];
         }

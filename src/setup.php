@@ -24,7 +24,9 @@ foreach (['data', 'plugins', 'uploads', 'uploads/avatars', 'uploads/private'] as
 require_once __DIR__ . '/Helpers/Upload.php';
 ensure_private_uploads_dir();
 
-$dbPath = $config['db_path'];
+// db_path only exists for SQLite installations: reading it unconditionally
+// raised "Undefined array key" warnings on every MySQL request.
+$dbPath = $config['db_path'] ?? '';
 $dbDriver = $config['db_driver'] ?? 'sqlite';
 
 require_once __DIR__ . '/../lib/BbPdo.php';
@@ -33,7 +35,13 @@ if ($dbDriver === 'mysql') {
     $dsn = "mysql:host={$config['db_host']};dbname={$config['db_name']};charset=utf8mb4";
     $pdo = new BbPdo($dsn, $config['db_user'], $config['db_pass']);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    $pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
+
+    // Shared hosts sometimes reject driver attributes or session statements
+    // (restricted users): none of these is required for the forum to work, so a
+    // refusal must never turn every request into a 500.
+    try {
+        $pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
+    } catch (Throwable $e) {}
 
     try {
         $pdo->exec("ALTER DATABASE `{$config['db_name']}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
@@ -49,7 +57,9 @@ if ($dbDriver === 'mysql') {
         $pdo->exec("SET time_zone = '+00:00'");
     } catch (PDOException $e) {}
 
-    $pdo->exec("SET FOREIGN_KEY_CHECKS = ON");
+    try {
+        $pdo->exec("SET FOREIGN_KEY_CHECKS = ON");
+    } catch (PDOException $e) {}
 } else {
     $isNewDb = !file_exists($dbPath);
     $pdo = new PDO('sqlite:' . $dbPath);

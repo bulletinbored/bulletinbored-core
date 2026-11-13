@@ -50,6 +50,22 @@ The version in this file must always match the `VERSION` file (enforced by
 - `whereIn('column', [])` matches nothing (it previously relied on the string
   `'1'` being accepted as a column name).
 
+### Fixed (remote installation on MySQL/MariaDB)
+
+- **Unhandled 500s are now diagnosable on shared hosting.** `data/logs/error.log`
+  receives the exception message, class, file/line, request URI, PHP version and
+  database target (no credentials). Previously the only trace was `error_log()`,
+  which most shared hosts never show.
+- **Nothing in the MySQL bootstrap can fail the request any more.** The driver
+  attribute and the session statements (`EMULATE_PREPARES`, `sql_mode`,
+  `time_zone`, `FOREIGN_KEY_CHECKS`) are best effort: a restricted database user
+  no longer turns every request into a 500.
+- **`src/setup.php` no longer reads `db_path` on MySQL installations**, which
+  raised "Undefined array key db_path" warnings on every request.
+- **The web installer's MySQL DDL is MySQL 8 compatible too**: `allowed_roles`
+  is `TEXT` without a default, like the migration. The dialect guard now also
+  scans the installer's MySQL statements.
+
 ### Fixed (MySQL 8 compatibility)
 
 - **Fresh MySQL 8 installations failed at the initial schema.** The MySQL branch
