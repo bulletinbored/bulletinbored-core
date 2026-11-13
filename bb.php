@@ -493,8 +493,22 @@ $registry->register('doctor', 'Run system diagnostics', function($args) use ($pd
             }
         }
 
-        $tables = $pdo->query("SELECT name FROM sqlite_master WHERE type='table'")->fetchAll(PDO::FETCH_COLUMN);
+        // sqlite_master only exists on SQLite: on MySQL it raised
+        // "Table 'sqlite_master' doesn't exist" and made doctor report a
+        // database error on a perfectly healthy installation.
+        $driverName = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+        if ($driverName === 'mysql') {
+            $tables = $pdo->query(
+                "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()"
+            )->fetchAll(PDO::FETCH_COLUMN);
+        } else {
+            $tables = $pdo->query("SELECT name FROM sqlite_master WHERE type='table'")->fetchAll(PDO::FETCH_COLUMN);
+        }
         success("  Tables: " . count($tables));
+        if ($tables !== [] && !in_array('users', $tables, true)) {
+            warning("  Table 'users' is missing: the schema is incomplete, run 'php bb.php migrate'");
+            $warnings++;
+        }
     } catch (Throwable $e) {
         fail("  Database error: " . $e->getMessage());
         $issues++;

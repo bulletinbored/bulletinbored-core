@@ -327,6 +327,14 @@ class DbQuery
         return $result[0] ?? null;
     }
 
+    /**
+     * Number of rows the query returns.
+     *
+     * With a join this is the number of joined rows, not of distinct rows of
+     * the main table: `threads LEFT JOIN posts` counts each thread once per
+     * post (and once if it has none). For a distinct count use
+     * `rawFirst('SELECT COUNT(DISTINCT threads.id) FROM ...')`.
+     */
     public function count(): int
     {
         $sql = "SELECT COUNT(*) FROM {$this->table}" . $this->buildJoins() . $this->buildWhere();

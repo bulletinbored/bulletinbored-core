@@ -327,7 +327,29 @@ function test_foreign_keys_skip_non_innodb_tables(): Test
     return $t;
 }
 
+function test_doctor_queries_are_driver_aware(): Test
+{
+    $t = new Test('MySQL dialect - doctor does not query sqlite_master on MySQL');
+
+    $code = (string)file_get_contents(dirname(__DIR__) . '/bb.php');
+    // Comments mention both names; compare the statements only.
+    $code = preg_replace('#/\*.*?\*/#s', '', $code) ?? $code;
+    $code = preg_replace('#^\s*//.*$#m', '', $code) ?? $code;
+
+    $t->assert('doctor queries information_schema for MySQL', str_contains($code, 'information_schema.TABLES'));
+
+    // The sqlite_master query must live in the non-MySQL branch.
+    $posSqlite = strpos($code, 'sqlite_master');
+    $posMysql = strpos($code, 'information_schema.TABLES');
+    $t->assertNotFalse('sqlite_master still used for SQLite', $posSqlite);
+    $t->assertNotFalse('information_schema used for MySQL', $posMysql);
+    $t->assertTrue('The MySQL branch comes first', $posMysql !== false && $posSqlite !== false && $posMysql < $posSqlite);
+
+    return $t;
+}
+
 register_tests(
+    'test_doctor_queries_are_driver_aware',
     'test_mysql_normalisation_rules',
     'test_mysql_rejects_text_defaults',
     'test_migration_mysql_paths_are_valid_mysql',

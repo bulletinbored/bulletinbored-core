@@ -190,7 +190,7 @@ Run it **from a clean checkout** as well — CI does, and a working copy hides
 untracked state (`plugins/`, `config.json`, `data/*`):
 
 ```bash
-git archive HEAD | tar -x -C /tmp/clean && cd /tmp/clean && php tests/run.php
+mkdir -p /tmp/clean && git archive HEAD | tar -x -C /tmp/clean && cd /tmp/clean && php tests/run.php
 ```
 
 Coverage (Xdebug or PCOV required) and a regression floor over `src/` + `lib/`:

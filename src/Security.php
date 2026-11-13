@@ -86,9 +86,48 @@ function rate_limit_client_ip(): string
  * Uses atomic file locking to prevent race conditions under concurrency.
  */
 /**
+ * Is the locked handle still the file that lives at $path?
+ *
+ * Guards the window between fopen() and flock(): if the garbage collector
+ * unlinked (or another process replaced) the bucket in between, the handle
+ * points at an orphaned inode and writing there would lose the hit.
+ */
+function rate_limit_bucket_is_current(string $file, $handle): bool
+{
+    // stat() results are cached per request: without this, a stat() performed
+    // before the GC ran would make the check compare against stale data.
+    clearstatcache(true, $file);
+    $fpStat = @fstat($handle);
+    $pathStat = @stat($file);
+    if ($pathStat === false) {
+        return false; // unlinked
+    }
+    if (!is_array($fpStat)) {
+        return true; // cannot compare: assume the normal case
+    }
+    $fpIno = (int)($fpStat['ino'] ?? 0);
+    $pathIno = (int)($pathStat['ino'] ?? 0);
+    if ($fpIno > 0 && $pathIno > 0 && $fpIno !== $pathIno) {
+        return false; // the name now points at a different file
+    }
+    return true;
+}
+
+/**
  * Delete rate-limit buckets that have not been touched for $maxAge seconds.
  * Called opportunistically by rate_limit() (one file per action+key would
  * otherwise accumulate forever). Returns the number of files removed.
+ *
+ * The unlink happens while holding the same lock rate_limit() uses, and the
+ * age is re-checked after acquiring it: otherwise a bucket could be removed
+ * while a request is writing to it, losing that hit (the writer would write to
+ * an unlinked inode and the next request would start from a fresh counter).
+ * A bucket that is currently locked is skipped (LOCK_NB) and retried on the
+ * next pass, so the GC never stalls a request.
+ *
+ * $maxAge must stay well above the largest rate-limit window, otherwise
+ * removing an expired-by-age bucket could drop timestamps that are still
+ * inside its window.
  */
 function rate_limit_gc(string $dir, int $maxAge = 86400): int
 {
@@ -98,12 +137,24 @@ function rate_limit_gc(string $dir, int $maxAge = 86400): int
     $now = time();
     $removed = 0;
     foreach (glob($dir . '/*.json') ?: [] as $file) {
-        $mtime = @filemtime($file);
-        if ($mtime !== false && ($now - $mtime) > $maxAge) {
-            if (@unlink($file)) {
-                $removed++;
-            }
+        // 'r+' (not 'c+'): never recreate a bucket that disappeared meanwhile.
+        $fp = @fopen($file, 'r+');
+        if ($fp === false) {
+            continue;
         }
+        if (!flock($fp, LOCK_EX | LOCK_NB)) {
+            fclose($fp); // in use right now: leave it for the next pass
+            continue;
+        }
+
+        clearstatcache(true, $file);
+        $mtime = @filemtime($file);
+        if ($mtime !== false && ($now - $mtime) > $maxAge && @unlink($file)) {
+            $removed++;
+        }
+
+        flock($fp, LOCK_UN);
+        fclose($fp);
     }
     return $removed;
 }
@@ -155,14 +206,34 @@ function rate_limit(string $action, int $max = 10, int $window = 300, ?string $k
     $now = time();
     $hits = [];
 
-    $fp = @fopen($file, 'c+');
+    $fp = false;
+    for ($attempt = 1; $attempt <= 3; $attempt++) {
+        $fp = @fopen($file, 'c+');
+        if ($fp === false) {
+            break;
+        }
+        if (!flock($fp, LOCK_EX)) {
+            fclose($fp);
+            $fp = false;
+            break;
+        }
+
+        // The garbage collector unlinks expired buckets (holding this same
+        // lock). If that happened between our fopen() and flock(), we are
+        // holding a lock on an unlinked inode: writing there would silently
+        // lose the hit. Detect it and retry on the fresh file.
+        if (rate_limit_bucket_is_current($file, $fp)) {
+            break;
+        }
+
+        flock($fp, LOCK_UN);
+        fclose($fp);
+        $fp = false;
+        clearstatcache(true, $file);
+    }
+
     if ($fp === false) {
         log_security_event('rate_limit_file_fail', ['action' => $action, 'key' => $key]);
-        return $onFailure;
-    }
-    if (!flock($fp, LOCK_EX)) {
-        fclose($fp);
-        log_security_event('rate_limit_lock_fail', ['action' => $action, 'key' => $key]);
         return $onFailure;
     }
 

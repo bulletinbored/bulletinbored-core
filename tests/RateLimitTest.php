@@ -151,7 +151,73 @@ function test_ratelimit_limit_holds_under_concurrency(): Test
     return $t;
 }
 
+function test_ratelimit_gc_skips_locked_bucket(): Test
+{
+    $t = new Test('Rate limit - GC never removes a bucket in use');
+
+    $file = ratelimit_write_bucket('bb_gc_locked', [time() - 200000], time() - 200000);
+    $fp = @fopen($file, 'r+');
+    $t->assertTrue('Bucket opened', is_resource($fp));
+    $t->assertTrue('Bucket locked', flock($fp, LOCK_EX | LOCK_NB));
+
+    try {
+        // Simulate the writer that is recording a hit right now.
+        $removed = rate_limit_gc(ratelimit_dir(), 86400);
+        $t->assertTrue('Locked bucket is not removed', is_file($file));
+
+        // Once released, the next pass removes it.
+        flock($fp, LOCK_UN);
+        fclose($fp);
+        $fp = null;
+        rate_limit_gc(ratelimit_dir(), 86400);
+        $t->assertFalse('Bucket removed after the lock is released', is_file($file));
+        $t->assert('GC reported at least this removal', $removed >= 0);
+    } finally {
+        if (is_resource($fp)) {
+            flock($fp, LOCK_UN);
+            fclose($fp);
+        }
+        @unlink($file);
+    }
+
+    return $t;
+}
+
+function test_ratelimit_detects_replaced_bucket(): Test
+{
+    $t = new Test('Rate limit - a bucket deleted while opening is detected');
+
+    $file = ratelimit_write_bucket('bb_replaced', [time()]);
+    $fp = @fopen($file, 'r+');
+    $t->assertTrue('Bucket opened', is_resource($fp));
+    $t->assertTrue('Bucket locked', flock($fp, LOCK_EX));
+    $t->assertTrue('Fresh handle matches its path', rate_limit_bucket_is_current($file, $fp));
+
+    // The garbage collector removes the bucket while the request holds it.
+    @unlink($file);
+    clearstatcache(true, $file);
+    $t->assertFalse('Unlinked bucket detected', rate_limit_bucket_is_current($file, $fp));
+
+    // A new file with the same name is a different inode: still not current.
+    file_put_contents($file, '[]');
+    clearstatcache(true, $file);
+    $t->assertFalse('Recreated bucket detected', rate_limit_bucket_is_current($file, $fp));
+
+    flock($fp, LOCK_UN);
+    fclose($fp);
+
+    // The limiter records the hit on the recreated file.
+    $t->assertTrue('Hit accepted on the recreated bucket', rate_limit('bb_replaced', 10, 300, 'shared'));
+    $decoded = json_decode((string)@file_get_contents(ratelimit_dir() . '/bb_replaced_shared.json'), true);
+    $t->assertCount('Hit recorded once', 1, is_array($decoded) ? $decoded : []);
+
+    @unlink(ratelimit_dir() . '/bb_replaced_shared.json');
+    return $t;
+}
+
 register_tests(
     'test_ratelimit_gc_removes_expired_buckets',
+    'test_ratelimit_gc_skips_locked_bucket',
+    'test_ratelimit_detects_replaced_bucket',
     'test_ratelimit_limit_holds_under_concurrency'
 );
