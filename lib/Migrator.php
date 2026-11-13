@@ -91,21 +91,29 @@ class Migrator
         $driver = $this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
 
         if ($driver === 'mysql') {
+            // VARCHAR(191), not 255: with utf8mb4 an indexed VARCHAR(255) needs
+            // 1020 bytes, which exceeds the 1000-byte MyISAM key limit and the
+            // 767-byte limit of older InnoDB builds (error 1071 "Specified key
+            // was too long"). 191 * 4 = 764 bytes is safe everywhere, and a
+            // migration id never comes close to that length.
+            // ENGINE=InnoDB: explicit, because hosts may default to MyISAM,
+            // which has no transactions and cannot hold the foreign keys added
+            // later by the schema migrations.
             $this->pdo->exec("
                 CREATE TABLE IF NOT EXISTS migrations (
                     id INT AUTO_INCREMENT PRIMARY KEY,
-                    migration VARCHAR(255) NOT NULL UNIQUE,
+                    migration VARCHAR(191) NOT NULL UNIQUE,
                     batch INT NOT NULL,
                     ran_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             ");
             $this->pdo->exec("
                 CREATE TABLE IF NOT EXISTS migration_progress (
-                    migration VARCHAR(255) NOT NULL PRIMARY KEY,
+                    migration VARCHAR(191) NOT NULL PRIMARY KEY,
                     batch INT NOT NULL,
                     started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     error TEXT NULL
-                )
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             ");
         } else {
             $this->pdo->exec("

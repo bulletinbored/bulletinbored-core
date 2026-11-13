@@ -171,6 +171,21 @@ If and when a community forms, any future change to the license will be decided 
 
 Contributions are accepted under the terms of the [CLA.md](CLA.md).
 
+## MySQL / MariaDB storage engine
+
+bulletinbored creates its tables with `ENGINE=InnoDB`, which is what foreign
+keys and transactions require. On a server whose default engine is MyISAM the
+forum still runs: the foreign-key migration detects it, logs the affected
+tables and completes without constraints. To enable them, convert the tables
+once:
+
+```sql
+ALTER TABLE users ENGINE=InnoDB;      -- repeat for every table in the database
+```
+
+Indexed text columns are limited to 191 characters so their utf8mb4 indexes fit
+the 767/1000-byte key limits of older MySQL/MariaDB builds.
+
 ## Troubleshooting a 500
 
 Unhandled errors are written to `data/logs/error.log` (message, file/line,

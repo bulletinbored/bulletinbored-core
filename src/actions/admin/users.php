@@ -74,6 +74,10 @@ function handle_admin_user_edit(string $method, array $params = []): \Bulletin\R
         $newEmail = trim($_POST['email'] ?? '');
         $newRole = $_POST['role'] ?? 'user';
         $newStatus = $_POST['status'] ?? 'active';
+        if ($newUsername !== '' && !empty(validate_username_length($newUsername))) {
+            $_SESSION['admin_user_error'] = 'Username is too long (maximum ' . BB_USERNAME_MAX_LENGTH . ' characters)';
+            return redirect(url('admin_user_edit', ['id' => $editUserId]));
+        }
         if ($newUsername !== '') {
             // A change of role or status must invalidate every session already
             // open for that account: the session caches user_role/user_status,
@@ -123,6 +127,12 @@ function handle_admin_create_user_post(): \Bulletin\Response|bool
 
     if ($username === '' || $password === '') {
         $_SESSION['admin_user_error'] = 'Username and password are required';
+        $_SESSION['admin_user_old'] = compact('username', 'email', 'role', 'status', 'emailVerified');
+        return redirect(url('admin_users'));
+    }
+
+    if (!empty(validate_username_length($username))) {
+        $_SESSION['admin_user_error'] = 'Username is too long (maximum ' . BB_USERNAME_MAX_LENGTH . ' characters)';
         $_SESSION['admin_user_old'] = compact('username', 'email', 'role', 'status', 'emailVerified');
         return redirect(url('admin_users'));
     }

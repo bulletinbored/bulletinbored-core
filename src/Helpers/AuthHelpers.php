@@ -70,6 +70,26 @@ function is_logged_in(): bool
  */
 function is_admin() { return ($_SESSION['user_role'] ?? '') === 'admin'; }
 
+/**
+ * Maximum stored username length.
+ *
+ * Indexed string columns are VARCHAR(191) on MySQL so their utf8mb4 index fits
+ * the 767/1000-byte key limits of older servers; allowing longer usernames
+ * would fail with "Data too long for column 'username'" on those installs.
+ */
+const BB_USERNAME_MAX_LENGTH = 191;
+
+/**
+ * @return string[] error keys, empty when the username is acceptable
+ */
+function validate_username_length(string $username): array
+{
+    if (mb_strlen($username) > BB_USERNAME_MAX_LENGTH) {
+        return ['username_too_long'];
+    }
+    return [];
+}
+
 function validate_password_strength(string $password): array
 {
     $errors = [];

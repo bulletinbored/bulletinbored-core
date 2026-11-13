@@ -557,7 +557,23 @@ function test_login_rate_limiting(): Test
     return $t;
 }
 
+function test_username_length_limit(): Test
+{
+    $t = new Test('Registration - username length limit');
+
+    $t->assertEquals('Limit matches the indexed column size', 191, BB_USERNAME_MAX_LENGTH);
+    $t->assertCount('Short name accepted', 0, validate_username_length('alice'));
+    $t->assertCount('Name at the limit accepted', 0, validate_username_length(str_repeat('a', BB_USERNAME_MAX_LENGTH)));
+    $t->assertCount('Name over the limit rejected', 1, validate_username_length(str_repeat('a', BB_USERNAME_MAX_LENGTH + 1)));
+    $t->assertContains('Error key', 'username_too_long', validate_username_length(str_repeat('a', 200)));
+    $t->assertCount('Multibyte name counted in characters, not bytes', 0, validate_username_length(str_repeat('è', 191)));
+    $t->assertCount('Multibyte name over the limit rejected', 1, validate_username_length(str_repeat('è', 192)));
+
+    return $t;
+}
+
 register_tests(
+    'test_username_length_limit',
     'test_register_user_success',
     'test_register_duplicate_username',
     'test_register_empty_fields',

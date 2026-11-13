@@ -50,6 +50,25 @@ The version in this file must always match the `VERSION` file (enforced by
 - `whereIn('column', [])` matches nothing (it previously relied on the string
   `'1'` being accepted as a column name).
 
+### Fixed (MySQL: "Specified key was too long" on shared hosting)
+
+- **Installations on hosts with a 1000-byte index limit failed with error 1071.**
+  `migrations.migration` was `VARCHAR(255) NOT NULL UNIQUE`: with utf8mb4 an
+  indexed 255-character column needs 1020 bytes, above the MyISAM limit (1000)
+  and the limit of older InnoDB builds (767). The table could not be created,
+  `setup.php` threw and every page returned 500 — while the installer, which
+  does not create that table, completed. Indexed string columns are now
+  `VARCHAR(191)` (764 bytes), in the migrator, in the initial schema and in the
+  installer.
+- **Tables are created with `ENGINE=InnoDB` explicitly.** Hosts often default
+  to MyISAM, which has no transactions and cannot hold foreign keys.
+- **`20260904_add_foreign_keys` skips gracefully on MyISAM.** It logs which
+  tables are not InnoDB and completes, instead of failing every request with
+  "Cannot add foreign key constraint" (1215).
+- **Username length is capped at 191 characters** in registration, user
+  creation and rename, so the shorter indexed column can never overflow
+  ("Data too long for column 'username'").
+
 ### Fixed (remote installation on MySQL/MariaDB)
 
 - **Unhandled 500s are now diagnosable on shared hosting.** `data/logs/error.log`

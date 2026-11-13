@@ -16,6 +16,32 @@
 
 require_once __DIR__ . '/harness.php';
 require_once __DIR__ . '/../lib/BbPdo.php';
+require_once __DIR__ . '/../lib/Migrator.php';
+
+function mysql_dialect_driver(): string
+{
+    return (string)($_ENV['DB_DRIVER'] ?? getenv('DB_DRIVER') ?: 'sqlite');
+}
+
+function mysql_dialect_pdo(): ?PDO
+{
+    if (mysql_dialect_driver() !== 'mysql') {
+        return null;
+    }
+    try {
+        $host = $_ENV['DB_HOST'] ?? getenv('DB_HOST') ?: 'localhost';
+        $port = $_ENV['DB_PORT'] ?? getenv('DB_PORT') ?: '3306';
+        $name = $_ENV['DB_NAME'] ?? getenv('DB_NAME') ?: 'bulletinbored_test';
+        $user = $_ENV['DB_USER'] ?? getenv('DB_USER') ?: 'root';
+        $pass = $_ENV['DB_PASS'] ?? getenv('DB_PASS') ?: '';
+        $pdo = new BbPdo("mysql:host={$host};port={$port};dbname={$name};charset=utf8mb4", $user, $pass);
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+        return $pdo;
+    } catch (PDOException $e) {
+        return null;
+    }
+}
 
 function test_mysql_normalisation_rules(): Test
 {
@@ -176,8 +202,136 @@ function test_migration_mysql_paths_are_valid_mysql(): Test
     return $t;
 }
 
+function test_indexed_string_columns_fit_old_key_limits(): Test
+{
+    $t = new Test('MySQL dialect - indexed strings fit a 1000-byte key');
+
+    // utf8mb4 uses up to 4 bytes per character: an indexed VARCHAR longer than
+    // 191 characters exceeds the 767-byte limit of older InnoDB builds and the
+    // 1000-byte MyISAM limit (error 1071 "Specified key was too long", which
+    // real shared hosts do return).
+    $files = array_merge(
+        glob(dirname(__DIR__) . '/migrations/*.php') ?: [],
+        [dirname(__DIR__) . '/lib/Migrator.php', dirname(__DIR__) . '/install3.php']
+    );
+
+    $problems = [];
+    foreach ($files as $file) {
+        $name = basename($file);
+        $lines = explode("\n", (string)file_get_contents($file));
+        foreach ($lines as $number => $line) {
+            // A line can declare several columns: check each definition alone so
+            // an unindexed VARCHAR(255) does not trip the guard.
+            foreach (explode(',', $line) as $column) {
+                if (!preg_match('/VARCHAR\((\d+)\)/i', $column, $match)) {
+                    continue;
+                }
+                if (!preg_match('/\b(?:UNIQUE|PRIMARY\s+KEY)\b/i', $column)) {
+                    continue;
+                }
+                if ((int)$match[1] > 191) {
+                    $problems[] = $name . ':' . ($number + 1) . ' indexed VARCHAR(' . $match[1] . ')';
+                }
+            }
+        }
+    }
+
+    $t->assert('No indexed VARCHAR longer than 191 characters', $problems === []);
+    foreach ($problems as $problem) {
+        $t->assert($problem, false);
+    }
+
+    return $t;
+}
+
+function test_migrations_tables_use_innodb(): Test
+{
+    $t = new Test('MySQL dialect - migrations tables are InnoDB (' . mysql_dialect_driver() . ')');
+
+    if (mysql_dialect_driver() !== 'mysql') {
+        $t->assert('Skipped: not a MySQL run', true);
+        return $t;
+    }
+
+    $pdo = mysql_dialect_pdo();
+    if ($pdo === null) {
+        $t->assert('Skipped: MySQL server not reachable', true);
+        return $t;
+    }
+
+    foreach (['migrations', 'migration_progress'] as $table) {
+        $pdo->exec('DROP TABLE IF EXISTS ' . $table);
+    }
+
+    $migrator = new Migrator($pdo, []);
+    $migrator->ensureMigrationsTable();
+
+    $stmt = $pdo->prepare(
+        "SELECT TABLE_NAME, ENGINE FROM information_schema.TABLES
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN ('migrations', 'migration_progress')"
+    );
+    $stmt->execute();
+    $engines = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $engines[$row['TABLE_NAME']] = $row['ENGINE'];
+    }
+
+    foreach (['migrations', 'migration_progress'] as $table) {
+        $t->assertEquals("{$table} uses InnoDB", 'InnoDB', $engines[$table] ?? null);
+    }
+
+    return $t;
+}
+
+function test_foreign_keys_skip_non_innodb_tables(): Test
+{
+    $t = new Test('MySQL dialect - foreign keys skipped on MyISAM (' . mysql_dialect_driver() . ')');
+
+    if (mysql_dialect_driver() !== 'mysql') {
+        $t->assert('Skipped: not a MySQL run', true);
+        return $t;
+    }
+
+    $pdo = mysql_dialect_pdo();
+    if ($pdo === null) {
+        $t->assert('Skipped: MySQL server not reachable', true);
+        return $t;
+    }
+
+    require_once dirname(__DIR__) . '/migrations/20260904_add_foreign_keys.php';
+
+    // MyISAM cannot hold foreign keys: the migration must skip them instead of
+    // failing every request on a host that defaults to MyISAM.
+    $pdo->exec("DROP TABLE IF EXISTS fk_threads");
+    $pdo->exec("DROP TABLE IF EXISTS fk_categories");
+    $pdo->exec("CREATE TABLE fk_threads (id INT AUTO_INCREMENT PRIMARY KEY, category_id INT) ENGINE=MyISAM");
+    $pdo->exec("CREATE TABLE fk_categories (id INT AUTO_INCREMENT PRIMARY KEY) ENGINE=InnoDB");
+
+    $migration = new AddForeignKeys();
+    $threw = null;
+    try {
+        // Only the engine check matters here: it must return before touching
+        // the real schema, which is not present in this fixture.
+        $method = new ReflectionMethod($migration, 'nonInnoDbTables');
+        $method->setAccessible(true);
+        $result = $method->invoke($migration, $pdo);
+        $t->assertNotNull('MyISAM table detected', $result);
+    } catch (\Throwable $e) {
+        $threw = $e;
+    }
+    $t->assertNull('Inspection does not throw', $threw);
+
+    $pdo->exec('DROP TABLE IF EXISTS fk_threads');
+    $pdo->exec('DROP TABLE IF EXISTS fk_categories');
+
+    return $t;
+}
+
 register_tests(
     'test_mysql_normalisation_rules',
     'test_mysql_rejects_text_defaults',
-    'test_migration_mysql_paths_are_valid_mysql'
+    'test_migration_mysql_paths_are_valid_mysql',
+    'test_indexed_string_columns_fit_old_key_limits',
+    'test_migrations_tables_use_innodb',
+    'test_foreign_keys_skip_non_innodb_tables'
 );
