@@ -56,12 +56,15 @@ class InitialSchema
 
     private function upMysql(PDO $pdo): void
     {
-        $charset = "CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci";
+        // ENGINE=InnoDB explicitly: the host may default to MyISAM, which
+        // cannot hold the foreign keys added by 20260904_add_foreign_keys and
+        // limits indexes to 1000 bytes.
+        $charset = "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
 
         $pdo->exec("
             CREATE TABLE IF NOT EXISTS users (
                 id INT AUTO_INCREMENT PRIMARY KEY,
-                username VARCHAR(255) UNIQUE NOT NULL,
+                username VARCHAR(191) UNIQUE NOT NULL,
                 password VARCHAR(255) NOT NULL,
                 email VARCHAR(255),
                 role VARCHAR(50) DEFAULT 'user',
@@ -76,10 +79,11 @@ class InitialSchema
         $pdo->exec("
             CREATE TABLE IF NOT EXISTS categories (
                 id INT AUTO_INCREMENT PRIMARY KEY,
-                name VARCHAR(255) NOT NULL UNIQUE,
+                name VARCHAR(191) NOT NULL UNIQUE,
                 description TEXT,
                 position INT DEFAULT 0,
-                allowed_roles TEXT DEFAULT NULL
+                -- TEXT columns cannot carry a default value on MySQL (error 1101)
+                allowed_roles TEXT
             ) $charset
         ");
 

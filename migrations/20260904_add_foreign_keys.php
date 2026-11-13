@@ -90,11 +90,62 @@ class AddForeignKeys
         return false;
     }
 
+    /**
+     * Tables involved in the foreign keys whose storage engine is not InnoDB.
+     *
+     * @return string[]
+     */
+    private function nonInnoDbTables(PDO $pdo): array
+    {
+        $tables = [];
+        foreach ($this->foreignKeySpecs() as $spec) {
+            $tables[$spec[0]] = true;
+            $tables[$spec[3]] = true;
+        }
+
+        $stmt = $pdo->prepare(
+            "SELECT ENGINE FROM information_schema.TABLES
+             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?"
+        );
+
+        $nonInnoDb = [];
+        foreach (array_keys($tables) as $table) {
+            try {
+                $stmt->execute([$table]);
+                $engine = $stmt->fetchColumn();
+            } catch (\Throwable $e) {
+                return []; // cannot inspect: let the normal path try
+            }
+            if ($engine === false || $engine === null) {
+                continue; // table does not exist yet
+            }
+            if (strcasecmp((string)$engine, 'InnoDB') !== 0) {
+                $nonInnoDb[] = $table . ' (' . $engine . ')';
+            }
+        }
+        return $nonInnoDb;
+    }
+
     public function up(PDO $pdo): void
     {
         $driver = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
 
         if ($driver === 'mysql') {
+            // Foreign keys exist only for InnoDB. Hosts that default to MyISAM
+            // (common on free shared hosting) would otherwise fail every
+            // request with "Cannot add foreign key constraint" (1215). The
+            // application keeps its own integrity checks, so skipping the
+            // constraints is a working fallback rather than a hard failure.
+            $nonInnoDb = $this->nonInnoDbTables($pdo);
+            if ($nonInnoDb !== []) {
+                error_log(
+                    'AddForeignKeys: skipping foreign keys, these tables are not InnoDB: '
+                    . implode(', ', $nonInnoDb)
+                    . '. Convert them with ALTER TABLE ... ENGINE=InnoDB to enable them.'
+                );
+                return;
+            }
+
             $this->checkOrphansAndFail($pdo, 'threads', 'category_id', 'categories', 'id');
             $this->checkOrphansAndFail($pdo, 'threads', 'user_id', 'users', 'id');
             $this->checkOrphansAndFail($pdo, 'posts', 'thread_id', 'threads', 'id');

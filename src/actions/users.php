@@ -138,6 +138,15 @@ function handle_register(string $method): \Bulletin\Response|bool
             return true;
         }
 
+        $nameErrors = validate_username_length($username);
+        if (!empty($nameErrors)) {
+            $error = $nameErrors[0] === 'username_too_long'
+                ? 'Username is too long (maximum ' . BB_USERNAME_MAX_LENGTH . ' characters)'
+                : t($nameErrors[0]);
+            include __DIR__ . '/../../views/register.php';
+            return true;
+        }
+
         $pwErrors = validate_password_strength($password);
         if (!empty($pwErrors)) {
             $error = t($pwErrors[0]);
@@ -512,6 +521,15 @@ function handle_reset_password(string $method): \Bulletin\Response|bool
             include __DIR__ . '/../../views/reset_password.php';
             return true;
         }
+        $nameErrors = validate_username_length($username);
+        if (!empty($nameErrors)) {
+            $error = $nameErrors[0] === 'username_too_long'
+                ? 'Username is too long (maximum ' . BB_USERNAME_MAX_LENGTH . ' characters)'
+                : t($nameErrors[0]);
+            include __DIR__ . '/../../views/register.php';
+            return true;
+        }
+
         $pwErrors = validate_password_strength($password);
         if (!empty($pwErrors)) {
             $error = t($pwErrors[0]);

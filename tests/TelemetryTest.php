@@ -171,7 +171,68 @@ function test_telemetry_defaults_on_when_key_missing(): Test
     return $t;
 }
 
+function test_telemetry_optout_writes_nothing(): Test
+{
+    $t = new Test('Telemetry - opt-out stores no identifier');
+
+    $dir = telemetry_tmp_dir();
+    $configPath = $dir . '/config.json';
+    file_put_contents($configPath, json_encode(['telemetry' => false, 'version' => '1.0.0']));
+
+    $before = json_decode((string)file_get_contents($configPath), true);
+    $calls = 0;
+    $telemetry = new Telemetry(
+        $dir,
+        ['telemetry' => false],
+        $configPath,
+        function () use (&$calls) { $calls++; return true; }
+    );
+
+    $t->assertFalse('maybePing does nothing when disabled', $telemetry->maybePing());
+    $t->assertEquals('transport never called', 0, $calls);
+
+    $after = json_decode((string)file_get_contents($configPath), true);
+    $t->assertFalse('no install_id written on opt-out', isset($after['install_id']));
+    $t->assertEquals('config otherwise unchanged', $before, $after);
+    $t->assertCount('no state file written on opt-out', 0, glob($dir . '/telemetry*') ?: []);
+
+    telemetry_rm_dir($dir);
+    return $t;
+}
+
+function test_telemetry_transport_exception_is_swallowed(): Test
+{
+    $t = new Test('Telemetry - transport failure never breaks the page');
+
+    $dir = telemetry_tmp_dir();
+    $telemetry = new Telemetry(
+        $dir,
+        ['telemetry' => true, 'install_id' => 'abc'],
+        null,
+        function () { throw new RuntimeException('network down'); }
+    );
+
+    $threw = false;
+    $result = false;
+    try {
+        $result = $telemetry->maybePing();
+    } catch (\Throwable $e) {
+        $threw = true;
+    }
+
+    $t->assertFalse('throwing transport does not propagate', $threw);
+    $t->assertFalse('maybePing reports failure', $result);
+
+    // The failure is recorded, so an unreachable server does not cause a storm.
+    $t->assertFalse('immediate retry suppressed', $telemetry->maybePing());
+
+    telemetry_rm_dir($dir);
+    return $t;
+}
+
 register_tests(
+    'test_telemetry_optout_writes_nothing',
+    'test_telemetry_transport_exception_is_swallowed',
     'test_telemetry_generates_valid_uuid',
     'test_telemetry_payload_shape',
     'test_telemetry_disabled_sends_nothing',

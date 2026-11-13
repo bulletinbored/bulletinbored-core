@@ -24,6 +24,15 @@ class BbPdo extends PDO
             return $sql;
         }
 
+        return self::normalizeForMysql($sql);
+    }
+
+    /**
+     * Rewrite SQLite-flavoured SQL so it runs on MySQL/MariaDB.
+     * Public and static so it can be unit-tested without a MySQL server.
+     */
+    public static function normalizeForMysql(string $sql): string
+    {
         // AUTOINCREMENT (SQLite) -> AUTO_INCREMENT (MySQL)
         $sql = preg_replace('#\bAUTOINCREMENT\b#i', 'AUTO_INCREMENT', $sql);
 
@@ -52,6 +61,16 @@ class BbPdo extends PDO
 
         // SQLite "CREATE INDEX IF NOT EXISTS" is not valid MySQL syntax.
         $sql = preg_replace('#CREATE\s+INDEX\s+IF\s+NOT\s+EXISTS#i', 'CREATE INDEX', $sql);
+
+        // TEXT/BLOB columns cannot carry a DEFAULT value on MySQL
+        // ("BLOB, TEXT, GEOMETRY or JSON column ... can't have a default value",
+        // error 1101). MariaDB and SQLite accept it, so plugin migrations
+        // written for SQLite hit this on a MySQL installation.
+        $sql = preg_replace_callback(
+            '#(\b(?:TINYTEXT|TEXT|MEDIUMTEXT|LONGTEXT|TINYBLOB|BLOB|MEDIUMBLOB|LONGBLOB)\b[^\n,;)]*?)\s+DEFAULT\s+(?:NULL\b|\'(?:[^\']|\'\')*\'|\d+|-?\d+\.\d+)#i',
+            fn($m) => $m[1],
+            $sql
+        );
 
         return $sql;
     }

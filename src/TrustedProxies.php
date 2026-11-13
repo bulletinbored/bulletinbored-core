@@ -11,6 +11,34 @@
 
 require_once __DIR__ . '/App.php';
 
+/**
+ * Is the current request served over HTTPS?
+ *
+ * Considers the direct connection and the forwarded headers already validated
+ * by trusted_proxies_detect(). The resolved value is what HSTS and the
+ * HTTPS redirect must use: behind a proxy PHP sees plain HTTP even though the
+ * visitor is on HTTPS, and deciding from $_SERVER['HTTPS'] alone would drop
+ * HSTS on those installations.
+ *
+ * @param array|null $proxyInfo Result of trusted_proxies_detect(); detected
+ *                              when omitted.
+ */
+function request_is_https(?array $proxyInfo = null): bool
+{
+    if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+        return true;
+    }
+    if (isset($_SERVER['SERVER_PORT']) && (int)$_SERVER['SERVER_PORT'] === 443) {
+        return true;
+    }
+
+    $info = $proxyInfo ?? trusted_proxies_detect();
+    if (($info['forwarded_proto'] ?? null) === 'https') {
+        return true;
+    }
+    return ($info['forwarded_ssl'] ?? null) === 'on';
+}
+
 function trusted_proxies_detect(): array
 {
     $config = App::getInstance()->config;

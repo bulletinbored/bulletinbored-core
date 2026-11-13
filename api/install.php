@@ -9,6 +9,7 @@ session_start();
 
 require_once __DIR__ . '/../lib/PluginManager.php';
 require_once __DIR__ . '/../lib/ThemeManager.php';
+require_once __DIR__ . '/../lib/AdminAuth.php';
 require_once __DIR__ . '/../src/Security.php';
 
 // This endpoint does not go through src/bootstrap.php, so it registers its own
@@ -35,7 +36,20 @@ if (empty($config)) {
     }
 }
 
-if (empty($_SESSION['user_role']) || $_SESSION['user_role'] !== 'admin') {
+// Authorization is resolved against the database, never from $_SESSION['user_role'].
+// This endpoint bypasses src/bootstrap.php, so the session role could belong to
+// an account that has since been deleted, demoted, banned or suspended.
+$adminUser = null;
+try {
+    $pdo = AdminAuth::connect($config);
+    $adminUser = AdminAuth::verifySession($pdo, $_SESSION);
+} catch (\Throwable $e) {
+    @error_log('api/install: authorization check failed: ' . $e->getMessage());
+    $adminUser = null;
+}
+
+if ($adminUser === null) {
+    http_response_code(403);
     echo json_encode(['success' => false, 'message' => 'Admin required']);
     exit;
 }

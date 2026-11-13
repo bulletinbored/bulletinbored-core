@@ -9,6 +9,7 @@ require_once __DIR__ . '/../src/bootstrap.php';
 require_once __DIR__ . '/../src/helpers.php';
 require_once __DIR__ . '/../src/Helpers/Upload.php';
 require_once __DIR__ . '/../src/csp.php';
+require_once __DIR__ . '/../src/TrustedProxies.php';
 
 function test_sql_injection_login(): Test
 {
@@ -276,6 +277,73 @@ function test_security_headers_frame_options(): Test
     return $t;
 }
 
+function test_hsts_header_configuration(): Test
+{
+    $t = new Test('Security - HSTS header is configurable');
+
+    $t->assertEquals(
+        'Default protects the host for one year without binding subdomains',
+        'max-age=31536000',
+        build_hsts_header([])
+    );
+    $t->assertEquals(
+        'Custom max-age honoured',
+        'max-age=600',
+        build_hsts_header(['hsts_max_age' => 600])
+    );
+    $t->assertEquals(
+        'includeSubDomains is opt-in',
+        'max-age=31536000; includeSubDomains',
+        build_hsts_header(['hsts_include_subdomains' => true])
+    );
+    $t->assertNull('max-age 0 disables HSTS', build_hsts_header(['hsts_max_age' => 0]));
+    $t->assertEquals(
+        'Invalid max-age falls back to the default',
+        'max-age=31536000',
+        build_hsts_header(['hsts_max_age' => 'not-a-number'])
+    );
+
+    return $t;
+}
+
+function test_https_detection_uses_trusted_proxies(): Test
+{
+    $t = new Test('Security - HTTPS detection behind a proxy');
+
+    $server = $_SERVER;
+    App::getInstance()->config = ['trusted_proxies' => ['10.0.0.1']];
+
+    try {
+        $_SERVER = ['REMOTE_ADDR' => '10.0.0.1', 'SERVER_PORT' => 80];
+        $t->assertFalse('Plain HTTP direct request', request_is_https());
+
+        $_SERVER = ['REMOTE_ADDR' => '10.0.0.1', 'SERVER_PORT' => 80, 'HTTPS' => 'on'];
+        $t->assertTrue('Direct HTTPS', request_is_https());
+
+        $_SERVER = ['REMOTE_ADDR' => '10.0.0.1', 'SERVER_PORT' => 443];
+        $t->assertTrue('Port 443 is HTTPS', request_is_https());
+
+        // Proxy terminates TLS: PHP sees HTTP but the forwarded header says https.
+        $_SERVER = ['REMOTE_ADDR' => '10.0.0.1', 'SERVER_PORT' => 80, 'HTTP_X_FORWARDED_PROTO' => 'https'];
+        $info = trusted_proxies_detect();
+        $t->assertTrue('Forwarded proto from a trusted proxy', request_is_https($info));
+
+        $_SERVER = ['REMOTE_ADDR' => '10.0.0.1', 'SERVER_PORT' => 80, 'HTTP_X_FORWARDED_SSL' => 'on'];
+        $info = trusted_proxies_detect();
+        $t->assertTrue('Forwarded ssl from a trusted proxy', request_is_https($info));
+
+        // Same headers from an untrusted client must be ignored.
+        $_SERVER = ['REMOTE_ADDR' => '203.0.113.9', 'SERVER_PORT' => 80, 'HTTP_X_FORWARDED_PROTO' => 'https'];
+        $info = trusted_proxies_detect();
+        $t->assertFalse('Forged forwarded header ignored', request_is_https($info));
+    } finally {
+        $_SERVER = $server;
+        App::reset();
+    }
+
+    return $t;
+}
+
 function test_csp_nonce_generation(): Test
 {
     $t = new Test('Security - CSP Nonce Generation');
@@ -345,6 +413,8 @@ register_tests(
     'test_security_headers_no_inline_scripts',
     'test_security_headers_x_content_type',
     'test_security_headers_frame_options',
+    'test_hsts_header_configuration',
+    'test_https_detection_uses_trusted_proxies',
     'test_csp_nonce_generation',
     'test_upload_double_extension',
     'test_upload_null_byte'

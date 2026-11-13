@@ -258,7 +258,11 @@ function test_nb001_version(): Test
     $t = new Test('NB-001 - VERSION file exists and is valid');
     $version = trim(file_get_contents(__DIR__ . '/../VERSION'));
     $t->assert('VERSION file not empty', !empty($version));
-    $t->assert('VERSION matches semver format', preg_match('/^\d+\.\d+\.\d+$/', $version));
+    // SemVer, including prerelease/build suffixes (1.0.0, 1.0.0-rc.1, 1.0.0+build.5).
+    $t->assert(
+        "VERSION matches semver format (got: {$version})",
+        (bool)preg_match('/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/', $version)
+    );
     return $t;
 }
 

@@ -6,6 +6,25 @@
  * Migrations are PHP files in migrations/ directory with up() and down() methods.
  * Each migration is tracked in the `migrations` table with name, batch, and timestamp.
  *
+ * Recovery after a failed migration
+ * --------------------------------
+ * SQLite rolls back DDL inside a transaction, so a failed migration leaves no
+ * trace. MySQL/MariaDB commit DDL implicitly: if the third statement of a
+ * migration fails, the first two are already applied while the migration is
+ * not recorded, and the next run repeats all of it.
+ *
+ * To make that state visible and recoverable, every run is announced in the
+ * `migration_progress` table before up() executes and cleared when it
+ * completes. A row left behind therefore means "this migration is partially
+ * applied":
+ *
+ *   $migrator->getInterruptedMigrations();   // name, batch, started_at, error
+ *   $migrator->forgetInterrupted($name);     // after manually fixing the DB
+ *   $migrator->recoverInterrupted($name);    // fix applied: record as ran
+ *
+ * Core migrations are written to be idempotent (CREATE TABLE IF NOT EXISTS,
+ * guarded ALTERs), so retrying through migrate() is a normal recovery path.
+ *
  * Plugins can register their own migration paths via addPath().
  *
  * Usage:
@@ -72,13 +91,29 @@ class Migrator
         $driver = $this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
 
         if ($driver === 'mysql') {
+            // VARCHAR(191), not 255: with utf8mb4 an indexed VARCHAR(255) needs
+            // 1020 bytes, which exceeds the 1000-byte MyISAM key limit and the
+            // 767-byte limit of older InnoDB builds (error 1071 "Specified key
+            // was too long"). 191 * 4 = 764 bytes is safe everywhere, and a
+            // migration id never comes close to that length.
+            // ENGINE=InnoDB: explicit, because hosts may default to MyISAM,
+            // which has no transactions and cannot hold the foreign keys added
+            // later by the schema migrations.
             $this->pdo->exec("
                 CREATE TABLE IF NOT EXISTS migrations (
                     id INT AUTO_INCREMENT PRIMARY KEY,
-                    migration VARCHAR(255) NOT NULL UNIQUE,
+                    migration VARCHAR(191) NOT NULL UNIQUE,
                     batch INT NOT NULL,
                     ran_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            ");
+            $this->pdo->exec("
+                CREATE TABLE IF NOT EXISTS migration_progress (
+                    migration VARCHAR(191) NOT NULL PRIMARY KEY,
+                    batch INT NOT NULL,
+                    started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    error TEXT NULL
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             ");
         } else {
             $this->pdo->exec("
@@ -89,7 +124,25 @@ class Migrator
                     ran_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
             ");
+            $this->pdo->exec("
+                CREATE TABLE IF NOT EXISTS migration_progress (
+                    migration TEXT NOT NULL PRIMARY KEY,
+                    batch INTEGER NOT NULL,
+                    started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    error TEXT NULL
+                )
+            ");
         }
+    }
+
+    /**
+     * Whether the driver can roll back DDL inside a transaction.
+     * Protected so a subclass (and the test suite) can emulate a driver
+     * without transactional DDL.
+     */
+    protected function supportsTransactionalDdl(): bool
+    {
+        return $this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite';
     }
 
     /**
@@ -205,18 +258,23 @@ class Migrator
     }
 
     /**
-     * Run a single migration's up() method within a transaction.
-     * On failure, the migration is NOT recorded and the transaction is rolled back.
+     * Run a single migration's up() method.
+     *
+     * On SQLite the whole migration runs inside a transaction and a failure
+     * leaves no trace. On MySQL DDL cannot be rolled back, so the run is
+     * announced in migration_progress first and the error is recorded there
+     * when up() fails; the migration stays pending and can be re-run (core
+     * migrations are idempotent) or repaired manually.
      */
     public function runUp(array $migration, int $batch): void
     {
         $instance = $this->loadMigration($migration['path']);
+        $transactional = $this->supportsTransactionalDdl();
 
-        $driver = $this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
-        $supportsTransactionalDdl = ($driver === 'sqlite');
+        $this->markStarted($migration['name'], $batch, !$transactional);
 
         try {
-            if ($supportsTransactionalDdl) {
+            if ($transactional) {
                 $this->pdo->beginTransaction();
             }
 
@@ -225,18 +283,138 @@ class Migrator
             $stmt = $this->pdo->prepare("INSERT INTO migrations (migration, batch) VALUES (?, ?)");
             $stmt->execute([$migration['name'], $batch]);
 
-            if ($supportsTransactionalDdl) {
+            if ($transactional) {
                 $this->pdo->commit();
             }
+
+            $this->clearProgress($migration['name']);
         } catch (\Throwable $e) {
-            if ($supportsTransactionalDdl && $this->pdo->inTransaction()) {
+            if ($transactional && $this->pdo->inTransaction()) {
                 $this->pdo->rollBack();
             }
+
+            $hint = '';
+            if ($transactional) {
+                // Nothing was applied: drop the marker, a retry starts clean.
+                $this->clearProgress($migration['name']);
+            } else {
+                $this->recordFailure($migration['name'], $e->getMessage());
+                $hint = ' The driver cannot roll back schema changes: this migration may be partially applied.'
+                    . ' Core migrations are idempotent, so running the updater again is safe; otherwise repair'
+                    . ' the schema manually and call recoverInterrupted().';
+            }
+
             throw new RuntimeException(
-                "Migration '{$migration['name']}' failed: " . $e->getMessage(),
+                "Migration '{$migration['name']}' failed: " . $e->getMessage() . $hint,
                 0,
                 $e
             );
+        }
+    }
+
+    /**
+     * Migrations that started but never completed (non-transactional drivers).
+     *
+     * @return array<int, array{migration: string, batch: int, started_at: string, error: ?string}>
+     */
+    public function getInterruptedMigrations(): array
+    {
+        try {
+            $stmt = $this->pdo->query("SELECT migration, batch, started_at, error FROM migration_progress ORDER BY started_at ASC");
+            return $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    public function isInterrupted(string $name): bool
+    {
+        foreach ($this->getInterruptedMigrations() as $row) {
+            if ($row['migration'] === $name) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Forget an interrupted migration without recording it as applied.
+     * Use after repairing the schema by hand so the migration runs again.
+     */
+    public function forgetInterrupted(string $name): void
+    {
+        $this->clearProgress($name);
+    }
+
+    /**
+     * Record an interrupted migration as applied without re-running up().
+     * Use when the schema was completed manually after a partial run.
+     */
+    public function recoverInterrupted(string $name, ?int $batch = null): void
+    {
+        $batch = $batch ?? $this->getNextBatch();
+        $stmt = $this->pdo->prepare("INSERT INTO migrations (migration, batch) VALUES (?, ?)");
+        $stmt->execute([$name, $batch]);
+        $this->clearProgress($name);
+    }
+
+    /**
+     * Announce a migration run in migration_progress.
+     *
+     * On drivers with transactional DDL this is best effort: a failure would
+     * not lose recoverable state, because a failed migration is rolled back.
+     * On MySQL/MariaDB it is mandatory: without the marker an interrupted
+     * migration leaves a half-applied schema with no trace of what happened,
+     * so the migration is refused instead of being run blind.
+     */
+    private function markStarted(string $name, int $batch, bool $required = false): void
+    {
+        try {
+            $this->pdo->prepare("DELETE FROM migration_progress WHERE migration = ?")->execute([$name]);
+            $this->pdo->prepare("INSERT INTO migration_progress (migration, batch) VALUES (?, ?)")
+                ->execute([$name, $batch]);
+
+            if ($required && !$this->progressExists($name)) {
+                throw new RuntimeException('the progress row could not be read back');
+            }
+        } catch (\Throwable $e) {
+            if ($required) {
+                throw new RuntimeException(
+                    "Cannot record the start of migration '{$name}' in migration_progress: " . $e->getMessage()
+                    . ' This driver cannot roll schema changes back, so running the migration without a recovery'
+                    . ' marker is unsafe. Fix the database permissions/table and retry.',
+                    0,
+                    $e
+                );
+            }
+            // Transactional driver: the migration can be rolled back on failure.
+            error_log('Migrator: cannot record progress for ' . $name . ': ' . $e->getMessage());
+        }
+    }
+
+    private function progressExists(string $name): bool
+    {
+        $stmt = $this->pdo->prepare("SELECT COUNT(*) FROM migration_progress WHERE migration = ?");
+        $stmt->execute([$name]);
+        return (int)$stmt->fetchColumn() > 0;
+    }
+
+    private function recordFailure(string $name, string $error): void
+    {
+        try {
+            $this->pdo->prepare("UPDATE migration_progress SET error = ? WHERE migration = ?")
+                ->execute([substr($error, 0, 2000), $name]);
+        } catch (\Throwable $e) {
+            error_log('Migrator: cannot record failure for ' . $name . ': ' . $e->getMessage());
+        }
+    }
+
+    private function clearProgress(string $name): void
+    {
+        try {
+            $this->pdo->prepare("DELETE FROM migration_progress WHERE migration = ?")->execute([$name]);
+        } catch (\Throwable $e) {
+            // Table may not exist on very old installations; ignore.
         }
     }
 
@@ -279,6 +457,54 @@ class Migrator
     }
 
     /**
+     * Retrying an interrupted migration is only safe when the migration is
+     * idempotent. Core migrations are written that way, and a plugin can opt in
+     * by implementing isIdempotent(): bool.
+     *
+     * Everything else is stopped with an actionable error: re-running half a
+     * plugin migration automatically could duplicate non-reversible work
+     * (data imports, column drops, external calls).
+     *
+     * @throws RuntimeException when an interrupted non-core migration is not
+     *                          declared idempotent.
+     */
+    private function assertInterruptedMigrationsAreRetryable(array $pending): void
+    {
+        $pendingByName = [];
+        foreach ($pending as $migration) {
+            $pendingByName[$migration['name']] = $migration;
+        }
+
+        foreach ($this->getInterruptedMigrations() as $interrupted) {
+            $name = (string)$interrupted['migration'];
+            if (!isset($pendingByName[$name])) {
+                continue; // already recorded/recovered, nothing to retry
+            }
+            if (str_starts_with($name, 'core:')) {
+                continue; // core migrations are idempotent by construction
+            }
+
+            $instance = null;
+            try {
+                $instance = $this->loadMigration($pendingByName[$name]['path']);
+            } catch (\Throwable $e) {
+                error_log('Migrator: cannot load interrupted migration ' . $name . ': ' . $e->getMessage());
+            }
+
+            if ($instance !== null && method_exists($instance, 'isIdempotent') && $instance->isIdempotent()) {
+                continue; // the plugin vouches for a safe retry
+            }
+
+            throw new RuntimeException(
+                "Migration '{$name}' was interrupted and is not declared idempotent"
+                . (!empty($interrupted['error']) ? ' (last error: ' . $interrupted['error'] . ')' : '')
+                . '. It was not retried automatically: repair the schema and call recoverInterrupted() to record it,'
+                . ' or call forgetInterrupted() to discard the marker and retry deliberately.'
+            );
+        }
+    }
+
+    /**
      * Run all pending migrations with file-based locking.
      * Prevents concurrent migration runs on the same database.
      *
@@ -310,6 +536,18 @@ class Migrator
         }
 
         try {
+            $this->assertInterruptedMigrationsAreRetryable($pending);
+            $pendingNames = array_column($pending, 'name');
+            foreach ($this->getInterruptedMigrations() as $interrupted) {
+                if (in_array($interrupted['migration'], $pendingNames, true)) {
+                    error_log(sprintf(
+                        'Migrator: retrying interrupted migration %s (previous error: %s)',
+                        $interrupted['migration'],
+                        $interrupted['error'] ?? 'unknown'
+                    ));
+                }
+            }
+
             $batch = $this->getNextBatch();
             $ran = [];
 

@@ -191,6 +191,11 @@ class PackageInstaller
                 continue;
             }
             $expected = array_map(fn($f) => ltrim(str_replace('\\', '/', (string)$f), '/'), $manifest['files']);
+            // manifest.json is the package metadata file, not a declared payload
+            // entry: it is present by definition and must not be reported as
+            // "undeclared" (which is what made nested archives always fail the
+            // integrity check).
+            $expected = array_values(array_filter($expected, fn($f) => $f !== 'manifest.json'));
 
             $actual = [];
             foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS)) as $item) {
@@ -200,6 +205,9 @@ class PackageInstaller
                     // metadata that is not part of the distributable package.
                     // It is not expected in the manifest "files" list.
                     if (self::isRepoOnlyPath($relative)) {
+                        continue;
+                    }
+                    if ($relative === 'manifest.json') {
                         continue;
                     }
                     $actual[] = $relative;
@@ -246,14 +254,24 @@ class PackageInstaller
 
         if (count($entries) === 1 && empty($topLevelFiles)) {
             $nested = $entries[0];
-            foreach (glob($nested . '/*') as $item) {
-                $destItem = $targetDir . '/' . basename($item);
+            // scandir() instead of glob(): a package may ship dotfiles such as
+            // .gitignore or .github/, which glob('*') ignores and which would
+            // otherwise be left behind in the wrapper directory.
+            $children = @scandir($nested) ?: [];
+            foreach ($children as $child) {
+                if ($child === '.' || $child === '..') {
+                    continue;
+                }
+                $item = $nested . '/' . $child;
+                $destItem = $targetDir . '/' . $child;
                 if (file_exists($destItem)) {
                     continue;
                 }
                 @rename($item, $destItem);
             }
-            @rmdir($nested);
+            // Whatever could not be moved is a leftover tree: remove it so the
+            // installed package never contains the wrapper directory.
+            $this->deleteDir($nested);
             return;
         }
 
@@ -290,17 +308,34 @@ class PackageInstaller
     }
 
     /**
-     * Recursively delete a directory.
+     * Recursively delete a directory, dotfiles included.
+     *
+     * glob('*') skips hidden entries, which used to leave ".gitignore",
+     * ".github/" and similar leftovers inside the temporary package directory
+     * (and made rmdir() fail, leaking ".install-tmp-*" directories into the
+     * plugins/themes folder where the loader would notice them).
      */
     public function deleteDir(string $dir): void
     {
-        if (!is_dir($dir)) {
+        if (!is_dir($dir) || is_link($dir)) {
             return;
         }
-        foreach (glob($dir . '/*') as $item) {
-            is_dir($item) ? $this->deleteDir($item) : unlink($item);
+        $items = @scandir($dir);
+        if ($items === false) {
+            return;
         }
-        rmdir($dir);
+        foreach ($items as $item) {
+            if ($item === '.' || $item === '..') {
+                continue;
+            }
+            $path = $dir . '/' . $item;
+            if (is_link($path) || !is_dir($path)) {
+                @unlink($path);
+            } else {
+                $this->deleteDir($path);
+            }
+        }
+        @rmdir($dir);
     }
 
     /**

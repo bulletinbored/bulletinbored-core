@@ -1,5 +1,6 @@
 <?php
 
+require_once __DIR__ . '/Version.php';
 require_once __DIR__ . '/UpdateFetcher.php';
 require_once __DIR__ . '/UpdateBackup.php';
 require_once __DIR__ . '/PackageInstaller.php';
@@ -13,9 +14,16 @@ class UpdateManager
     private UpdateFetcher $fetcher;
     private UpdateBackup $backup;
     private string $rootDir;
+    private bool $allowPrerelease;
 
-    public function __construct(string $manifestPath, ?string $updateServer = null, ?string $githubToken = null, ?string $updateMirror = null, ?string $rootDir = null)
-    {
+    public function __construct(
+        string $manifestPath,
+        ?string $updateServer = null,
+        ?string $githubToken = null,
+        ?string $updateMirror = null,
+        ?string $rootDir = null,
+        ?UpdateFetcher $fetcher = null
+    ) {
         $this->manifestPath = $manifestPath;
         $this->updateServer = $updateServer;
         $this->updateMirror = $updateMirror !== null ? rtrim($updateMirror, '/') : null;
@@ -23,8 +31,63 @@ class UpdateManager
         $this->loadManifest();
 
         $dataDir = dirname($manifestPath);
-        $this->fetcher = new UpdateFetcher($dataDir, $updateServer, $githubToken, $updateMirror);
+        $this->fetcher = $fetcher ?? new UpdateFetcher($dataDir, $updateServer, $githubToken, $updateMirror);
         $this->backup = new UpdateBackup($dataDir, $this->rootDir);
+
+        // Prereleases are opt-in: a stable installation must never be offered
+        // 1.0.0-rc.1, while an installation already running a prerelease may
+        // follow the next one.
+        $this->allowPrerelease = false;
+        if (class_exists('App')) {
+            $appConfig = App::getInstance()->config;
+            $this->allowPrerelease = !empty($appConfig['allow_prerelease_updates']);
+        }
+    }
+
+    /**
+     * Enable or disable prerelease updates (config: allow_prerelease_updates).
+     */
+    public function setAllowPrerelease(bool $allow): self
+    {
+        $this->allowPrerelease = $allow;
+        return $this;
+    }
+
+    public function allowsPrerelease(): bool
+    {
+        return $this->allowPrerelease;
+    }
+
+    /**
+     * A SemVer prerelease has a suffix after the patch number: 1.0.0-rc.1,
+     * 1.0.0-beta.2. Build metadata alone (1.0.0+build) is not a prerelease.
+     */
+    public static function isPrerelease(string $version): bool
+    {
+        return bb_version_is_prerelease($version);
+    }
+
+    /**
+     * Should $remote be offered to an installation running $installed?
+     *
+     * Rules: the remote must be strictly newer, and a prerelease is only
+     * offered when the installation is itself a prerelease or the administrator
+     * opted in. version_compare() already ranks 1.0.0-rc.1 below 1.0.0.
+     */
+    public function isUpdateAllowed(string $installed, ?string $remote): bool
+    {
+        $installed = trim($installed);
+        $remote = $remote !== null ? trim($remote) : '';
+        if ($remote === '' || $installed === '') {
+            return false;
+        }
+        if (!version_compare($remote, $installed, '>')) {
+            return false;
+        }
+        if (self::isPrerelease($remote) && !$this->allowPrerelease && !self::isPrerelease($installed)) {
+            return false;
+        }
+        return true;
     }
 
     private function loadManifest(): void
@@ -35,13 +98,29 @@ class UpdateManager
         }
     }
 
-    private function saveManifest(): void
+    /**
+     * Persist the manifest. Returns false when the file could not be written,
+     * so callers (in particular the core update finalization) do not report
+     * success for metadata that never reached the disk.
+     */
+    private function saveManifest(): bool
     {
         $dir = dirname($this->manifestPath);
-        if (!is_dir($dir)) {
-            mkdir($dir, 0755, true);
+        if (!is_dir($dir) && !@mkdir($dir, 0755, true) && !is_dir($dir)) {
+            error_log('UpdateManager: cannot create manifest directory ' . $dir);
+            return false;
         }
-        file_put_contents($this->manifestPath, json_encode($this->manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+        $json = json_encode($this->manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        if ($json === false) {
+            error_log('UpdateManager: cannot encode the update manifest');
+            return false;
+        }
+        $written = @file_put_contents($this->manifestPath, $json);
+        if ($written === false) {
+            error_log('UpdateManager: cannot write the update manifest ' . $this->manifestPath);
+            return false;
+        }
+        return true;
     }
 
     private function getSection(string $type, string $name): array
@@ -56,13 +135,17 @@ class UpdateManager
         return $section[$name] ?? ['version' => '1.0.0', 'last_check' => null, 'remote_version' => null, 'available_update' => null];
     }
 
-    public function setVersion(string $type, string $name, string $version): void
+    /**
+     * Record the installed version of a component.
+     * Returns false when the manifest could not be persisted.
+     */
+    public function setVersion(string $type, string $name, string $version): bool
     {
         $section = $this->getSection($type, $name);
         $section[$name]['version'] = $version;
         $section[$name]['last_updated'] = date('c');
         $this->manifest[$type] = $section;
-        $this->saveManifest();
+        return $this->saveManifest();
     }
 
     public function getVersion(string $type, string $name): string
@@ -102,10 +185,16 @@ class UpdateManager
             'core' => ['installed' => $coreVersion, 'remote' => null, 'update_available' => false, 'update_url' => null],
         ];
         $results['core']['remote'] = $this->fetcher->fetchRemoteVersion('core');
-        if ($results['core']['remote'] && version_compare($results['core']['remote'], $coreVersion, '>')) {
-            $results['core']['update_available'] = true;
+        $results['core']['update_available'] = $this->isUpdateAllowed($coreVersion, $results['core']['remote']);
+        if ($results['core']['update_available']) {
             $results['core']['update_url'] = $this->updateServer;
         }
+        // Surfaced by the admin UI: "a newer prerelease exists but this
+        // installation only follows stable releases".
+        $results['core']['prerelease_ignored'] = $results['core']['remote'] !== null
+            && self::isPrerelease((string)$results['core']['remote'])
+            && !$results['core']['update_available']
+            && version_compare((string)$results['core']['remote'], $coreVersion, '>');
         $this->recordCheck('core', 'core', $results['core']['remote']);
 
         $catalog = $catalog ?? [];
@@ -123,7 +212,7 @@ class UpdateManager
             if ($remote === null && !empty($catalogVersions[$key])) {
                 $remote = $catalogVersions[$key];
             }
-            $updateAvailable = $remote && version_compare($remote, $plugin['version'], '>');
+            $updateAvailable = $this->isUpdateAllowed((string)$plugin['version'], $remote);
             $results['plugins'][$key] = [
                 'installed' => $plugin['version'],
                 'remote' => $remote,
@@ -139,7 +228,7 @@ class UpdateManager
             if ($remote === null && !empty($catalogVersions[$key])) {
                 $remote = $catalogVersions[$key];
             }
-            $updateAvailable = $remote && version_compare($remote, ($theme['version'] ?? '1.0.0'), '>');
+            $updateAvailable = $this->isUpdateAllowed((string)($theme['version'] ?? '1.0.0'), $remote);
             $results['themes'][$key] = [
                 'installed' => $theme['version'] ?? '1.0.0',
                 'remote' => $remote,
@@ -291,7 +380,9 @@ class UpdateManager
         if (!empty($manifest['core'])) {
             $coreVersion = trim(@file_get_contents(__DIR__ . '/../VERSION') ?: '0.0.0');
             $constraint = $manifest['core'];
-            $ok = $this->checkVersionConstraint($coreVersion, $constraint);
+            // Requirements are matched against the base version, so a plugin
+            // asking for ">=1.0.0" installs on 1.0.0-rc.1.
+            $ok = $this->checkVersionConstraint(bb_version_base($coreVersion), $constraint);
             if (!$ok) {
                 return ['success' => false, 'message' => "Core version {$coreVersion} does not satisfy constraint '{$constraint}'"];
             }
@@ -329,6 +420,13 @@ class UpdateManager
         return true;
     }
 
+    /**
+     * Apply a core update from a ZIP archive uploaded by an administrator.
+     *
+     * Shares every post-copy step with applyCoreUpdate() through
+     * completeCoreUpdate()/finalizeCoreUpdate(), so both update routes leave
+     * the installation in exactly the same state.
+     */
     private function applyCoreUpdateFromZip(string $zipPath): bool
     {
         $errors = $this->preflight('core', '');
@@ -340,8 +438,8 @@ class UpdateManager
         require_once __DIR__ . '/repo_install.php';
 
         $zip = new ZipArchive();
-        $res = $zip->open($zipPath);
-        if ($res !== true) {
+        if ($zip->open($zipPath) !== true) {
+            error_log('BB CORE FAIL zip open');
             return false;
         }
 
@@ -353,56 +451,11 @@ class UpdateManager
 
         if (!$ok) {
             $this->backup->deleteRecursive($tmpExtract);
+            error_log('BB CORE FAIL unsafe zip');
             return false;
         }
 
-        $topDirs = glob($tmpExtract . '*', GLOB_ONLYDIR);
-        $sourceDir = (count($topDirs) === 1) ? $topDirs[0] : $tmpExtract;
-        if (!file_exists($sourceDir . '/index.php') || !file_exists($sourceDir . '/VERSION')) {
-            $this->backup->deleteRecursive($tmpExtract);
-            error_log('BB CORE FAIL invalid package structure');
-            return false;
-        }
-
-        $backupPath = $this->backup->backupCore();
-        if ($backupPath === null) {
-            error_log('BB CORE FAIL: backup failed, aborting update');
-            $this->backup->deleteRecursive($tmpExtract);
-            return false;
-        }
-
-        $root = rtrim(__DIR__ . '/../', '/');
-
-        try {
-            $this->backup->copyRecursive($sourceDir, $root);
-        } catch (\Throwable $e) {
-            if ($backupPath !== null) {
-                $this->backup->restoreCoreBackup($backupPath);
-            }
-            $this->backup->deleteRecursive($tmpExtract);
-            error_log('BB CORE FAIL copy error: ' . $e->getMessage());
-            return false;
-        }
-        $this->backup->deleteRecursive($tmpExtract);
-
-        foreach (glob($root . '/bulletinbored-core-*', GLOB_ONLYDIR) as $nested) {
-            foreach (glob($nested . '/*') as $item) {
-                $base = basename($item);
-                $dest = $root . '/' . $base;
-                if (is_dir($item)) {
-                    $this->backup->copyRecursive($item, $dest);
-                } elseif (is_file($item)) {
-                    if (is_dir($dest)) {
-                        $this->backup->deleteRecursive($dest);
-                    }
-                    copy($item, $dest);
-                }
-            }
-            $this->backup->deleteRecursive($nested);
-        }
-
-        $this->fetcher->clearCache();
-        return true;
+        return $this->completeCoreUpdate($tmpExtract);
     }
 
     public function applyCoreUpdate(string $tag): bool
@@ -445,13 +498,42 @@ class UpdateManager
             return false;
         }
 
-        $topDirs = glob($tmpExtract . '*', GLOB_ONLYDIR);
-        $sourceDir = (count($topDirs) === 1) ? $topDirs[0] : $tmpExtract;
+        return $this->completeCoreUpdate($tmpExtract, $tag);
+    }
+
+    /**
+     * Install an already extracted core package and finalize it.
+     *
+     * @param string      $tmpExtract Directory the archive was extracted into.
+     * @param string|null $tag        Version being applied; when null it is read
+     *                                from the VERSION file in the package.
+     */
+    private function completeCoreUpdate(string $tmpExtract, ?string $tag = null): bool
+    {
+        // A GitHub archive wraps everything in a single "<project>-<version>/"
+        // directory; a hand-made release ZIP usually has the files at the root
+        // but may also contain exactly one real directory (e.g. lib/). Only
+        // treat the single directory as a wrapper when it actually holds the
+        // application entry points.
+        $sourceDir = $tmpExtract;
+        if (!file_exists($tmpExtract . '/index.php') || !file_exists($tmpExtract . '/VERSION')) {
+            $topDirs = glob($tmpExtract . '*', GLOB_ONLYDIR) ?: [];
+            if (count($topDirs) === 1
+                && file_exists($topDirs[0] . '/index.php')
+                && file_exists($topDirs[0] . '/VERSION')) {
+                $sourceDir = $topDirs[0];
+            }
+        }
         if (!file_exists($sourceDir . '/index.php') || !file_exists($sourceDir . '/VERSION')) {
             $this->backup->deleteRecursive($tmpExtract);
             error_log('BB CORE FAIL invalid package structure');
             return false;
         }
+
+        // Read the version shipped in the package before the files are copied:
+        // the manual ZIP route has no tag to fall back on.
+        $packageVersion = $this->readPackageVersion($sourceDir);
+        $version = $tag !== null ? $tag : $packageVersion;
 
         $backupPath = $this->backup->backupCore();
         if ($backupPath === null) {
@@ -460,22 +542,50 @@ class UpdateManager
             return false;
         }
 
-        $root = rtrim(__DIR__ . '/../', '/');
+        $root = $this->rootDir;
 
         try {
             $this->backup->copyRecursive($sourceDir, $root);
         } catch (\Throwable $e) {
-            if ($backupPath !== null) {
-                $this->backup->restoreCoreBackup($backupPath);
-            }
+            $this->backup->restoreCoreBackup($backupPath);
             $this->backup->deleteRecursive($tmpExtract);
             error_log('BB CORE FAIL copy error: ' . $e->getMessage());
             return false;
         }
         $this->backup->deleteRecursive($tmpExtract);
 
-        foreach (glob($root . '/bulletinbored-core-*', GLOB_ONLYDIR) as $nested) {
-            foreach (glob($nested . '/*') as $item) {
+        $this->flattenNestedCoreDir($root);
+        error_log('BB CORE extracted');
+
+        return $this->finalizeCoreUpdate($root, $version);
+    }
+
+    /**
+     * Extract a version number from a package VERSION file.
+     * Returns null when the file is missing or does not look like a version.
+     */
+    private function readPackageVersion(string $sourceDir): ?string
+    {
+        $raw = @file_get_contents($sourceDir . '/VERSION');
+        if ($raw === false) {
+            return null;
+        }
+        $version = trim($raw);
+        if ($version === '' || !preg_match('/^v?\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/', $version)) {
+            return null;
+        }
+        return $version;
+    }
+
+    /**
+     * GitHub archives sometimes contain a top-level project folder that ends up
+     * nested inside the installation root (e.g. bulletinbored-core-1.0.0/).
+     * Move its contents one level up and remove the wrapper directory.
+     */
+    private function flattenNestedCoreDir(string $root): void
+    {
+        foreach (glob($root . '/bulletinbored-core-*', GLOB_ONLYDIR) ?: [] as $nested) {
+            foreach (glob($nested . '/*') ?: [] as $item) {
                 $base = basename($item);
                 $dest = $root . '/' . $base;
                 if (is_dir($item)) {
@@ -489,45 +599,118 @@ class UpdateManager
             }
             $this->backup->deleteRecursive($nested);
         }
+    }
 
+    /**
+     * Post-copy steps shared by every core update route.
+     *
+     * Keeping them in one place is what makes "update from upload" behave like
+     * "update from repository": installer scripts are removed, the version is
+     * recorded in the manifest, in VERSION and in config.json, and the update
+     * cache is cleared.
+     */
+    /**
+     * Post-copy steps shared by every core update route.
+     *
+     * Every metadata write is verified: the update is reported as successful
+     * only when VERSION, config.json and the manifest all carry the new
+     * version. The files themselves are already in place at this point, so a
+     * failure here is reported (and logged with the exact step) instead of
+     * leaving a silent mismatch between the code and the recorded version; a
+     * retry re-runs the copy and the metadata writes idempotently.
+     */
+    private function finalizeCoreUpdate(string $root, ?string $version): bool
+    {
         $this->removeInstallerScripts($root);
-        error_log('BB CORE extracted');
 
-        $this->setVersion('core', 'core', $tag);
-        $versionFile = __DIR__ . '/../VERSION';
-        if (is_writable($versionFile)) {
-            file_put_contents($versionFile, $tag);
+        $failures = [];
+        $normalized = $version !== null ? ltrim(trim($version), 'v') : '';
+        if ($normalized !== '' && preg_match('/^\d+\.\d+\.\d+/', $normalized)) {
+            if (!$this->setVersion('core', 'core', $normalized)) {
+                $failures[] = 'update manifest';
+            }
+
+            $versionFile = rtrim($root, '/') . '/VERSION';
+            if (is_file($versionFile)) {
+                if (@file_put_contents($versionFile, $normalized) === false) {
+                    $failures[] = 'VERSION';
+                }
+            }
+
+            if (!$this->updateVersionInConfig($root, $normalized)) {
+                $failures[] = 'config.json';
+            }
+        } else {
+            error_log('BB CORE WARN: package version unknown, version metadata left unchanged');
         }
 
-        $this->updateVersionInConfig($tag);
-
         $this->fetcher->clearCache();
+
+        if (!empty($failures)) {
+            error_log('BB CORE FAIL: files updated but version metadata not finalized ('
+                . implode(', ', $failures) . '). Fix permissions and re-run the update.');
+            return false;
+        }
         return true;
     }
 
-    private function updateVersionInConfig(string $tag): void
+    /**
+     * Update the version stored in config.json (or the legacy config.php).
+     * Returns false when the file exists but could not be updated.
+     */
+    private function updateVersionInConfig(string $root, string $tag): bool
     {
-        $configJsonPath = __DIR__ . '/../config.json';
-        $legacyConfigPath = __DIR__ . '/../config.php';
+        $configJsonPath = rtrim($root, '/') . '/config.json';
+        $legacyConfigPath = rtrim($root, '/') . '/config.php';
         $version = ltrim($tag, 'v');
 
-        if (file_exists($configJsonPath) && is_writable($configJsonPath)) {
-            $config = json_decode(file_get_contents($configJsonPath), true);
-            if (is_array($config)) {
-                $config['version'] = $version;
-                file_put_contents($configJsonPath, json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+        if (file_exists($configJsonPath)) {
+            if (!is_writable($configJsonPath)) {
+                error_log('UpdateManager: config.json is not writable, version not updated');
+                return false;
             }
-        } elseif (file_exists($legacyConfigPath) && is_writable($legacyConfigPath)) {
-            $content = file_get_contents($legacyConfigPath);
-            $content = preg_replace(
+            $raw = @file_get_contents($configJsonPath);
+            $config = is_string($raw) ? json_decode($raw, true) : null;
+            if (!is_array($config)) {
+                error_log('UpdateManager: config.json is not valid JSON, version not updated');
+                return false;
+            }
+            $config['version'] = $version;
+            $json = json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+            if ($json === false || @file_put_contents($configJsonPath, $json) === false) {
+                error_log('UpdateManager: cannot write config.json, version not updated');
+                return false;
+            }
+            return true;
+        }
+
+        if (file_exists($legacyConfigPath)) {
+            if (!is_writable($legacyConfigPath)) {
+                error_log('UpdateManager: config.php is not writable, version not updated');
+                return false;
+            }
+            $content = @file_get_contents($legacyConfigPath);
+            if (!is_string($content)) {
+                return false;
+            }
+            $updated = preg_replace(
                 '/\$config\[\'version\'\]\s*=\s*\'[^\']*\';/',
                 "\$config['version'] = '{$version}';",
                 $content
             );
-            if ($content !== null) {
-                file_put_contents($legacyConfigPath, $content);
+            if (!is_string($updated)) {
+                return false;
             }
+            if (@file_put_contents($legacyConfigPath, $updated) === false) {
+                error_log('UpdateManager: cannot write config.php, version not updated');
+                return false;
+            }
+            return true;
         }
+
+        // No configuration file at all: there is no version to update, but that
+        // is not an error (fresh unpack, tests).
+        return true;
     }
 
     /**
@@ -617,6 +800,16 @@ class UpdateManager
         return $this->applyExtensionUpdateFromZip($type, $name, $tmpZip);
     }
 
+    /**
+     * Remove the web installer scripts after a core update.
+     *
+     * Only the setup wizards are removed: they can create a config.json and
+     * reset the database, so they must not survive on a live installation.
+     * api/install.php is deliberately kept — it is a runtime admin endpoint
+     * (plugin/theme install from the catalog) protected by a database-backed
+     * administrator check, and deleting it would leave updated installations
+     * different from freshly installed ones.
+     */
     private function removeInstallerScripts(string $root): void
     {
         if (!file_exists($root . '/config.json')) {
@@ -626,7 +819,6 @@ class UpdateManager
             $root . '/install.php',
             $root . '/install2.php',
             $root . '/install3.php',
-            $root . '/api/install.php',
         ];
         foreach ($installerScripts as $f) {
             if (is_file($f)) {

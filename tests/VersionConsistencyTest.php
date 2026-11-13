@@ -1,10 +1,10 @@
 <?php
 
 /**
- * VersionConsistencyTest — the packaged version, the sample config and the
- * release notes must not drift apart. Guards against shipping a config-sample
- * or changelog whose version disagrees with the VERSION file (which is what
- * the installer and telemetry report).
+ * VersionConsistencyTest — the packaged version and the sample config must not
+ * drift apart. Guards against shipping a config-sample whose version disagrees
+ * with the VERSION file (which is what the installer and telemetry report).
+ * Release notes live on GitHub Releases, not in the repository.
  */
 
 require_once __DIR__ . '/harness.php';
@@ -18,7 +18,11 @@ function test_version_files_consistent(): Test
     $t->assert('VERSION file exists', is_file($versionFile));
 
     $version = trim((string)@file_get_contents($versionFile));
-    $t->assert('VERSION is a semantic version', (bool)preg_match('/^\d+\.\d+\.\d+$/', $version));
+    // SemVer with an optional prerelease suffix (1.0.0, 1.0.0-rc.1, 1.0.0-beta.2).
+    $t->assert(
+        "VERSION is a semantic version (got: {$version})",
+        (bool)preg_match('/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/', $version)
+    );
 
     $sampleRaw = (string)@file_get_contents($root . '/config-sample.json');
     $sample = json_decode($sampleRaw, true);

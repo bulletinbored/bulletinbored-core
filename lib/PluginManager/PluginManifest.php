@@ -42,7 +42,10 @@ trait PluginManifest
 
         if (empty($errors) && !empty($manifest['core'])) {
             $coreVersion = trim(file_get_contents(__DIR__ . '/../../VERSION'));
-            if (!$this->satisfiesConstraint($coreVersion, $manifest['core'])) {
+            // Match the requirement against the base version: 1.0.0-rc.1
+            // satisfies ">=1.0.0" so the release candidate can be tested with
+            // plugins published for the stable release.
+            if (!$this->satisfiesConstraint(bb_version_base($coreVersion), $manifest['core'])) {
                 $errors[] = "Core version {$coreVersion} does not satisfy constraint '{$manifest['core']}'";
             }
         }

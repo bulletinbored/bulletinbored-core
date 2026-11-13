@@ -78,7 +78,9 @@ Leaving them in place is a security risk.
 
 ## Production checklist
 
-- **Delete the installer files** (`install.php`, `install2.php`, `install3.php`, `api/install.php`) after setup.
+- **Delete the installer files** (`install.php`, `install2.php`, `install3.php`) after setup. Core updates
+  remove them automatically. `api/install.php` is **not** an installer: it is the admin endpoint used
+  to install catalog plugins/themes and it verifies the administrator against the database on every call.
 - **`display_errors = Off`** and `expose_php = Off` in `php.ini` (the `doctor` command warns if they are on).
 - **HTTPS**: enable `force_https` / `cookie_secure`; behind a proxy set `X-Forwarded-Proto`.
 - **Confirm sensitive paths return 403**: `data/`, `uploads/private/`, `config.json`, `bb.php`, `router.php`. The shipped `.htaccess`, `nginx.conf`, `web.config` and `router.php` handle this — keep the rules if you customise them.
@@ -103,11 +105,16 @@ See the [Configuration documentation](https://docs.bulletinbored.net/configurati
     "db_path": "__DIR__/data/database.sqlite",
     "site_name": "bulletinbored",
     "admin_user": "admin",
-    "admin_pass": "changeme123",
+    "admin_pass": "<a-long-unique-password>",
     "theme": "freshbored",
     "base_url": ""
 }
 ```
+
+`admin_pass` is only read on the very first request, when the administrator account is
+created. Use a unique password of at least 10 characters with upper- and lower-case
+letters and a digit (the same rule the registration form enforces) — never ship a
+placeholder such as `changeme123`. After the first login, change it from your profile.
 
 ## Server configuration reference
 
@@ -164,6 +171,29 @@ If and when a community forms, any future change to the license will be decided 
 
 Contributions are accepted under the terms of the [CLA.md](CLA.md).
 
+## MySQL / MariaDB storage engine
+
+bulletinbored creates its tables with `ENGINE=InnoDB`, which is what foreign
+keys and transactions require. On a server whose default engine is MyISAM the
+forum still runs: the foreign-key migration detects it, logs the affected
+tables and completes without constraints. To enable them, convert the tables
+once:
+
+```sql
+ALTER TABLE users ENGINE=InnoDB;      -- repeat for every table in the database
+```
+
+Indexed text columns are limited to 191 characters so their utf8mb4 indexes fit
+the 767/1000-byte key limits of older MySQL/MariaDB builds.
+
+## Troubleshooting a 500
+
+Unhandled errors are written to `data/logs/error.log` (message, file/line,
+request URI, PHP version, database driver — never passwords). If you cannot
+reach that file, upload `tools/diag.php` to the forum root as `diag.php` and open
+it: it reports PHP extensions, config sanity, directory permissions, the
+database connection and the migration state. **Delete it right after use.**
+
 ## Testing notes
 
 Run the full CLI test suite with:
@@ -172,7 +202,91 @@ Run the full CLI test suite with:
 php tests/run.php
 ```
 
+Coverage (Xdebug or PCOV required) and a regression floor over `src/` + `lib/`:
+
+```bash
+XDEBUG_MODE=coverage php tests/run.php --coverage --min-coverage=80
+XDEBUG_MODE=coverage php tests/run.php --coverage --min-area-coverage=70
+```
+
+`--min-area-coverage` applies a separate floor to the areas that must not lose
+coverage: authentication/sessions, authorization, updates, package installation
+and migrations. CI runs both checks.
+
 **Known limitation**: `src/bootstrap.php` is not fully exercised by the CLI suite. It contains a `BULLETIN_TEST_MODE` early-return path that skips session startup, security headers, and HTTPS redirects — those paths should be verified through integration testing in a real PHP server environment.
+
+## Release process
+
+Version numbers live in `VERSION` and must match `config-sample.json`
+(`tests/VersionConsistencyTest.php` enforces it). Release notes are not kept in
+the repository: the release workflow generates them on the GitHub Release, so
+the tag, `VERSION` and the published notes always refer to the same commit.
+
+Pre-releases use SemVer suffixes: `VERSION` is `1.0.0-rc.1`, the tag is
+`v1.0.0-rc.1`, and the GitHub release is published as a **prerelease** so the
+update checker (`/releases/latest`, which skips prereleases) never offers it to
+stable installations. A stable installation that wants prereleases can set
+`allow_prerelease_updates: true`; an installation already running a prerelease
+follows the next ones automatically. `version_compare()` keeps the SemVer
+ordering (`1.0.0-rc.1 < 1.0.0`), while extension requirements (`"core":
+">=1.0.0"`) are matched against the base version so plugins can be tested on a
+release candidate.
+
+The distribution archive is built, not copied:
+
+```bash
+php tools/build-release.php                  # dist/bulletinbored-core-<VERSION>.zip
+php tools/build-release.php --output=/tmp/x.zip
+```
+
+The builder ships a whitelist of files (core, admin/installer scripts, `lib/`,
+`src/`, `views/`, `api/`, `assets/`, `migrations/`, the default theme, the English
+language pack and the server configuration samples) and refuses to write an archive
+that contains development files (`tests/`, `.github/`, `tools/`), deployment files
+(`config.json`, `config.php`, `.user.ini`) or runtime data (database, sessions,
+logs, rate-limit buckets, backups, uploads). A `.sha256` checksum is written next
+to the archive.
+
+`tests/ReleasePackageTest.php` verifies the result end to end: the archive is built
+into a temporary path, inspected for forbidden and required files, every shipped PHP
+file is linted, and the package is extracted and installed from the ZIP alone through
+`php bb.php migrate`. Pushing a tag matching `VERSION` runs the same steps in CI and
+publishes the archive with its checksum.
+
+Upgrading an existing installation:
+
+- backups of the previous core are taken automatically (`data/backups/`), and a failed
+  copy restores them;
+- both update routes (repository download and uploaded ZIP) run the same
+  finalisation, so `VERSION`, `config.json` and the update manifest always agree;
+- the web installers (`install.php`, `install2.php`, `install3.php`) are removed after
+  a successful update; `api/install.php` is kept because it is the runtime endpoint
+  used by the admin panel to install catalog plugins/themes;
+- plugins, themes, uploads, `data/` and `config.json` are never overwritten.
+
+## HTTPS, HSTS and proxies
+
+`force_https` (default `true`) redirects plain-HTTP visitors to HTTPS, and the
+`Secure` session cookie is controlled by `cookie_secure`. Both decisions use the
+forwarded headers validated against `trusted_proxies`, so reverse-proxy setups
+work without extra configuration.
+
+HSTS is sent only when the visitor is actually on HTTPS (directly or through a
+trusted proxy):
+
+| Option | Default | Meaning |
+|---|---|---|
+| `hsts_max_age` | `31536000` | HSTS lifetime in seconds. `0` disables HSTS (useful while a certificate is being rolled out). |
+| `hsts_include_subdomains` | `false` | Adds `includeSubDomains`. Enable it only if **every** subdomain of the domain can serve valid HTTPS: the browser will refuse plain HTTP on all of them for the whole `max-age`. |
+
+## Email authentication over TLS
+
+`mail_secure` accepts `tls` (STARTTLS), `ssl` (implicit TLS) or an empty value
+(plain connection). When SMTP credentials are configured without TLS, the
+password is only base64-encoded on the wire: bulletinbored logs a warning and
+keeps working, and `mail_require_tls_for_auth: true` makes it refuse instead.
+Server certificates are always verified — a self-signed or expired certificate
+makes the delivery fail rather than sending credentials to an unknown host.
 
 ## Security model & known risks
 
@@ -186,6 +300,13 @@ trust in its source. Defense-in-depth is provided by Zip Slip protection on ever
 package extraction, JSON-only (non-executable) language files, HTML sanitization under
 a nonce-based CSP, and the `plugin_verify_files` / `theme_verify_files` integrity checks
 (enabled by default).
+
+Sessions are tied to the account, not just to the cookie: `is_logged_in()` rejects a
+session whose user row disappeared, and any change of role, status or password bumps
+`users.session_version`, which logs the affected account out everywhere. Endpoints
+that bypass `src/bootstrap.php` (such as `api/install.php`) re-check the administrator
+against the database on every request instead of trusting the role cached in the
+session.
 
 Package rollback is **filesystem-only**. When a plugin or theme install/update
 fails, bulletinbored restores the previous files and `installed.json` metadata,
