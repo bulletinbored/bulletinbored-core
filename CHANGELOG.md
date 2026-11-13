@@ -7,7 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 The version in this file must always match the `VERSION` file (enforced by
 `tests/VersionConsistencyTest.php`).
 
-## [Unreleased] — hardening for 1.0.0
+## [Unreleased]
+
+Nothing yet.
+
+## [1.0.0-rc.1] — 2026-11-13
+
+First release candidate: consolidation work for 1.0.0. No new features.
+
+### Release engineering
+
+- Pre-release versioning: `VERSION`/`config-sample.json` carry `1.0.0-rc.1`, the
+  tag is `v1.0.0-rc.1` and the GitHub release is published as a prerelease.
+- The update checker never offers a prerelease to a stable installation: it
+  requires either an installation already running a prerelease or
+  `allow_prerelease_updates: true`. GitHub's `/releases/latest` also skips
+  prereleases, so the mirror is the only path that could surface one.
+- Extension requirements (`"core": ">=1.0.0"`) are matched against the base
+  version, so plugins published for 1.0.0 can be installed and tested on the
+  release candidate, while update ordering keeps `1.0.0-rc.1 < 1.0.0`.
 
 ### Security
 

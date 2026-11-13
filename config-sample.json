@@ -32,7 +32,7 @@
     "timezone": "UTC",
     "date_format": "Y-m-d",
     "time_format": "H:i",
-    "version": "0.9.8",
+    "version": "1.0.0-rc.1",
     "plugin_manifest": "__DIR__/data/plugins.json",
     "theme_manifest": "__DIR__/data/themes.json",
     "update_manifest": "__DIR__/data/updates.json",
@@ -41,6 +41,7 @@
     "plugin_verify_files": true,
     "theme_verify_files": true,
     "allow_catalog_only": true,
+    "allow_prerelease_updates": false,
     "telemetry": true,
     "telemetry_url": "https://www.bulletinbored.net/heartbeat.php",
     "trusted_proxies": ["127.0.0.1", "::1"]

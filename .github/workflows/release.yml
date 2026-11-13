@@ -51,10 +51,25 @@ jobs:
       - name: Build the package
         run: php tools/build-release.php --output=dist/bulletinbored-core.zip
 
+      - name: Detect prerelease
+        id: release_kind
+        run: |
+          VERSION="$(cat VERSION)"
+          case "$VERSION" in
+            *-*) echo "prerelease=true" >> "$GITHUB_OUTPUT" ;;
+            *)   echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
       - name: Publish the release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
+          name: ${{ steps.release_kind.outputs.version }}
+          # 1.0.0-rc.1 and friends are published as GitHub prereleases, so the
+          # update checker (which reads /releases/latest) never offers them to
+          # stable installations.
+          prerelease: ${{ steps.release_kind.outputs.prerelease == 'true' }}
           files: |
             dist/bulletinbored-core.zip
             dist/bulletinbored-core.zip.sha256

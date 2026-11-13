@@ -1,5 +1,6 @@
 <?php
 
+require_once __DIR__ . '/Version.php';
 require_once __DIR__ . '/PackageInstaller.php';
 require_once __DIR__ . '/PluginDiscovery.php';
 require_once __DIR__ . '/PluginManager/PluginHooks.php';

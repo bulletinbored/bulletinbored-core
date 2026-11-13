@@ -564,7 +564,7 @@ trait PluginPackages
 
         if (!empty($manifest['core'])) {
             $coreVersion = trim(@file_get_contents(__DIR__ . '/../../VERSION') ?: '0.0.0');
-            if (!$this->satisfiesConstraint($coreVersion, $manifest['core'])) {
+            if (!$this->satisfiesConstraint(bb_version_base($coreVersion), $manifest['core'])) {
                 return ['success' => false, 'message' => "Core version {$coreVersion} does not satisfy constraint '{$manifest['core']}'"];
             }
         }

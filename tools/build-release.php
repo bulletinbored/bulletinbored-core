@@ -135,8 +135,8 @@ function build_release_is_forbidden(string $relative): bool
 
 $options = getopt('', ['output::', 'allow-dirty']);
 $version = trim((string)@file_get_contents($root . '/VERSION'));
-if ($version === '' || !preg_match('/^\d+\.\d+\.\d+$/', $version)) {
-    build_release_fail('VERSION is missing or not a semantic version');
+if ($version === '' || !preg_match('/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/', $version)) {
+    build_release_fail('VERSION is missing or not a semantic version (1.0.0, 1.0.0-rc.1, ...)');
 }
 
 if (!class_exists('ZipArchive')) {

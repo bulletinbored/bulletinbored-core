@@ -18,7 +18,11 @@ function test_version_files_consistent(): Test
     $t->assert('VERSION file exists', is_file($versionFile));
 
     $version = trim((string)@file_get_contents($versionFile));
-    $t->assert('VERSION is a semantic version', (bool)preg_match('/^\d+\.\d+\.\d+$/', $version));
+    // SemVer with an optional prerelease suffix (1.0.0, 1.0.0-rc.1, 1.0.0-beta.2).
+    $t->assert(
+        "VERSION is a semantic version (got: {$version})",
+        (bool)preg_match('/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/', $version)
+    );
 
     $sampleRaw = (string)@file_get_contents($root . '/config-sample.json');
     $sample = json_decode($sampleRaw, true);
@@ -32,6 +36,7 @@ function test_version_files_consistent(): Test
     if (is_file($changelogFile)) {
         $changelog = (string)file_get_contents($changelogFile);
         $hasEntry = (bool)preg_match('/^##\s+\[' . preg_quote($version, '/') . '\]/m', $changelog);
+        $t->assert('CHANGELOG heading is escaped-safe for prereleases', str_contains($changelog, '[' . $version . ']'));
         $t->assert("CHANGELOG has an entry for {$version}", $hasEntry);
         $t->assert('CHANGELOG documents the unreleased work', (bool)preg_match('/^##\s+\[Unreleased\]/m', $changelog));
     }

@@ -1,5 +1,6 @@
 <?php
 
+require_once __DIR__ . '/Version.php';
 require_once __DIR__ . '/UpdateFetcher.php';
 require_once __DIR__ . '/UpdateBackup.php';
 require_once __DIR__ . '/PackageInstaller.php';
@@ -13,9 +14,16 @@ class UpdateManager
     private UpdateFetcher $fetcher;
     private UpdateBackup $backup;
     private string $rootDir;
+    private bool $allowPrerelease;
 
-    public function __construct(string $manifestPath, ?string $updateServer = null, ?string $githubToken = null, ?string $updateMirror = null, ?string $rootDir = null)
-    {
+    public function __construct(
+        string $manifestPath,
+        ?string $updateServer = null,
+        ?string $githubToken = null,
+        ?string $updateMirror = null,
+        ?string $rootDir = null,
+        ?UpdateFetcher $fetcher = null
+    ) {
         $this->manifestPath = $manifestPath;
         $this->updateServer = $updateServer;
         $this->updateMirror = $updateMirror !== null ? rtrim($updateMirror, '/') : null;
@@ -23,8 +31,63 @@ class UpdateManager
         $this->loadManifest();
 
         $dataDir = dirname($manifestPath);
-        $this->fetcher = new UpdateFetcher($dataDir, $updateServer, $githubToken, $updateMirror);
+        $this->fetcher = $fetcher ?? new UpdateFetcher($dataDir, $updateServer, $githubToken, $updateMirror);
         $this->backup = new UpdateBackup($dataDir, $this->rootDir);
+
+        // Prereleases are opt-in: a stable installation must never be offered
+        // 1.0.0-rc.1, while an installation already running a prerelease may
+        // follow the next one.
+        $this->allowPrerelease = false;
+        if (class_exists('App')) {
+            $appConfig = App::getInstance()->config;
+            $this->allowPrerelease = !empty($appConfig['allow_prerelease_updates']);
+        }
+    }
+
+    /**
+     * Enable or disable prerelease updates (config: allow_prerelease_updates).
+     */
+    public function setAllowPrerelease(bool $allow): self
+    {
+        $this->allowPrerelease = $allow;
+        return $this;
+    }
+
+    public function allowsPrerelease(): bool
+    {
+        return $this->allowPrerelease;
+    }
+
+    /**
+     * A SemVer prerelease has a suffix after the patch number: 1.0.0-rc.1,
+     * 1.0.0-beta.2. Build metadata alone (1.0.0+build) is not a prerelease.
+     */
+    public static function isPrerelease(string $version): bool
+    {
+        return bb_version_is_prerelease($version);
+    }
+
+    /**
+     * Should $remote be offered to an installation running $installed?
+     *
+     * Rules: the remote must be strictly newer, and a prerelease is only
+     * offered when the installation is itself a prerelease or the administrator
+     * opted in. version_compare() already ranks 1.0.0-rc.1 below 1.0.0.
+     */
+    public function isUpdateAllowed(string $installed, ?string $remote): bool
+    {
+        $installed = trim($installed);
+        $remote = $remote !== null ? trim($remote) : '';
+        if ($remote === '' || $installed === '') {
+            return false;
+        }
+        if (!version_compare($remote, $installed, '>')) {
+            return false;
+        }
+        if (self::isPrerelease($remote) && !$this->allowPrerelease && !self::isPrerelease($installed)) {
+            return false;
+        }
+        return true;
     }
 
     private function loadManifest(): void
@@ -122,10 +185,16 @@ class UpdateManager
             'core' => ['installed' => $coreVersion, 'remote' => null, 'update_available' => false, 'update_url' => null],
         ];
         $results['core']['remote'] = $this->fetcher->fetchRemoteVersion('core');
-        if ($results['core']['remote'] && version_compare($results['core']['remote'], $coreVersion, '>')) {
-            $results['core']['update_available'] = true;
+        $results['core']['update_available'] = $this->isUpdateAllowed($coreVersion, $results['core']['remote']);
+        if ($results['core']['update_available']) {
             $results['core']['update_url'] = $this->updateServer;
         }
+        // Surfaced by the admin UI: "a newer prerelease exists but this
+        // installation only follows stable releases".
+        $results['core']['prerelease_ignored'] = $results['core']['remote'] !== null
+            && self::isPrerelease((string)$results['core']['remote'])
+            && !$results['core']['update_available']
+            && version_compare((string)$results['core']['remote'], $coreVersion, '>');
         $this->recordCheck('core', 'core', $results['core']['remote']);
 
         $catalog = $catalog ?? [];
@@ -143,7 +212,7 @@ class UpdateManager
             if ($remote === null && !empty($catalogVersions[$key])) {
                 $remote = $catalogVersions[$key];
             }
-            $updateAvailable = $remote && version_compare($remote, $plugin['version'], '>');
+            $updateAvailable = $this->isUpdateAllowed((string)$plugin['version'], $remote);
             $results['plugins'][$key] = [
                 'installed' => $plugin['version'],
                 'remote' => $remote,
@@ -159,7 +228,7 @@ class UpdateManager
             if ($remote === null && !empty($catalogVersions[$key])) {
                 $remote = $catalogVersions[$key];
             }
-            $updateAvailable = $remote && version_compare($remote, ($theme['version'] ?? '1.0.0'), '>');
+            $updateAvailable = $this->isUpdateAllowed((string)($theme['version'] ?? '1.0.0'), $remote);
             $results['themes'][$key] = [
                 'installed' => $theme['version'] ?? '1.0.0',
                 'remote' => $remote,
@@ -311,7 +380,9 @@ class UpdateManager
         if (!empty($manifest['core'])) {
             $coreVersion = trim(@file_get_contents(__DIR__ . '/../VERSION') ?: '0.0.0');
             $constraint = $manifest['core'];
-            $ok = $this->checkVersionConstraint($coreVersion, $constraint);
+            // Requirements are matched against the base version, so a plugin
+            // asking for ">=1.0.0" installs on 1.0.0-rc.1.
+            $ok = $this->checkVersionConstraint(bb_version_base($coreVersion), $constraint);
             if (!$ok) {
                 return ['success' => false, 'message' => "Core version {$coreVersion} does not satisfy constraint '{$constraint}'"];
             }

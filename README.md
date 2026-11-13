@@ -222,6 +222,16 @@ Version numbers live in `VERSION` (and must match `config-sample.json` and
 change is recorded in [CHANGELOG.md](CHANGELOG.md) under `[Unreleased]`; a release
 moves that section under the new version number.
 
+Pre-releases use SemVer suffixes: `VERSION` is `1.0.0-rc.1`, the tag is
+`v1.0.0-rc.1`, and the GitHub release is published as a **prerelease** so the
+update checker (`/releases/latest`, which skips prereleases) never offers it to
+stable installations. A stable installation that wants prereleases can set
+`allow_prerelease_updates: true`; an installation already running a prerelease
+follows the next ones automatically. `version_compare()` keeps the SemVer
+ordering (`1.0.0-rc.1 < 1.0.0`), while extension requirements (`"core":
+">=1.0.0"`) are matched against the base version so plugins can be tested on a
+release candidate.
+
 The distribution archive is built, not copied:
 
 ```bash
