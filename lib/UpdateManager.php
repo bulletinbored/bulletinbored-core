@@ -35,13 +35,29 @@ class UpdateManager
         }
     }
 
-    private function saveManifest(): void
+    /**
+     * Persist the manifest. Returns false when the file could not be written,
+     * so callers (in particular the core update finalization) do not report
+     * success for metadata that never reached the disk.
+     */
+    private function saveManifest(): bool
     {
         $dir = dirname($this->manifestPath);
-        if (!is_dir($dir)) {
-            mkdir($dir, 0755, true);
+        if (!is_dir($dir) && !@mkdir($dir, 0755, true) && !is_dir($dir)) {
+            error_log('UpdateManager: cannot create manifest directory ' . $dir);
+            return false;
         }
-        file_put_contents($this->manifestPath, json_encode($this->manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+        $json = json_encode($this->manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        if ($json === false) {
+            error_log('UpdateManager: cannot encode the update manifest');
+            return false;
+        }
+        $written = @file_put_contents($this->manifestPath, $json);
+        if ($written === false) {
+            error_log('UpdateManager: cannot write the update manifest ' . $this->manifestPath);
+            return false;
+        }
+        return true;
     }
 
     private function getSection(string $type, string $name): array
@@ -56,13 +72,17 @@ class UpdateManager
         return $section[$name] ?? ['version' => '1.0.0', 'last_check' => null, 'remote_version' => null, 'available_update' => null];
     }
 
-    public function setVersion(string $type, string $name, string $version): void
+    /**
+     * Record the installed version of a component.
+     * Returns false when the manifest could not be persisted.
+     */
+    public function setVersion(string $type, string $name, string $version): bool
     {
         $section = $this->getSection($type, $name);
         $section[$name]['version'] = $version;
         $section[$name]['last_updated'] = date('c');
         $this->manifest[$type] = $section;
-        $this->saveManifest();
+        return $this->saveManifest();
     }
 
     public function getVersion(string $type, string $name): string
@@ -419,8 +439,20 @@ class UpdateManager
      */
     private function completeCoreUpdate(string $tmpExtract, ?string $tag = null): bool
     {
-        $topDirs = glob($tmpExtract . '*', GLOB_ONLYDIR) ?: [];
-        $sourceDir = (count($topDirs) === 1) ? $topDirs[0] : $tmpExtract;
+        // A GitHub archive wraps everything in a single "<project>-<version>/"
+        // directory; a hand-made release ZIP usually has the files at the root
+        // but may also contain exactly one real directory (e.g. lib/). Only
+        // treat the single directory as a wrapper when it actually holds the
+        // application entry points.
+        $sourceDir = $tmpExtract;
+        if (!file_exists($tmpExtract . '/index.php') || !file_exists($tmpExtract . '/VERSION')) {
+            $topDirs = glob($tmpExtract . '*', GLOB_ONLYDIR) ?: [];
+            if (count($topDirs) === 1
+                && file_exists($topDirs[0] . '/index.php')
+                && file_exists($topDirs[0] . '/VERSION')) {
+                $sourceDir = $topDirs[0];
+            }
+        }
         if (!file_exists($sourceDir . '/index.php') || !file_exists($sourceDir . '/VERSION')) {
             $this->backup->deleteRecursive($tmpExtract);
             error_log('BB CORE FAIL invalid package structure');
@@ -506,51 +538,108 @@ class UpdateManager
      * recorded in the manifest, in VERSION and in config.json, and the update
      * cache is cleared.
      */
+    /**
+     * Post-copy steps shared by every core update route.
+     *
+     * Every metadata write is verified: the update is reported as successful
+     * only when VERSION, config.json and the manifest all carry the new
+     * version. The files themselves are already in place at this point, so a
+     * failure here is reported (and logged with the exact step) instead of
+     * leaving a silent mismatch between the code and the recorded version; a
+     * retry re-runs the copy and the metadata writes idempotently.
+     */
     private function finalizeCoreUpdate(string $root, ?string $version): bool
     {
         $this->removeInstallerScripts($root);
 
+        $failures = [];
         $normalized = $version !== null ? ltrim(trim($version), 'v') : '';
         if ($normalized !== '' && preg_match('/^\d+\.\d+\.\d+/', $normalized)) {
-            $this->setVersion('core', 'core', $normalized);
-
-            $versionFile = rtrim($root, '/') . '/VERSION';
-            if (is_file($versionFile) && is_writable($versionFile)) {
-                file_put_contents($versionFile, $normalized);
+            if (!$this->setVersion('core', 'core', $normalized)) {
+                $failures[] = 'update manifest';
             }
 
-            $this->updateVersionInConfig($root, $normalized);
+            $versionFile = rtrim($root, '/') . '/VERSION';
+            if (is_file($versionFile)) {
+                if (@file_put_contents($versionFile, $normalized) === false) {
+                    $failures[] = 'VERSION';
+                }
+            }
+
+            if (!$this->updateVersionInConfig($root, $normalized)) {
+                $failures[] = 'config.json';
+            }
         } else {
             error_log('BB CORE WARN: package version unknown, version metadata left unchanged');
         }
 
         $this->fetcher->clearCache();
+
+        if (!empty($failures)) {
+            error_log('BB CORE FAIL: files updated but version metadata not finalized ('
+                . implode(', ', $failures) . '). Fix permissions and re-run the update.');
+            return false;
+        }
         return true;
     }
 
-    private function updateVersionInConfig(string $root, string $tag): void
+    /**
+     * Update the version stored in config.json (or the legacy config.php).
+     * Returns false when the file exists but could not be updated.
+     */
+    private function updateVersionInConfig(string $root, string $tag): bool
     {
         $configJsonPath = rtrim($root, '/') . '/config.json';
         $legacyConfigPath = rtrim($root, '/') . '/config.php';
         $version = ltrim($tag, 'v');
 
-        if (file_exists($configJsonPath) && is_writable($configJsonPath)) {
-            $config = json_decode(file_get_contents($configJsonPath), true);
-            if (is_array($config)) {
-                $config['version'] = $version;
-                file_put_contents($configJsonPath, json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+        if (file_exists($configJsonPath)) {
+            if (!is_writable($configJsonPath)) {
+                error_log('UpdateManager: config.json is not writable, version not updated');
+                return false;
             }
-        } elseif (file_exists($legacyConfigPath) && is_writable($legacyConfigPath)) {
-            $content = file_get_contents($legacyConfigPath);
-            $content = preg_replace(
+            $raw = @file_get_contents($configJsonPath);
+            $config = is_string($raw) ? json_decode($raw, true) : null;
+            if (!is_array($config)) {
+                error_log('UpdateManager: config.json is not valid JSON, version not updated');
+                return false;
+            }
+            $config['version'] = $version;
+            $json = json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+            if ($json === false || @file_put_contents($configJsonPath, $json) === false) {
+                error_log('UpdateManager: cannot write config.json, version not updated');
+                return false;
+            }
+            return true;
+        }
+
+        if (file_exists($legacyConfigPath)) {
+            if (!is_writable($legacyConfigPath)) {
+                error_log('UpdateManager: config.php is not writable, version not updated');
+                return false;
+            }
+            $content = @file_get_contents($legacyConfigPath);
+            if (!is_string($content)) {
+                return false;
+            }
+            $updated = preg_replace(
                 '/\$config\[\'version\'\]\s*=\s*\'[^\']*\';/',
                 "\$config['version'] = '{$version}';",
                 $content
             );
-            if ($content !== null) {
-                file_put_contents($legacyConfigPath, $content);
+            if (!is_string($updated)) {
+                return false;
             }
+            if (@file_put_contents($legacyConfigPath, $updated) === false) {
+                error_log('UpdateManager: cannot write config.php, version not updated');
+                return false;
+            }
+            return true;
         }
+
+        // No configuration file at all: there is no version to update, but that
+        // is not an error (fresh unpack, tests).
+        return true;
     }
 
     /**

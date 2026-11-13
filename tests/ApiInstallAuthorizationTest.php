@@ -22,6 +22,7 @@ function api_install_pdo(): PDO
         username TEXT NOT NULL,
         role TEXT NOT NULL DEFAULT 'user',
         status TEXT NOT NULL DEFAULT 'active',
+        suspension_time INTEGER DEFAULT 0,
         session_version INTEGER DEFAULT 1
     )");
     return $pdo;
@@ -169,6 +170,26 @@ function test_admin_auth_verify_session_matrix(): Test
     $t->assertNull('Banned admin rejected', AdminAuth::verifySession($pdo, ['user_id' => $bannedId, 'session_version' => 1]));
     $t->assertNull('Suspended admin rejected', AdminAuth::verifySession($pdo, ['user_id' => $suspendedId, 'session_version' => 1]));
 
+    // Expired suspentions are treated as active, exactly like the login flow
+    // which clears them on the next successful sign-in.
+    $expiredId = api_install_add_user($pdo, 'suspended_expired', 'admin', 'suspended');
+    $pdo->prepare("UPDATE users SET suspension_time = ? WHERE id = ?")->execute([time() - 60, $expiredId]);
+    $t->assertNotNull('Expired suspension accepted', AdminAuth::verifySession($pdo, [
+        'user_id' => $expiredId, 'session_version' => 1,
+    ]));
+
+    $futureId = api_install_add_user($pdo, 'suspended_future', 'admin', 'suspended');
+    $pdo->prepare("UPDATE users SET suspension_time = ? WHERE id = ?")->execute([time() + 3600, $futureId]);
+    $t->assertNull('Running suspension rejected', AdminAuth::verifySession($pdo, [
+        'user_id' => $futureId, 'session_version' => 1,
+    ]));
+
+    $indefiniteId = api_install_add_user($pdo, 'suspended_forever', 'admin', 'suspended');
+    $pdo->prepare("UPDATE users SET suspension_time = 0 WHERE id = ?")->execute([$indefiniteId]);
+    $t->assertNull('Suspension without an end date rejected', AdminAuth::verifySession($pdo, [
+        'user_id' => $indefiniteId, 'session_version' => 1,
+    ]));
+
     return $t;
 }
 
@@ -205,6 +226,7 @@ function test_api_install_requires_live_admin(): Test
         username TEXT NOT NULL,
         role TEXT NOT NULL DEFAULT 'user',
         status TEXT NOT NULL DEFAULT 'active',
+        suspension_time INTEGER DEFAULT 0,
         session_version INTEGER DEFAULT 1
     )");
     $adminId = api_install_add_user($pdo, 'admin', 'admin');
@@ -241,6 +263,24 @@ function test_api_install_requires_live_admin(): Test
             'session_version' => 1,
         ]);
         $t->assertEquals('Real admin passes the gate', 'Invalid CSRF token', $liveAdmin['message'] ?? null);
+
+        $pdo->prepare("UPDATE users SET status = 'suspended', suspension_time = ? WHERE id = ?")
+            ->execute([time() - 60, $adminId]);
+        $expired = api_install_call($root, [
+            'user_id' => $adminId,
+            'user_role' => 'admin',
+            'session_version' => 1,
+        ]);
+        $t->assertEquals('Expired suspension passes the gate', 'Invalid CSRF token', $expired['message'] ?? null);
+
+        $pdo->prepare("UPDATE users SET suspension_time = ? WHERE id = ?")
+            ->execute([time() + 3600, $adminId]);
+        $active = api_install_call($root, [
+            'user_id' => $adminId,
+            'user_role' => 'admin',
+            'session_version' => 1,
+        ]);
+        $t->assertEquals('Running suspension is denied', 'Admin required', $active['message'] ?? null);
     } finally {
         api_install_delete_fixture($root);
         @unlink($dbPath);

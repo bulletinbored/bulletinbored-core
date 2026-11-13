@@ -11,6 +11,8 @@
  *   php tests/run.php --coverage   # report source coverage after the run
  *   php tests/run.php --coverage --min-coverage=60
  *                                  # ...and fail when line coverage is below 60%
+ *   php tests/run.php --coverage --min-area-coverage=70
+ *                                  # ...and fail when a critical area is below 70%
  */
 
 require_once __DIR__ . '/harness.php';
@@ -21,6 +23,7 @@ $verbose = false;
 $listOnly = false;
 $coverage = false;
 $minCoverage = 0.0;
+$minAreaCoverage = 0.0;
 
 foreach ($argv as $arg) {
     // argv[0] is the script path, which may be relative and use either slash
@@ -35,6 +38,9 @@ foreach ($argv as $arg) {
         $coverage = true;
     } elseif (str_starts_with($arg, '--min-coverage=')) {
         $minCoverage = (float)substr($arg, strlen('--min-coverage='));
+        $coverage = true;
+    } elseif (str_starts_with($arg, '--min-area-coverage=')) {
+        $minAreaCoverage = (float)substr($arg, strlen('--min-area-coverage='));
         $coverage = true;
     } elseif (!$isRunner) {
         $filter = $arg;
@@ -135,28 +141,41 @@ echo "\n";
 $suite->run();
 
 if ($coverage) {
-    $coveragePercent = print_source_coverage($xdebugCoverage, $pcovCoverage);
+    $stats = print_source_coverage($xdebugCoverage, $pcovCoverage);
+    $coveragePercent = $stats['percent'] ?? null;
+    $exitCode = 0;
     if ($minCoverage > 0) {
         if ($coveragePercent === null) {
             echo "\nWARNING: --min-coverage requested but no coverage driver is available.\n";
             echo "Install Xdebug (XDEBUG_MODE=coverage) or PCOV, or run the CI coverage job.\n";
         } elseif ($coveragePercent + 0.0001 < $minCoverage) {
             printf("\nCOVERAGE FAILURE: %.1f%% is below the required %.1f%%\n", $coveragePercent, $minCoverage);
-            exit(1);
+            $exitCode = 1;
         } else {
             printf("\nCoverage OK: %.1f%% >= %.1f%%\n", $coveragePercent, $minCoverage);
         }
     }
+    if ($minAreaCoverage > 0) {
+        if (empty($stats['files'])) {
+            echo "\nWARNING: --min-area-coverage requested but no coverage driver is available.\n";
+        } elseif (!print_area_coverage($stats['files'], $minAreaCoverage)) {
+            $exitCode = 1;
+        }
+    }
+    if ($exitCode !== 0) {
+        exit($exitCode);
+    }
 }
 
 /**
- * Report coverage for the src/ tree: line coverage with Xdebug, executed-line
- * counts with PCOV, otherwise which src/ files were loaded by the suite.
+ * Report coverage for the src/ and lib/ trees: line coverage with Xdebug,
+ * executed-line counts with PCOV, otherwise which files were loaded by the suite.
  *
- * @return float|null Percentage of covered lines, or null when no coverage
- *                    driver reported executable lines.
+ * @return array{percent: ?float, files: array<string, array{covered: int, executable: int}>}
+ *         Overall percentage (null without a driver) and per-file statistics
+ *         keyed by repository-relative path, used for the critical-area check.
  */
-function print_source_coverage(bool $xdebugCoverage, bool $pcovCoverage = false): ?float
+function print_source_coverage(bool $xdebugCoverage, bool $pcovCoverage = false): array
 {
     $root = dirname(__DIR__);
     $srcFiles = [];
@@ -180,6 +199,7 @@ function print_source_coverage(bool $xdebugCoverage, bool $pcovCoverage = false)
     echo "# SOURCE COVERAGE (src/ + lib/)\n";
     echo str_repeat('#', 60) . "\n";
 
+    $stats = [];
     if ($xdebugCoverage && function_exists('xdebug_get_code_coverage')) {
         $data = xdebug_get_code_coverage();
         $totalExecutable = 0;
@@ -196,6 +216,7 @@ function print_source_coverage(bool $xdebugCoverage, bool $pcovCoverage = false)
                     $covered++;
                 }
             }
+            $stats[$rel] = ['covered' => $covered, 'executable' => $executable];
             $totalExecutable += $executable;
             $totalCovered += $covered;
             printf("  %-46s %5.1f%% (%d/%d)\n", $rel, $executable ? 100 * $covered / $executable : 0.0, $covered, $executable);
@@ -204,7 +225,7 @@ function print_source_coverage(bool $xdebugCoverage, bool $pcovCoverage = false)
         $percent = $totalExecutable ? 100 * $totalCovered / $totalExecutable : null;
         printf("  Line coverage: %.1f%% (%d/%d executable lines)\n", $percent ?? 0.0, $totalCovered, $totalExecutable);
         echo str_repeat('#', 60) . "\n";
-        return $percent;
+        return ['percent' => $percent, 'files' => $stats];
     } elseif ($pcovCoverage && function_exists('\pcov\collect')) {
         // Coverage collection is informational: never let it fail the run.
         $data = [];
@@ -228,6 +249,7 @@ function print_source_coverage(bool $xdebugCoverage, bool $pcovCoverage = false)
                     $covered++;
                 }
             }
+            $stats[$rel] = ['covered' => $covered, 'executable' => $known];
             $totalCovered += $covered;
             $totalKnown += $known;
             printf("  %-46s %d covered lines\n", $rel, $covered);
@@ -241,7 +263,7 @@ function print_source_coverage(bool $xdebugCoverage, bool $pcovCoverage = false)
             echo "  (pcov reports executed lines; exact % of executable lines requires Xdebug.)\n";
         }
         echo str_repeat('#', 60) . "\n";
-        return $percent;
+        return ['percent' => $percent, 'files' => $stats];
     } else {
         echo "  No coverage driver (Xdebug/PCOV) is available — reporting which src/ files were loaded.\n";
         echo "  Enable Xdebug (XDEBUG_MODE=coverage) or PCOV for line coverage.\n\n";
@@ -257,5 +279,76 @@ function print_source_coverage(bool $xdebugCoverage, bool $pcovCoverage = false)
         printf("\n  Files loaded: %d/%d (%.1f%%)\n", $loadedCount, count($srcFiles), count($srcFiles) ? 100 * $loadedCount / count($srcFiles) : 0.0);
     }
     echo str_repeat('#', 60) . "\n";
-    return null;
+    return ['percent' => null, 'files' => []];
+}
+
+/**
+ * Critical areas that must not silently lose coverage: authentication and
+ * session handling, authorization, updates, package installation and
+ * migrations. Each area reports the line coverage of its files and fails when
+ * it drops below $min.
+ *
+ * @param array<string, array{covered: int, executable: int}> $files
+ */
+function print_area_coverage(array $files, float $min): bool
+{
+    $areas = [
+        'authentication & sessions' => [
+            'src/Helpers/AuthHelpers.php',
+            'lib/AdminAuth.php',
+            'src/actions/users.php',
+        ],
+        'authorization' => [
+            'lib/AuthZ.php',
+            'src/actions/admin/users.php',
+            'src/Security.php',
+        ],
+        'updates' => [
+            'lib/UpdateManager.php',
+            'lib/UpdateFetcher.php',
+            'lib/UpdateBackup.php',
+        ],
+        'packages & extensions' => [
+            'lib/PackageInstaller.php',
+            'lib/PluginManager.php',
+            'lib/ThemeManager.php',
+            'lib/PluginDiscovery.php',
+        ],
+        'migrations & install' => [
+            'lib/Migrator.php',
+            'src/setup.php',
+        ],
+    ];
+
+    echo "\n" . str_repeat('#', 60) . "\n";
+    echo "# CRITICAL AREA COVERAGE (minimum " . sprintf('%.1f', $min) . "%)\n";
+    echo str_repeat('#', 60) . "\n";
+
+    $ok = true;
+    foreach ($areas as $area => $paths) {
+        $covered = 0;
+        $executable = 0;
+        $measured = [];
+        foreach ($paths as $path) {
+            if (!isset($files[$path])) {
+                continue;
+            }
+            $covered += $files[$path]['covered'];
+            $executable += $files[$path]['executable'];
+            $measured[] = basename($path);
+        }
+        if ($executable === 0) {
+            printf("  %-26s %s\n", $area, 'not measured (files not loaded)');
+            continue;
+        }
+        $percent = 100 * $covered / $executable;
+        $status = $percent + 0.0001 >= $min ? 'ok' : 'BELOW MINIMUM';
+        printf("  %-26s %5.1f%% (%d/%d) %s\n", $area, $percent, $covered, $executable, $status);
+        if ($percent + 0.0001 < $min) {
+            echo '    files: ' . implode(', ', $measured) . "\n";
+            $ok = false;
+        }
+    }
+    echo str_repeat('#', 60) . "\n";
+    return $ok;
 }

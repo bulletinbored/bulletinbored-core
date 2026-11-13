@@ -11,6 +11,10 @@
  *   reject_data  accept RCPT but refuse the message body with 554
  *   auth         require AUTH LOGIN before MAIL FROM
  *   slow         never answer (client timeout)
+ *   no_starttls  refuse STARTTLS with 502
+ *   tls_garbage  accept STARTTLS then speak plain text (handshake failure)
+ *   tls_selfsigned  accept STARTTLS and present the self-signed certificate
+ *                   given as argv[4] (cert) and argv[5] (key)
  *
  * Every line received from the client is appended to the transcript file so a
  * test can assert what was actually put on the wire (e.g. dot-stuffing).
@@ -19,8 +23,27 @@
 $port = (int)($argv[1] ?? 0);
 $mode = (string)($argv[2] ?? 'ok');
 $transcriptFile = (string)($argv[3] ?? '');
+$certFile = (string)($argv[4] ?? '');
+$keyFile = (string)($argv[5] ?? '');
 
-$server = @stream_socket_server('tcp://127.0.0.1:' . $port, $errno, $errstr);
+$context = null;
+if (in_array($mode, ['tls_selfsigned', 'tls_garbage'], true) && $certFile !== '' && is_file($certFile)) {
+    $context = stream_context_create(['ssl' => [
+        'local_cert' => $certFile,
+        'local_pk' => $keyFile !== '' ? $keyFile : null,
+        'verify_peer' => false,
+        'verify_peer_name' => false,
+        'allow_self_signed' => true,
+    ]]);
+}
+
+$server = @stream_socket_server(
+    'tcp://127.0.0.1:' . $port,
+    $errno,
+    $errstr,
+    STREAM_SERVER_BIND | STREAM_SERVER_LISTEN,
+    $context
+);
 if ($server === false) {
     fwrite(STDERR, "bind failed: {$errstr}\n");
     exit(1);
@@ -82,6 +105,29 @@ while (($line = $read()) !== null) {
 
     if (str_starts_with($upper, 'HELO')) {
         $write("250 fake.local\r\n");
+        continue;
+    }
+
+    if (str_starts_with($upper, 'STARTTLS')) {
+        if ($mode === 'no_starttls') {
+            $write("502 5.5.1 STARTTLS not supported\r\n");
+            continue;
+        }
+        if ($mode === 'tls_garbage') {
+            $write("220 2.0.0 Ready to start TLS\r\n");
+            $write("this is not a TLS handshake\r\n");
+            break;
+        }
+        if ($mode === 'tls_selfsigned') {
+            $write("220 2.0.0 Ready to start TLS\r\n");
+            $ok = @stream_socket_enable_crypto($conn, true, STREAM_CRYPTO_METHOD_TLS_SERVER);
+            if ($ok !== true) {
+                // The client rejected the certificate (expected in the test).
+                break;
+            }
+            continue;
+        }
+        $write("454 4.7.0 TLS not available\r\n");
         continue;
     }
 

@@ -173,6 +173,17 @@ function bb_smtp_send(array $config, string $to, string $subject, string $htmlBo
     }
 
     if ($username !== '' && $password !== '') {
+        // Base64 is not encryption: without TLS the credentials cross the
+        // network in clear. Refuse when the administrator asked for that
+        // guarantee, otherwise warn loudly instead of failing silently.
+        if ($secure !== 'tls' && $secure !== 'ssl') {
+            if (!empty($config['mail_require_tls_for_auth'])) {
+                error_log('SMTP: refusing to authenticate over an unencrypted connection (mail_require_tls_for_auth is enabled)');
+                fclose($fp);
+                return false;
+            }
+            error_log('SMTP WARNING: authenticating over an unencrypted connection; the password is only base64-encoded. Set mail_secure to "tls" (STARTTLS) or "ssl", or enable mail_require_tls_for_auth to refuse this.');
+        }
         if (bb_smtp_command($fp, 'AUTH LOGIN', [334], $timeout, 'AUTH LOGIN') === null) {
             fclose($fp);
             return false;

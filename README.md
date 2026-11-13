@@ -183,7 +183,12 @@ Coverage (Xdebug or PCOV required) and a regression floor over `src/` + `lib/`:
 
 ```bash
 XDEBUG_MODE=coverage php tests/run.php --coverage --min-coverage=80
+XDEBUG_MODE=coverage php tests/run.php --coverage --min-area-coverage=70
 ```
+
+`--min-area-coverage` applies a separate floor to the areas that must not lose
+coverage: authentication/sessions, authorization, updates, package installation
+and migrations. CI runs both checks.
 
 **Known limitation**: `src/bootstrap.php` is not fully exercised by the CLI suite. It contains a `BULLETIN_TEST_MODE` early-return path that skips session startup, security headers, and HTTPS redirects — those paths should be verified through integration testing in a real PHP server environment.
 
@@ -225,6 +230,30 @@ Upgrading an existing installation:
   a successful update; `api/install.php` is kept because it is the runtime endpoint
   used by the admin panel to install catalog plugins/themes;
 - plugins, themes, uploads, `data/` and `config.json` are never overwritten.
+
+## HTTPS, HSTS and proxies
+
+`force_https` (default `true`) redirects plain-HTTP visitors to HTTPS, and the
+`Secure` session cookie is controlled by `cookie_secure`. Both decisions use the
+forwarded headers validated against `trusted_proxies`, so reverse-proxy setups
+work without extra configuration.
+
+HSTS is sent only when the visitor is actually on HTTPS (directly or through a
+trusted proxy):
+
+| Option | Default | Meaning |
+|---|---|---|
+| `hsts_max_age` | `31536000` | HSTS lifetime in seconds. `0` disables HSTS (useful while a certificate is being rolled out). |
+| `hsts_include_subdomains` | `false` | Adds `includeSubDomains`. Enable it only if **every** subdomain of the domain can serve valid HTTPS: the browser will refuse plain HTTP on all of them for the whole `max-age`. |
+
+## Email authentication over TLS
+
+`mail_secure` accepts `tls` (STARTTLS), `ssl` (implicit TLS) or an empty value
+(plain connection). When SMTP credentials are configured without TLS, the
+password is only base64-encoded on the wire: bulletinbored logs a warning and
+keeps working, and `mail_require_tls_for_auth: true` makes it refuse instead.
+Server certificates are always verified — a self-signed or expired certificate
+makes the delivery fail rather than sending credentials to an unknown host.
 
 ## Security model & known risks
 

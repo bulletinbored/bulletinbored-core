@@ -13,9 +13,11 @@
  * identifiers throw InvalidArgumentException instead of being interpolated
  * into SQL.
  *
- * whereRaw() is the documented escape hatch and takes *trusted* SQL only — the
- * fragment is not inspected or sanitised, so never pass user input as the first
- * argument (bind it through $params instead).
+ * whereRaw(), raw(), rawFirst() and rawExec() are the documented escape hatches
+ * and take *trusted* SQL only — those statements are not inspected or
+ * sanitised, so never pass user input as the SQL string (bind every value
+ * through the $params argument instead). Everything they return is still safe;
+ * only the statement text is the caller's responsibility.
  *
  * Usage:
  *   $db = new DbQuery($pdo);
@@ -330,6 +332,10 @@ class DbQuery
         return $stmt->rowCount();
     }
 
+    /**
+     * Run a trusted SQL statement and return all rows.
+     * SECURITY: $sql is executed verbatim — see the class docblock.
+     */
     public function raw(string $sql, array $params = []): array
     {
         $stmt = $this->pdo->prepare($sql);
@@ -337,6 +343,10 @@ class DbQuery
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /**
+     * Run a trusted SQL statement and return the first row.
+     * SECURITY: $sql is executed verbatim — see the class docblock.
+     */
     public function rawFirst(string $sql, array $params = []): ?array
     {
         $stmt = $this->pdo->prepare($sql);
@@ -345,6 +355,10 @@ class DbQuery
         return $result ?: null;
     }
 
+    /**
+     * Run a trusted SQL write statement and return the affected row count.
+     * SECURITY: $sql is executed verbatim — see the class docblock.
+     */
     public function rawExec(string $sql, array $params = []): int
     {
         $stmt = $this->pdo->prepare($sql);

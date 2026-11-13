@@ -49,17 +49,10 @@ if (!isset($config) || !is_array($config)) {
     }
 }
 
-// --- Security headers -------------------------------------------------------
-require_once __DIR__ . '/csp.php';
-$cspNonce = generate_csp_nonce();
-send_security_headers($cspNonce, $config);
-
-// --- Force HTTPS ------------------------------------------------------------
-// If the deployment is HTTPS-only (cookie_secure enabled), redirect any plain
-// HTTP request to the equivalent HTTPS URL before starting the session, so the
-// Secure session cookie is never emitted over an unencrypted channel. This keeps
-// login/sessions working while upgrading every visitor to HTTPS automatically.
 // --- Trusted proxies --------------------------------------------------------
+// Resolved before the security headers: behind a reverse proxy HTTPS terminates
+// at the proxy and PHP receives plain HTTP, so HSTS can only be decided after
+// the forwarded headers have been validated against the trusted proxy list.
 require_once __DIR__ . '/TrustedProxies.php';
 $proxyInfo = trusted_proxies_detect();
 
@@ -69,10 +62,18 @@ $app->forwardedProto = $forwardedProto = $proxyInfo['forwarded_proto'];
 $app->forwardedSsl = $forwardedSsl = $proxyInfo['forwarded_ssl'];
 $app->forwardedFor = $forwardedFor = $proxyInfo['forwarded_for'];
 
-$isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-    || (isset($_SERVER['SERVER_PORT']) && (int) $_SERVER['SERVER_PORT'] === 443)
-    || ($forwardedProto === 'https')
-    || ($forwardedSsl === 'on');
+$isHttps = request_is_https($proxyInfo);
+
+// --- Security headers -------------------------------------------------------
+require_once __DIR__ . '/csp.php';
+$cspNonce = generate_csp_nonce();
+send_security_headers($cspNonce, $config, $isHttps);
+
+// --- Force HTTPS ------------------------------------------------------------
+// If the deployment is HTTPS-only (cookie_secure enabled), redirect any plain
+// HTTP request to the equivalent HTTPS URL before starting the session, so the
+// Secure session cookie is never emitted over an unencrypted channel. This keeps
+// login/sessions working while upgrading every visitor to HTTPS automatically.
 // The redirect can be disabled with "force_https": false in config.json. That
 // escape hatch matters on hosts where the domain has no valid certificate yet
 // (or during local development): without it every URL would 301 to an https://

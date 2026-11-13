@@ -50,6 +50,54 @@ The version in this file must always match the `VERSION` file (enforced by
 - `whereIn('column', [])` matches nothing (it previously relied on the string
   `'1'` being accepted as a column name).
 
+### Fixed (review of develop)
+
+- **CI now runs on `develop`** (`push` and `pull_request`), so the branch is
+  actually verified before a merge.
+- **Migration markers are mandatory where they matter.** On MySQL/MariaDB the
+  run is refused when `migration_progress` cannot be written: without a recovery
+  marker a half-applied schema would be untraceable. SQLite keeps tracking as
+  best effort because a failure is rolled back.
+- **Plugin migrations are no longer retried blindly.** After an interruption,
+  core migrations are retried (they are idempotent); a plugin migration is
+  stopped with instructions unless it declares `isIdempotent(): bool`.
+- **Expired suspensions are honoured by `AdminAuth`**: an administrator whose
+  suspension ended can use `api/install.php` again, matching the login flow,
+  while a running or indefinite suspension is still refused.
+- **`tools/build-release.php` refuses a dirty working tree** unless
+  `--allow-dirty` is passed, verifies every archive write, the archive size and
+  the checksum file.
+- **Release workflow accepts both `1.0.0` and `v1.0.0` tags** (the prefix is
+  normalised before comparing with `VERSION`).
+- **Core update finalization is verified**: `VERSION`, `config.json` and the
+  update manifest must all be written, otherwise the update is reported as
+  failed (the files are in place; a retry re-runs the metadata writes).
+- **HSTS works behind a reverse proxy**: the HTTPS state is resolved after the
+  trusted-proxy headers are validated, and `includeSubDomains` is now opt-in
+  (`hsts_include_subdomains`, default `false`) because it also binds every other
+  subdomain of the domain.
+- **SMTP credentials over plaintext**: a warning is logged, and
+  `mail_require_tls_for_auth` makes the client refuse. New tests cover STARTTLS
+  refusal, a broken TLS handshake and self-signed certificates (proof that the
+  server certificate is verified).
+- `DbQuery::raw()`, `rawFirst()` and `rawExec()` are documented as trusted-SQL
+  APIs, like `whereRaw()`.
+
+### Fixed (second pass)
+
+- **Nested plugin/theme archives failed the integrity check.** `manifest.json`
+  was counted as an undeclared payload file, so any archive with a top-level
+  `plugin-1.0.0/` folder (the standard GitHub layout) was rejected.
+- **Temporary package directories were never fully removed.** Cleanup and
+  flattening used `glob('*')`, which skips dotfiles: `.github/`, `.gitignore`
+  and friends stayed behind, `rmdir()` failed and `.install-tmp-*` directories
+  leaked into `plugins/`/`themes/`, where the loader could pick them up.
+  `deleteDir()` now removes hidden files too and never follows symlinks.
+- **A core ZIP whose only top-level entry is a directory was rejected** as an
+  "invalid package structure" (e.g. a package containing `index.php`, `VERSION`
+  and `lib/`). The wrapper-directory detection now requires `index.php` and
+  `VERSION` inside the single directory before treating it as a wrapper.
+
 ### Reliability
 
 - **Interrupted migrations are recoverable.** The migrator records a row in the
@@ -64,6 +112,18 @@ The version in this file must always match the `VERSION` file (enforced by
   them testable without touching the real installation.
 
 ### Tooling and distribution
+
+- Route authorization map test: every `/admin` route must sit inside the admin
+  middleware group and every non-public route must require authentication; the
+  guest/auth/admin/can middleware chains are also exercised end to end.
+- `tests/run.php --min-area-coverage=<percent>` enforces a separate coverage
+  floor for authentication/sessions, authorization, updates, packages and
+  migrations (CI runs it at 70%).
+- Adversarial `PackageInstaller` tests (Zip Slip variants, integrity mismatches,
+  pre-existing target directories, repo-file stripping, nested archives),
+  upgrade-compatibility tests (previous-release database, populated database,
+  core update preserving data/plugins/themes/uploads/config) and telemetry
+  opt-out/failure tests.
 
 - Versioned `CHANGELOG.md` checked by the test suite.
 - `tools/build-release.php` produces a reproducible distribution ZIP (whitelist

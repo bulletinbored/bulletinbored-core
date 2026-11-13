@@ -17,10 +17,13 @@ function csp_nonce(): string {
 /**
  * Build the HSTS header value from configuration, or null when HSTS is disabled.
  *
- * includeSubDomains is opt-out (config: hsts_include_subdomains = false) because
- * it also covers every other host under the domain, including ones that may not
- * have a valid certificate yet. hsts_max_age = 0 disables HSTS entirely, for
- * example while a certificate is being rolled out.
+ * includeSubDomains is opt-IN (config: hsts_include_subdomains = true). It
+ * binds every subdomain of the domain to HTTPS for the whole max-age, so a
+ * forum installed on "forum.example.com" would also break "shop.example.com"
+ * if that host has no valid certificate. The main host is protected by
+ * max-age alone, which is what a stock installation gets.
+ * hsts_max_age = 0 disables HSTS entirely, for example while a certificate is
+ * being rolled out.
  */
 function build_hsts_header(array $config = []): ?string
 {
@@ -33,21 +36,33 @@ function build_hsts_header(array $config = []): ?string
         return null;
     }
     $header = 'max-age=' . $maxAge;
-    if (!empty($config['hsts_include_subdomains']) || !array_key_exists('hsts_include_subdomains', $config)) {
+    if (!empty($config['hsts_include_subdomains'])) {
         $header .= '; includeSubDomains';
     }
     return $header;
 }
 
-function send_security_headers(string $nonce, array $config = []): void {
+/**
+ * Send the security headers.
+ *
+ * @param string    $nonce  CSP nonce.
+ * @param array     $config Forum configuration (HSTS settings).
+ * @param bool|null $isHttps Whether the visitor is on HTTPS. Pass the value
+ *                           already resolved through trusted proxies: behind a
+ *                           reverse proxy PHP sees plain HTTP, so detecting it
+ *                           here would silently drop HSTS on those hosts.
+ */
+function send_security_headers(string $nonce, array $config = [], ?bool $isHttps = null): void {
     header('X-Content-Type-Options: nosniff');
     header('X-Frame-Options: DENY');
     header('Referrer-Policy: strict-origin-when-cross-origin');
     header('Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=()');
     // Only advertise HSTS over an actual HTTPS connection: sending it over
     // plain HTTP has no effect (and would be ignored by browsers anyway).
-    $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-        || (isset($_SERVER['SERVER_PORT']) && (int)$_SERVER['SERVER_PORT'] === 443);
+    if ($isHttps === null) {
+        $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+            || (isset($_SERVER['SERVER_PORT']) && (int)$_SERVER['SERVER_PORT'] === 443);
+    }
     if ($isHttps) {
         $hsts = build_hsts_header($config);
         if ($hsts !== null) {

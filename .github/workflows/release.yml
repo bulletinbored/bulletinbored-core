@@ -34,7 +34,11 @@ jobs:
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
           VERSION="$(cat VERSION)"
-          if [ "$TAG" != "$VERSION" ] && [ "v$TAG" != "v$VERSION" ]; then
+          # Normalise the optional "v" prefix before comparing: both "1.0.0"
+          # and "v1.0.0" are accepted.
+          TAG_NORM="${TAG#v}"
+          VERSION_NORM="${VERSION#v}"
+          if [ "$TAG_NORM" != "$VERSION_NORM" ]; then
             echo "Tag $TAG does not match VERSION $VERSION" >&2
             exit 1
           fi

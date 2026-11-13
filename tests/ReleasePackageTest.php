@@ -16,8 +16,10 @@ function release_package_build(string $output): array
         return ['ok' => false, 'skipped' => true, 'stdout' => '', 'stderr' => '', 'exit' => -1];
     }
     $root = dirname(__DIR__);
+    // --allow-dirty: the suite runs on developer checkouts too, where the tree
+    // is often dirty. The dirty-tree refusal has its own test below.
     $cmd = escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($root . '/tools/build-release.php')
-        . ' --output=' . escapeshellarg($output);
+        . ' --allow-dirty --output=' . escapeshellarg($output);
     $descriptors = [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
     $proc = @proc_open($cmd, $descriptors, $pipes, $root);
     if (!is_resource($proc)) {
@@ -253,8 +255,53 @@ function test_release_package_clean_install(): Test
     return $t;
 }
 
+function test_release_builder_refuses_dirty_working_tree(): Test
+{
+    $t = new Test('Release package - dirty working tree is refused');
+
+    if (!class_exists('ZipArchive') || !function_exists('proc_open') || !is_dir(dirname(__DIR__) . '/.git')) {
+        $t->assert('Skipped: no git checkout or missing tooling', true);
+        return $t;
+    }
+
+    $root = dirname(__DIR__);
+    $status = trim((string)@shell_exec('git -C ' . escapeshellarg($root) . ' status --porcelain 2>/dev/null'));
+    if ($status === '') {
+        $t->assert('Skipped: working tree is clean', true);
+        return $t;
+    }
+
+    $output = sys_get_temp_dir() . '/bb_release_dirty_' . uniqid('', true) . '.zip';
+    try {
+        $cmd = escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($root . '/tools/build-release.php')
+            . ' --output=' . escapeshellarg($output);
+        $descriptors = [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
+        $proc = @proc_open($cmd, $descriptors, $pipes, $root);
+        if (!is_resource($proc)) {
+            $t->assert('Skipped: cannot spawn the builder', true);
+            return $t;
+        }
+        stream_get_contents($pipes[1]);
+        $stderr = stream_get_contents($pipes[2]);
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+        $exit = proc_close($proc);
+
+        $t->assertEquals('Builder fails on a dirty tree', 1, $exit);
+        $t->assert('Error mentions uncommitted changes', str_contains($stderr, 'uncommitted changes'));
+        $t->assert('Error suggests --allow-dirty', str_contains($stderr, '--allow-dirty'));
+        $t->assertFalse('No archive written when refusing', is_file($output));
+    } finally {
+        @unlink($output);
+        @unlink($output . '.sha256');
+    }
+
+    return $t;
+}
+
 register_tests(
     'test_release_package_contents',
-    'test_release_package_clean_install'
+    'test_release_package_clean_install',
+    'test_release_builder_refuses_dirty_working_tree'
 );
 

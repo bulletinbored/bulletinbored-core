@@ -263,7 +263,7 @@ class Migrator
         $instance = $this->loadMigration($migration['path']);
         $transactional = $this->supportsTransactionalDdl();
 
-        $this->markStarted($migration['name'], $batch);
+        $this->markStarted($migration['name'], $batch, !$transactional);
 
         try {
             if ($transactional) {
@@ -350,16 +350,45 @@ class Migrator
         $this->clearProgress($name);
     }
 
-    private function markStarted(string $name, int $batch): void
+    /**
+     * Announce a migration run in migration_progress.
+     *
+     * On drivers with transactional DDL this is best effort: a failure would
+     * not lose recoverable state, because a failed migration is rolled back.
+     * On MySQL/MariaDB it is mandatory: without the marker an interrupted
+     * migration leaves a half-applied schema with no trace of what happened,
+     * so the migration is refused instead of being run blind.
+     */
+    private function markStarted(string $name, int $batch, bool $required = false): void
     {
         try {
             $this->pdo->prepare("DELETE FROM migration_progress WHERE migration = ?")->execute([$name]);
             $this->pdo->prepare("INSERT INTO migration_progress (migration, batch) VALUES (?, ?)")
                 ->execute([$name, $batch]);
+
+            if ($required && !$this->progressExists($name)) {
+                throw new RuntimeException('the progress row could not be read back');
+            }
         } catch (\Throwable $e) {
-            // Progress tracking is best effort: never block the migration.
+            if ($required) {
+                throw new RuntimeException(
+                    "Cannot record the start of migration '{$name}' in migration_progress: " . $e->getMessage()
+                    . ' This driver cannot roll schema changes back, so running the migration without a recovery'
+                    . ' marker is unsafe. Fix the database permissions/table and retry.',
+                    0,
+                    $e
+                );
+            }
+            // Transactional driver: the migration can be rolled back on failure.
             error_log('Migrator: cannot record progress for ' . $name . ': ' . $e->getMessage());
         }
+    }
+
+    private function progressExists(string $name): bool
+    {
+        $stmt = $this->pdo->prepare("SELECT COUNT(*) FROM migration_progress WHERE migration = ?");
+        $stmt->execute([$name]);
+        return (int)$stmt->fetchColumn() > 0;
     }
 
     private function recordFailure(string $name, string $error): void
@@ -420,6 +449,54 @@ class Migrator
     }
 
     /**
+     * Retrying an interrupted migration is only safe when the migration is
+     * idempotent. Core migrations are written that way, and a plugin can opt in
+     * by implementing isIdempotent(): bool.
+     *
+     * Everything else is stopped with an actionable error: re-running half a
+     * plugin migration automatically could duplicate non-reversible work
+     * (data imports, column drops, external calls).
+     *
+     * @throws RuntimeException when an interrupted non-core migration is not
+     *                          declared idempotent.
+     */
+    private function assertInterruptedMigrationsAreRetryable(array $pending): void
+    {
+        $pendingByName = [];
+        foreach ($pending as $migration) {
+            $pendingByName[$migration['name']] = $migration;
+        }
+
+        foreach ($this->getInterruptedMigrations() as $interrupted) {
+            $name = (string)$interrupted['migration'];
+            if (!isset($pendingByName[$name])) {
+                continue; // already recorded/recovered, nothing to retry
+            }
+            if (str_starts_with($name, 'core:')) {
+                continue; // core migrations are idempotent by construction
+            }
+
+            $instance = null;
+            try {
+                $instance = $this->loadMigration($pendingByName[$name]['path']);
+            } catch (\Throwable $e) {
+                error_log('Migrator: cannot load interrupted migration ' . $name . ': ' . $e->getMessage());
+            }
+
+            if ($instance !== null && method_exists($instance, 'isIdempotent') && $instance->isIdempotent()) {
+                continue; // the plugin vouches for a safe retry
+            }
+
+            throw new RuntimeException(
+                "Migration '{$name}' was interrupted and is not declared idempotent"
+                . (!empty($interrupted['error']) ? ' (last error: ' . $interrupted['error'] . ')' : '')
+                . '. It was not retried automatically: repair the schema and call recoverInterrupted() to record it,'
+                . ' or call forgetInterrupted() to discard the marker and retry deliberately.'
+            );
+        }
+    }
+
+    /**
      * Run all pending migrations with file-based locking.
      * Prevents concurrent migration runs on the same database.
      *
@@ -451,6 +528,7 @@ class Migrator
         }
 
         try {
+            $this->assertInterruptedMigrationsAreRetryable($pending);
             $pendingNames = array_column($pending, 'name');
             foreach ($this->getInterruptedMigrations() as $interrupted) {
                 if (in_array($interrupted['migration'], $pendingNames, true)) {

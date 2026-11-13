@@ -2,9 +2,9 @@ name: Database Matrix Tests
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, develop]
   pull_request:
-    branches: [main, master]
+    branches: [main, master, develop]
 
 jobs:
   test-sqlite:
@@ -134,4 +134,5 @@ jobs:
         # threshold is a regression floor, not a target: it currently sits a
         # few points below the measured value so unrelated refactors do not
         # break the build, while a real loss of coverage does.
-        run: php tests/run.php --coverage --min-coverage=80
+        run: >-
+          php tests/run.php --coverage --min-coverage=80 --min-area-coverage=70

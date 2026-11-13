@@ -188,8 +188,67 @@ function test_core_zip_update_rejects_invalid_package(): Test
     return $t;
 }
 
+function test_core_zip_update_reports_metadata_failure(): Test
+{
+    $t = new Test('Core update - unfinished metadata is reported as failure');
+
+    if (!class_exists('ZipArchive')) {
+        $t->assert('Skipped: ZipArchive not available', true);
+        return $t;
+    }
+
+    $root = core_zip_root('0.9.8');
+    // A corrupt config.json cannot receive the new version.
+    file_put_contents($root . '/config.json', '{ this is not json');
+    $zipPath = core_zip_build([
+        'index.php' => "<?php // new core\n",
+        'VERSION' => '1.0.0',
+    ]);
+
+    $manager = new UpdateManager($root . '/data/update_manifest.json', null, null, null, $root);
+
+    try {
+        $ok = $manager->applyUpdate('core', 'core', $zipPath);
+        $t->assertFalse('Update reported as failed', $ok);
+        $t->assertEquals('Files were still updated', "<?php // new core\n", file_get_contents($root . '/index.php'));
+        $t->assertEquals('VERSION written before the failure', '1.0.0', trim((string)file_get_contents($root . '/VERSION')));
+        $manifest = json_decode((string)file_get_contents($root . '/data/update_manifest.json'), true);
+        $t->assertEquals('Manifest written before the failure', '1.0.0', $manifest['core']['core']['version'] ?? null);
+        $t->assertEquals('Corrupt config left untouched', '{ this is not json', file_get_contents($root . '/config.json'));
+    } finally {
+        core_zip_cleanup($root);
+        if ($zipPath !== '') {
+            @unlink($zipPath);
+        }
+    }
+
+    return $t;
+}
+
+function test_set_version_reports_write_failure(): Test
+{
+    $t = new Test('Update manifest - write failures are reported');
+
+    // "data" is a file, so the manifest directory cannot be created.
+    $root = sys_get_temp_dir() . '/bb_umw_' . uniqid('', true);
+    @mkdir($root, 0755, true);
+    file_put_contents($root . '/data', 'not a directory');
+
+    try {
+        $manager = new UpdateManager($root . '/data/update_manifest.json', null, null, null, $root);
+        $t->assertFalse('setVersion() returns false when the manifest cannot be written', $manager->setVersion('core', 'core', '1.0.0'));
+    } finally {
+        @unlink($root . '/data');
+        @rmdir($root);
+    }
+
+    return $t;
+}
+
 register_tests(
     'test_core_zip_update_finalizes_like_remote_update',
     'test_core_zip_update_flattens_nested_directory',
-    'test_core_zip_update_rejects_invalid_package'
+    'test_core_zip_update_rejects_invalid_package',
+    'test_core_zip_update_reports_metadata_failure',
+    'test_set_version_reports_write_failure'
 );

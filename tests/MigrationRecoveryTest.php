@@ -33,16 +33,27 @@ class NonTransactionalMigrator extends Migrator
  *
  * @return array{dir: string, name: string}
  */
-function migration_recovery_fixture_dir(bool $commitFirstStatement, string $tag): array
+function migration_recovery_fixture_dir(bool $commitFirstStatement, string $tag, string $source = 'core'): array
 {
     static $counter = 0;
     $counter++;
     $suffix = ucfirst(preg_replace('/[^A-Za-z0-9]/', '', $tag)) . $counter;
     $base = 'partial_' . strtolower($suffix);
 
-    $dir = sys_get_temp_dir() . '/bb_mig_' . uniqid('', true) . '/migrations';
+    // The migrator namespaces migrations with the source directory name, so a
+    // directory called "core" behaves exactly like the core migrations and
+    // anything else behaves like a plugin migration.
+    $dir = sys_get_temp_dir() . '/bb_mig_' . uniqid('', true) . '/' . $source . '/migrations';
     @mkdir($dir, 0755, true);
 
+    return migration_recovery_write_fixture($dir, $suffix, $base, $counter, $commitFirstStatement);
+}
+
+/**
+ * Write the migration file; kept separate so the idempotent variant can reuse it.
+ */
+function migration_recovery_write_fixture(string $dir, string $suffix, string $base, int $counter, bool $commitFirstStatement): array
+{
     $body = $commitFirstStatement
         ? "        \$pdo->exec(\"CREATE TABLE IF NOT EXISTS partial_table_{$counter} (id INTEGER PRIMARY KEY, v TEXT)\");\n"
           . "        throw new RuntimeException('boom in second statement');"
@@ -60,12 +71,16 @@ function migration_recovery_fixture_dir(bool $commitFirstStatement, string $tag)
 
 function migration_recovery_cleanup(string $dir): void
 {
-    $migrations = dirname($dir);
+    $migrations = dirname($dir);   // e.g. .../core/migrations
+    $source = dirname($migrations);
+    $base = dirname($source);
     foreach (glob($dir . '/*') ?: [] as $file) {
         @unlink($file);
     }
     @rmdir($dir);
     @rmdir($migrations);
+    @rmdir($source);
+    @rmdir($base);
 }
 
 function test_failed_migration_on_transactional_driver_leaves_no_trace(): Test
@@ -232,9 +247,193 @@ function test_successful_migration_clears_marker(): Test
     return $t;
 }
 
+function test_plugin_migration_is_not_retried_blindly(): Test
+{
+    $t = new Test('Migrations - interrupted plugin migration needs a decision');
+
+    $fixture = migration_recovery_fixture_dir(true, 'pluginblock', 'myplugin');
+    try {
+        $pdo = new BbPdo('sqlite::memory:');
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+        $migrator = new NonTransactionalMigrator($pdo, []);
+        $migrator->ensureMigrationsTable();
+        $migrator->addPath($fixture['dir']);
+
+        try {
+            $migrator->migrate();
+        } catch (RuntimeException $e) {
+            // first failure: the migration itself
+        }
+        $t->assertTrue('Plugin migration interrupted', $migrator->isInterrupted($fixture['name']));
+
+        $blocked = null;
+        try {
+            $migrator->migrate();
+        } catch (RuntimeException $e) {
+            $blocked = $e;
+        }
+        $t->assertNotNull('Second run refuses to retry automatically', $blocked);
+        if ($blocked !== null) {
+            $t->assert('Error names the migration', str_contains($blocked->getMessage(), $fixture['name']));
+            $t->assert('Error offers recoverInterrupted()', str_contains($blocked->getMessage(), 'recoverInterrupted'));
+            $t->assert('Error offers forgetInterrupted()', str_contains($blocked->getMessage(), 'forgetInterrupted'));
+        }
+
+        // Explicit decision: the operator repaired the schema by hand.
+        $migrator->recoverInterrupted($fixture['name']);
+        $t->assertCount('Nothing left pending after recovery', 0, array_filter(
+            array_column($migrator->getPending(), 'name'),
+            fn($name) => $name === $fixture['name']
+        ));
+        $t->assertContains('Recorded as ran', $fixture['name'], $migrator->getRanMigrations());
+        $t->assertCount('Next run does not retry it', 0, $migrator->migrate());
+    } finally {
+        migration_recovery_cleanup($fixture['dir']);
+    }
+
+    return $t;
+}
+
+function test_plugin_migration_can_declare_idempotency(): Test
+{
+    $t = new Test('Migrations - idempotent plugin migration is retried');
+
+    $base = sys_get_temp_dir() . '/bb_migidem_' . uniqid('', true);
+    $dir = $base . '/idemplugin/migrations';
+    @mkdir($dir, 0755, true);
+    $suffix = 'Probe';
+    $file = $dir . '/20260103_probe.php';
+    // Fails the first time (after creating its table), succeeds on the retry:
+    // exactly the "half applied, safe to resume" case.
+    file_put_contents($file, "<?php\nclass {$suffix}\n{\n"
+        . "    public function up(\$pdo)\n    {\n"
+        . "        \$pdo->exec(\"CREATE TABLE IF NOT EXISTS probe_table (id INTEGER PRIMARY KEY)\");\n"
+        . "        \$marker = __DIR__ . '/.ran';\n"
+        . "        if (file_exists(\$marker)) { return; }\n"
+        . "        file_put_contents(\$marker, '1');\n"
+        . "        throw new RuntimeException('first run fails on purpose');\n"
+        . "    }\n\n"
+        . "    public function isIdempotent(): bool { return true; }\n"
+        . "}\n");
+
+    try {
+        $pdo = new BbPdo('sqlite::memory:');
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+        $migrator = new NonTransactionalMigrator($pdo, []);
+        $migrator->ensureMigrationsTable();
+        $migrator->addPath($dir);
+
+        try {
+            $migrator->migrate();
+        } catch (RuntimeException $e) {
+            // expected first failure
+        }
+        $name = 'idemplugin:20260103_probe';
+        $t->assertTrue('Interrupted after the first run', $migrator->isInterrupted($name));
+
+        $ran = [];
+        $retried = true;
+        try {
+            $ran = $migrator->migrate();
+        } catch (RuntimeException $e) {
+            $retried = false;
+        }
+        $t->assertTrue('Retry allowed for an idempotent plugin migration', $retried);
+        $t->assertContains('Migration completed on retry', $name, $ran);
+        $t->assertFalse('Marker cleared after success', $migrator->isInterrupted($name));
+    } finally {
+        foreach (glob($dir . '/*') ?: [] as $item) {
+            is_dir($item) ? @rmdir($item) : @unlink($item);
+        }
+        foreach (glob($dir . '/.ran') ?: [] as $item) {
+            @unlink($item);
+        }
+        @rmdir($dir);
+        @rmdir($base . '/idemplugin');
+        @rmdir($base);
+    }
+
+    return $t;
+}
+
+function test_marker_failure_blocks_non_transactional_migration(): Test
+{
+    $t = new Test('Migrations - missing recovery marker blocks MySQL-like drivers');
+
+    $fixture = migration_recovery_fixture_dir(true, 'marker', 'core');
+    try {
+        // Non-transactional driver: the marker is mandatory.
+        $pdo = new BbPdo('sqlite::memory:');
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $migrator = new NonTransactionalMigrator($pdo, []);
+        $migrator->ensureMigrationsTable();
+        $migrator->addPath($fixture['dir']);
+
+        // Break the progress table so the marker cannot be written, then run the
+        // migration directly: migrate() would recreate the table first.
+        $migration = null;
+        foreach ($migrator->getAllMigrations() as $candidate) {
+            if ($candidate['name'] === $fixture['name']) {
+                $migration = $candidate;
+                break;
+            }
+        }
+        $t->assertNotNull('Fixture migration discovered', $migration);
+        $pdo->exec('DROP TABLE migration_progress');
+
+        $error = null;
+        try {
+            $migrator->runUp($migration, 1);
+        } catch (RuntimeException $e) {
+            $error = $e;
+        }
+        $t->assertNotNull('Migration refused without a recovery marker', $error);
+        if ($error !== null) {
+            $t->assert('Error explains why', str_contains($error->getMessage(), 'migration_progress'));
+        }
+        $tables = $pdo->query("SELECT name FROM sqlite_master WHERE type='table' AND name='{$fixture['table']}'")->fetchAll();
+        $t->assertCount('Migration body never ran', 0, $tables);
+
+        // Transactional driver: the same broken table does not block, because a
+        // failure is rolled back instead of tracked.
+        $pdo2 = new BbPdo('sqlite::memory:');
+        $pdo2->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $transactional = new Migrator($pdo2, []);
+        $transactional->ensureMigrationsTable();
+        $transactional->addPath($fixture['dir']);
+        $migration2 = null;
+        foreach ($transactional->getAllMigrations() as $candidate) {
+            if ($candidate['name'] === $fixture['name']) {
+                $migration2 = $candidate;
+                break;
+            }
+        }
+        $pdo2->exec('DROP TABLE migration_progress');
+
+        $ranOrFailed = true;
+        try {
+            $transactional->runUp($migration2, 1);
+        } catch (RuntimeException $e) {
+            // The migration itself still fails, but not because of the marker.
+            $ranOrFailed = !str_contains($e->getMessage(), 'migration_progress');
+        }
+        $t->assertTrue('SQLite is not blocked by the missing marker table', $ranOrFailed);
+    } finally {
+        migration_recovery_cleanup($fixture['dir']);
+    }
+
+    return $t;
+}
+
 register_tests(
     'test_failed_migration_on_transactional_driver_leaves_no_trace',
     'test_failed_migration_on_mysql_like_driver_is_recorded',
     'test_interrupted_migration_recovery_paths',
-    'test_successful_migration_clears_marker'
+    'test_successful_migration_clears_marker',
+    'test_plugin_migration_is_not_retried_blindly',
+    'test_plugin_migration_can_declare_idempotency',
+    'test_marker_failure_blocks_non_transactional_migration'
 );
+

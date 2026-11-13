@@ -55,7 +55,12 @@ class AdminAuth
      *   - the user row no longer exists (deleted account);
      *   - the stored session_version is stale (role/status/password changed);
      *   - the current role is not 'admin';
-     *   - the account is banned or suspended.
+     *   - the account is banned, or suspended and the suspension has not expired.
+     *
+     * An expired suspension is treated as active, matching the login flow in
+     * src/actions/users.php which clears it: otherwise an administrator whose
+     * suspension ended could use the panel again after the automatic
+     * reactivation but still be refused by this endpoint until the next login.
      */
     public static function verifySession(PDO $pdo, array $session): ?array
     {
@@ -64,7 +69,7 @@ class AdminAuth
             return null;
         }
 
-        $stmt = $pdo->prepare("SELECT id, username, role, status, session_version FROM users WHERE id = ?");
+        $stmt = $pdo->prepare("SELECT id, username, role, status, session_version, suspension_time FROM users WHERE id = ?");
         $stmt->execute([$userId]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -77,8 +82,17 @@ class AdminAuth
         if (($user['role'] ?? '') !== 'admin') {
             return null;
         }
-        if (in_array(strtolower((string)($user['status'] ?? 'active')), ['banned', 'suspended'], true)) {
+
+        $status = strtolower((string)($user['status'] ?? 'active'));
+        if ($status === 'banned') {
             return null;
+        }
+        if ($status === 'suspended') {
+            $until = (int)($user['suspension_time'] ?? 0);
+            // 0/absent means "suspended indefinitely".
+            if ($until <= 0 || $until > time()) {
+                return null;
+            }
         }
 
         return $user;
