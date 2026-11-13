@@ -6,6 +6,17 @@
  * No ORM, no magic. Just sugar over prepared statements.
  * Supports SQLite and MySQL via BbPdo.
  *
+ * Values are always bound as parameters. Identifiers (tables, columns, the
+ * ordering expression and the operator of a where clause) cannot be bound by
+ * PDO, so they are validated against a strict allow-list instead: letters,
+ * digits and underscores, optionally qualified as table.column. Invalid
+ * identifiers throw InvalidArgumentException instead of being interpolated
+ * into SQL.
+ *
+ * whereRaw() is the documented escape hatch and takes *trusted* SQL only — the
+ * fragment is not inspected or sanitised, so never pass user input as the first
+ * argument (bind it through $params instead).
+ *
  * Usage:
  *   $db = new DbQuery($pdo);
  *   $user = $db->table('users')->where('id', 42)->first();
@@ -16,6 +27,9 @@
 
 class DbQuery
 {
+    /** Operators accepted by where(). Everything else is rejected. */
+    private const OPERATORS = ['=', '!=', '<>', '<', '<=', '>', '>=', 'LIKE', 'NOT LIKE', 'IS', 'IS NOT'];
+
     private PDO $pdo;
     private string $table = '';
     private array $wheres = [];
@@ -33,9 +47,48 @@ class DbQuery
     public function table(string $table): self
     {
         $clone = clone $this;
-        $clone->table = $table;
+        $clone->table = self::assertIdentifier($table, 'table');
         $clone->reset();
         return $clone;
+    }
+
+    /**
+     * Validate a bare identifier: "users", "users.id", "thread_watchers".
+     * Anything that could change the shape of the statement is rejected.
+     */
+    private static function assertIdentifier(string $identifier, string $what = 'identifier'): string
+    {
+        $identifier = trim($identifier);
+        if (!preg_match('/^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?$/', $identifier)) {
+            throw new InvalidArgumentException("DbQuery: invalid {$what} '" . substr($identifier, 0, 64) . "'");
+        }
+        return $identifier;
+    }
+
+    /**
+     * Validate a select/order clause made of identifiers, "*" or a column
+     * alias ("created_at AS c"). Expressions and functions are not supported:
+     * use raw()/rawFirst() for those.
+     */
+    private static function assertColumnExpression(string $expression): string
+    {
+        $expression = trim(preg_replace('/\s+/', ' ', $expression) ?? '');
+        if ($expression === '*' || preg_match('/^[A-Za-z_][A-Za-z0-9_]*\.\*$/', $expression)) {
+            return $expression;
+        }
+        if (preg_match('/^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?(?: (?:AS )?[A-Za-z_][A-Za-z0-9_]*)?$/i', $expression)) {
+            return $expression;
+        }
+        throw new InvalidArgumentException("DbQuery: invalid column expression '" . substr($expression, 0, 64) . "'");
+    }
+
+    private static function assertOperator(string $operator): string
+    {
+        $normalized = strtoupper(trim(preg_replace('/\s+/', ' ', $operator) ?? ''));
+        if (!in_array($normalized, self::OPERATORS, true)) {
+            throw new InvalidArgumentException("DbQuery: unsupported operator '{$operator}'");
+        }
+        return $normalized;
     }
 
     private function reset(): void
@@ -51,15 +104,33 @@ class DbQuery
     public function select(string ...$cols): self
     {
         $clone = clone $this;
-        $clone->selectCols = $cols ?: ['*'];
+        $validated = [];
+        foreach ($cols as $col) {
+            $validated[] = self::assertColumnExpression($col);
+        }
+        $clone->selectCols = $validated ?: ['*'];
         return $clone;
     }
 
     public function where(string $column, $value, string $op = '='): self
     {
         $clone = clone $this;
+        $column = self::assertIdentifier($column, 'column');
+        $operator = self::assertOperator($op);
+
+        // NULL never compares equal: "col = NULL" is always false (and
+        // "col != NULL" always true). Emit the IS / IS NOT form meant instead.
+        if ($value === null && ($operator === '=' || $operator === 'IS')) {
+            $clone->wheres[] = "{$column} IS NULL";
+            return $clone;
+        }
+        if ($value === null && ($operator === '!=' || $operator === '<>' || $operator === 'IS NOT')) {
+            $clone->wheres[] = "{$column} IS NOT NULL";
+            return $clone;
+        }
+
         $paramName = ':w' . count($clone->params);
-        $clone->wheres[] = "{$column} {$op} {$paramName}";
+        $clone->wheres[] = "{$column} {$operator} {$paramName}";
         $clone->params[$paramName] = $value;
         return $clone;
     }
@@ -67,7 +138,9 @@ class DbQuery
     public function whereIn(string $column, array $values): self
     {
         if (empty($values)) {
-            return $this->where('1', 0);
+            // No values: match nothing. Expressed as raw SQL because it is not
+            // a column comparison.
+            return $this->whereRaw('1 = 0');
         }
         $clone = clone $this;
         $placeholders = [];
@@ -76,10 +149,16 @@ class DbQuery
             $placeholders[] = $paramName;
             $clone->params[$paramName] = $val;
         }
-        $clone->wheres[] = "{$column} IN (" . implode(', ', $placeholders) . ")";
+        $clone->wheres[] = self::assertIdentifier($column, 'column') . " IN (" . implode(', ', $placeholders) . ")";
         return $clone;
     }
 
+    /**
+     * Add a raw WHERE fragment.
+     *
+     * SECURITY: $sql is inserted verbatim. It must come from code, never from
+     * user input; bind every dynamic value through $params.
+     */
     public function whereRaw(string $sql, array $params = []): self
     {
         $clone = clone $this;
@@ -93,8 +172,8 @@ class DbQuery
     public function orderBy(string $column, string $direction = 'ASC'): self
     {
         $clone = clone $this;
-        $dir = strtoupper($direction) === 'DESC' ? 'DESC' : 'ASC';
-        $clone->orderBy[] = "{$column} {$dir}";
+        $dir = strtoupper(trim($direction)) === 'DESC' ? 'DESC' : 'ASC';
+        $clone->orderBy[] = self::assertIdentifier($column, 'order column') . " {$dir}";
         return $clone;
     }
 
@@ -142,7 +221,11 @@ class DbQuery
 
     public function get(): array
     {
-        $cols = implode(', ', $this->selectCols);
+        $validatedCols = [];
+        foreach ($this->selectCols as $col) {
+            $validatedCols[] = self::assertColumnExpression((string)$col);
+        }
+        $cols = implode(', ', $validatedCols);
         $sql = "SELECT {$cols} FROM {$this->table}"
             . $this->buildWhere()
             . $this->buildOrder()
@@ -174,7 +257,7 @@ class DbQuery
         if (empty($data)) {
             return 0;
         }
-        $columns = array_keys($data);
+        $columns = array_map(fn($c) => self::assertIdentifier((string)$c, 'column'), array_keys($data));
         $placeholders = [];
         $params = [];
         foreach ($columns as $col) {
@@ -195,7 +278,7 @@ class DbQuery
             return 0;
         }
         $driver = $this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
-        $columns = array_keys($data);
+        $columns = array_map(fn($c) => self::assertIdentifier((string)$c, 'column'), array_keys($data));
         $placeholders = [];
         $params = [];
         foreach ($columns as $col) {
@@ -226,8 +309,9 @@ class DbQuery
         $setParts = [];
         $params = [];
         foreach ($data as $col => $val) {
+            $column = self::assertIdentifier((string)$col, 'column');
             $paramName = ':u_' . $col;
-            $setParts[] = "{$col} = {$paramName}";
+            $setParts[] = "{$column} = {$paramName}";
             $params[$paramName] = $val;
         }
 

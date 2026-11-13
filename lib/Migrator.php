@@ -6,6 +6,25 @@
  * Migrations are PHP files in migrations/ directory with up() and down() methods.
  * Each migration is tracked in the `migrations` table with name, batch, and timestamp.
  *
+ * Recovery after a failed migration
+ * --------------------------------
+ * SQLite rolls back DDL inside a transaction, so a failed migration leaves no
+ * trace. MySQL/MariaDB commit DDL implicitly: if the third statement of a
+ * migration fails, the first two are already applied while the migration is
+ * not recorded, and the next run repeats all of it.
+ *
+ * To make that state visible and recoverable, every run is announced in the
+ * `migration_progress` table before up() executes and cleared when it
+ * completes. A row left behind therefore means "this migration is partially
+ * applied":
+ *
+ *   $migrator->getInterruptedMigrations();   // name, batch, started_at, error
+ *   $migrator->forgetInterrupted($name);     // after manually fixing the DB
+ *   $migrator->recoverInterrupted($name);    // fix applied: record as ran
+ *
+ * Core migrations are written to be idempotent (CREATE TABLE IF NOT EXISTS,
+ * guarded ALTERs), so retrying through migrate() is a normal recovery path.
+ *
  * Plugins can register their own migration paths via addPath().
  *
  * Usage:
@@ -80,6 +99,14 @@ class Migrator
                     ran_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
             ");
+            $this->pdo->exec("
+                CREATE TABLE IF NOT EXISTS migration_progress (
+                    migration VARCHAR(255) NOT NULL PRIMARY KEY,
+                    batch INT NOT NULL,
+                    started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    error TEXT NULL
+                )
+            ");
         } else {
             $this->pdo->exec("
                 CREATE TABLE IF NOT EXISTS migrations (
@@ -89,7 +116,25 @@ class Migrator
                     ran_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
             ");
+            $this->pdo->exec("
+                CREATE TABLE IF NOT EXISTS migration_progress (
+                    migration TEXT NOT NULL PRIMARY KEY,
+                    batch INTEGER NOT NULL,
+                    started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    error TEXT NULL
+                )
+            ");
         }
+    }
+
+    /**
+     * Whether the driver can roll back DDL inside a transaction.
+     * Protected so a subclass (and the test suite) can emulate a driver
+     * without transactional DDL.
+     */
+    protected function supportsTransactionalDdl(): bool
+    {
+        return $this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite';
     }
 
     /**
@@ -205,18 +250,23 @@ class Migrator
     }
 
     /**
-     * Run a single migration's up() method within a transaction.
-     * On failure, the migration is NOT recorded and the transaction is rolled back.
+     * Run a single migration's up() method.
+     *
+     * On SQLite the whole migration runs inside a transaction and a failure
+     * leaves no trace. On MySQL DDL cannot be rolled back, so the run is
+     * announced in migration_progress first and the error is recorded there
+     * when up() fails; the migration stays pending and can be re-run (core
+     * migrations are idempotent) or repaired manually.
      */
     public function runUp(array $migration, int $batch): void
     {
         $instance = $this->loadMigration($migration['path']);
+        $transactional = $this->supportsTransactionalDdl();
 
-        $driver = $this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
-        $supportsTransactionalDdl = ($driver === 'sqlite');
+        $this->markStarted($migration['name'], $batch);
 
         try {
-            if ($supportsTransactionalDdl) {
+            if ($transactional) {
                 $this->pdo->beginTransaction();
             }
 
@@ -225,18 +275,109 @@ class Migrator
             $stmt = $this->pdo->prepare("INSERT INTO migrations (migration, batch) VALUES (?, ?)");
             $stmt->execute([$migration['name'], $batch]);
 
-            if ($supportsTransactionalDdl) {
+            if ($transactional) {
                 $this->pdo->commit();
             }
+
+            $this->clearProgress($migration['name']);
         } catch (\Throwable $e) {
-            if ($supportsTransactionalDdl && $this->pdo->inTransaction()) {
+            if ($transactional && $this->pdo->inTransaction()) {
                 $this->pdo->rollBack();
             }
+
+            $hint = '';
+            if ($transactional) {
+                // Nothing was applied: drop the marker, a retry starts clean.
+                $this->clearProgress($migration['name']);
+            } else {
+                $this->recordFailure($migration['name'], $e->getMessage());
+                $hint = ' The driver cannot roll back schema changes: this migration may be partially applied.'
+                    . ' Core migrations are idempotent, so running the updater again is safe; otherwise repair'
+                    . ' the schema manually and call recoverInterrupted().';
+            }
+
             throw new RuntimeException(
-                "Migration '{$migration['name']}' failed: " . $e->getMessage(),
+                "Migration '{$migration['name']}' failed: " . $e->getMessage() . $hint,
                 0,
                 $e
             );
+        }
+    }
+
+    /**
+     * Migrations that started but never completed (non-transactional drivers).
+     *
+     * @return array<int, array{migration: string, batch: int, started_at: string, error: ?string}>
+     */
+    public function getInterruptedMigrations(): array
+    {
+        try {
+            $stmt = $this->pdo->query("SELECT migration, batch, started_at, error FROM migration_progress ORDER BY started_at ASC");
+            return $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    public function isInterrupted(string $name): bool
+    {
+        foreach ($this->getInterruptedMigrations() as $row) {
+            if ($row['migration'] === $name) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Forget an interrupted migration without recording it as applied.
+     * Use after repairing the schema by hand so the migration runs again.
+     */
+    public function forgetInterrupted(string $name): void
+    {
+        $this->clearProgress($name);
+    }
+
+    /**
+     * Record an interrupted migration as applied without re-running up().
+     * Use when the schema was completed manually after a partial run.
+     */
+    public function recoverInterrupted(string $name, ?int $batch = null): void
+    {
+        $batch = $batch ?? $this->getNextBatch();
+        $stmt = $this->pdo->prepare("INSERT INTO migrations (migration, batch) VALUES (?, ?)");
+        $stmt->execute([$name, $batch]);
+        $this->clearProgress($name);
+    }
+
+    private function markStarted(string $name, int $batch): void
+    {
+        try {
+            $this->pdo->prepare("DELETE FROM migration_progress WHERE migration = ?")->execute([$name]);
+            $this->pdo->prepare("INSERT INTO migration_progress (migration, batch) VALUES (?, ?)")
+                ->execute([$name, $batch]);
+        } catch (\Throwable $e) {
+            // Progress tracking is best effort: never block the migration.
+            error_log('Migrator: cannot record progress for ' . $name . ': ' . $e->getMessage());
+        }
+    }
+
+    private function recordFailure(string $name, string $error): void
+    {
+        try {
+            $this->pdo->prepare("UPDATE migration_progress SET error = ? WHERE migration = ?")
+                ->execute([substr($error, 0, 2000), $name]);
+        } catch (\Throwable $e) {
+            error_log('Migrator: cannot record failure for ' . $name . ': ' . $e->getMessage());
+        }
+    }
+
+    private function clearProgress(string $name): void
+    {
+        try {
+            $this->pdo->prepare("DELETE FROM migration_progress WHERE migration = ?")->execute([$name]);
+        } catch (\Throwable $e) {
+            // Table may not exist on very old installations; ignore.
         }
     }
 
@@ -310,6 +451,17 @@ class Migrator
         }
 
         try {
+            $pendingNames = array_column($pending, 'name');
+            foreach ($this->getInterruptedMigrations() as $interrupted) {
+                if (in_array($interrupted['migration'], $pendingNames, true)) {
+                    error_log(sprintf(
+                        'Migrator: retrying interrupted migration %s (previous error: %s)',
+                        $interrupted['migration'],
+                        $interrupted['error'] ?? 'unknown'
+                    ));
+                }
+            }
+
             $batch = $this->getNextBatch();
             $ran = [];
 

@@ -32,16 +32,9 @@ if (defined('BULLETIN_TEST_MODE') && BULLETIN_TEST_MODE) {
     return;
 }
 
-// --- Security headers -------------------------------------------------------
-require_once __DIR__ . '/csp.php';
-$cspNonce = generate_csp_nonce();
-send_security_headers($cspNonce);
-
-// --- Force HTTPS ------------------------------------------------------------
-// If the deployment is HTTPS-only (cookie_secure enabled), redirect any plain
-// HTTP request to the equivalent HTTPS URL before starting the session, so the
-// Secure session cookie is never emitted over an unencrypted channel. This keeps
-// login/sessions working while upgrading every visitor to HTTPS automatically.
+// --- Configuration ----------------------------------------------------------
+// Loaded before the security headers so HSTS settings (hsts_max_age,
+// hsts_include_subdomains) can be applied to the response.
 if (!isset($config) || !is_array($config)) {
     $cfgPath = __DIR__ . '/../config.json';
     $legacyPath = __DIR__ . '/../config.php';
@@ -55,6 +48,17 @@ if (!isset($config) || !is_array($config)) {
         $config = [];
     }
 }
+
+// --- Security headers -------------------------------------------------------
+require_once __DIR__ . '/csp.php';
+$cspNonce = generate_csp_nonce();
+send_security_headers($cspNonce, $config);
+
+// --- Force HTTPS ------------------------------------------------------------
+// If the deployment is HTTPS-only (cookie_secure enabled), redirect any plain
+// HTTP request to the equivalent HTTPS URL before starting the session, so the
+// Secure session cookie is never emitted over an unencrypted channel. This keeps
+// login/sessions working while upgrading every visitor to HTTPS automatically.
 // --- Trusted proxies --------------------------------------------------------
 require_once __DIR__ . '/TrustedProxies.php';
 $proxyInfo = trusted_proxies_detect();

@@ -1,0 +1,57 @@
+name: Release
+
+# Build the official distribution archive from a tag:
+#   git tag 1.0.0 && git push origin 1.0.0
+#
+# The package is built by tools/build-release.php, verified by the test suite
+# (tests/ReleasePackageTest.php) and published with its SHA-256 checksum.
+
+on:
+  push:
+    tags: ['*.*.*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    name: Build and verify the distribution package
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo, pdo_sqlite, zip
+
+      - name: Check tag matches VERSION
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          VERSION="$(cat VERSION)"
+          if [ "$TAG" != "$VERSION" ] && [ "v$TAG" != "v$VERSION" ]; then
+            echo "Tag $TAG does not match VERSION $VERSION" >&2
+            exit 1
+          fi
+
+      - name: Run the test suite
+        env:
+          BB_HTTP_TESTS: '1'
+        run: php tests/run.php
+
+      - name: Build the package
+        run: php tools/build-release.php --output=dist/bulletinbored-core.zip
+
+      - name: Publish the release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/bulletinbored-core.zip
+            dist/bulletinbored-core.zip.sha256
+          generate_release_notes: true

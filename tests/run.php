@@ -9,6 +9,8 @@
  *   php tests/run.php --verbose    # verbose output
  *   php tests/run.php --list       # list all available tests without running
  *   php tests/run.php --coverage   # report source coverage after the run
+ *   php tests/run.php --coverage --min-coverage=60
+ *                                  # ...and fail when line coverage is below 60%
  */
 
 require_once __DIR__ . '/harness.php';
@@ -18,6 +20,7 @@ $filter = '';
 $verbose = false;
 $listOnly = false;
 $coverage = false;
+$minCoverage = 0.0;
 
 foreach ($argv as $arg) {
     // argv[0] is the script path, which may be relative and use either slash
@@ -29,6 +32,9 @@ foreach ($argv as $arg) {
     } elseif ($arg === '--list') {
         $listOnly = true;
     } elseif ($arg === '--coverage') {
+        $coverage = true;
+    } elseif (str_starts_with($arg, '--min-coverage=')) {
+        $minCoverage = (float)substr($arg, strlen('--min-coverage='));
         $coverage = true;
     } elseif (!$isRunner) {
         $filter = $arg;
@@ -129,19 +135,38 @@ echo "\n";
 $suite->run();
 
 if ($coverage) {
-    print_source_coverage($xdebugCoverage, $pcovCoverage);
+    $coveragePercent = print_source_coverage($xdebugCoverage, $pcovCoverage);
+    if ($minCoverage > 0) {
+        if ($coveragePercent === null) {
+            echo "\nWARNING: --min-coverage requested but no coverage driver is available.\n";
+            echo "Install Xdebug (XDEBUG_MODE=coverage) or PCOV, or run the CI coverage job.\n";
+        } elseif ($coveragePercent + 0.0001 < $minCoverage) {
+            printf("\nCOVERAGE FAILURE: %.1f%% is below the required %.1f%%\n", $coveragePercent, $minCoverage);
+            exit(1);
+        } else {
+            printf("\nCoverage OK: %.1f%% >= %.1f%%\n", $coveragePercent, $minCoverage);
+        }
+    }
 }
 
 /**
  * Report coverage for the src/ tree: line coverage with Xdebug, executed-line
  * counts with PCOV, otherwise which src/ files were loaded by the suite.
+ *
+ * @return float|null Percentage of covered lines, or null when no coverage
+ *                    driver reported executable lines.
  */
-function print_source_coverage(bool $xdebugCoverage, bool $pcovCoverage = false): void
+function print_source_coverage(bool $xdebugCoverage, bool $pcovCoverage = false): ?float
 {
     $root = dirname(__DIR__);
     $srcFiles = [];
-    if (is_dir($root . '/src')) {
-        $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root . '/src', FilesystemIterator::SKIP_DOTS));
+    // src/ holds routing, handlers and helpers; lib/ holds authorization,
+    // migrations, updates and package installation. Both matter for a release.
+    foreach (['src', 'lib'] as $tree) {
+        if (!is_dir($root . '/' . $tree)) {
+            continue;
+        }
+        $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root . '/' . $tree, FilesystemIterator::SKIP_DOTS));
         foreach ($it as $file) {
             if ($file->isFile() && $file->getExtension() === 'php') {
                 $real = str_replace('\\', '/', $file->getRealPath());
@@ -152,7 +177,7 @@ function print_source_coverage(bool $xdebugCoverage, bool $pcovCoverage = false)
     ksort($srcFiles);
 
     echo "\n" . str_repeat('#', 60) . "\n";
-    echo "# SOURCE COVERAGE (src/)\n";
+    echo "# SOURCE COVERAGE (src/ + lib/)\n";
     echo str_repeat('#', 60) . "\n";
 
     if ($xdebugCoverage && function_exists('xdebug_get_code_coverage')) {
@@ -176,7 +201,10 @@ function print_source_coverage(bool $xdebugCoverage, bool $pcovCoverage = false)
             printf("  %-46s %5.1f%% (%d/%d)\n", $rel, $executable ? 100 * $covered / $executable : 0.0, $covered, $executable);
         }
         echo str_repeat('-', 60) . "\n";
-        printf("  Line coverage: %.1f%% (%d/%d executable lines)\n", $totalExecutable ? 100 * $totalCovered / $totalExecutable : 0.0, $totalCovered, $totalExecutable);
+        $percent = $totalExecutable ? 100 * $totalCovered / $totalExecutable : null;
+        printf("  Line coverage: %.1f%% (%d/%d executable lines)\n", $percent ?? 0.0, $totalCovered, $totalExecutable);
+        echo str_repeat('#', 60) . "\n";
+        return $percent;
     } elseif ($pcovCoverage && function_exists('\pcov\collect')) {
         // Coverage collection is informational: never let it fail the run.
         $data = [];
@@ -190,19 +218,30 @@ function print_source_coverage(bool $xdebugCoverage, bool $pcovCoverage = false)
             $data = [];
         }
         $totalCovered = 0;
+        $totalKnown = 0;
         foreach ($srcFiles as $real => $rel) {
             $covered = 0;
+            $known = 0;
             foreach ($data[$real] ?? [] as $state) {
+                $known++;
                 if ((int)$state > 0) {
                     $covered++;
                 }
             }
             $totalCovered += $covered;
+            $totalKnown += $known;
             printf("  %-46s %d covered lines\n", $rel, $covered);
         }
         echo str_repeat('-', 60) . "\n";
         printf("  Covered lines (pcov): %d\n", $totalCovered);
-        echo "  (pcov reports executed lines; exact % of executable lines requires Xdebug.)\n";
+        $percent = $totalKnown ? 100 * $totalCovered / $totalKnown : null;
+        if ($percent !== null) {
+            printf("  Coverage (pcov): %.1f%% (%d/%d lines)\n", $percent, $totalCovered, $totalKnown);
+        } else {
+            echo "  (pcov reports executed lines; exact % of executable lines requires Xdebug.)\n";
+        }
+        echo str_repeat('#', 60) . "\n";
+        return $percent;
     } else {
         echo "  No coverage driver (Xdebug/PCOV) is available — reporting which src/ files were loaded.\n";
         echo "  Enable Xdebug (XDEBUG_MODE=coverage) or PCOV for line coverage.\n\n";
@@ -218,4 +257,5 @@ function print_source_coverage(bool $xdebugCoverage, bool $pcovCoverage = false)
         printf("\n  Files loaded: %d/%d (%.1f%%)\n", $loadedCount, count($srcFiles), count($srcFiles) ? 100 * $loadedCount / count($srcFiles) : 0.0);
     }
     echo str_repeat('#', 60) . "\n";
+    return null;
 }

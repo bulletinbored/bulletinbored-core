@@ -329,6 +329,13 @@ class UpdateManager
         return true;
     }
 
+    /**
+     * Apply a core update from a ZIP archive uploaded by an administrator.
+     *
+     * Shares every post-copy step with applyCoreUpdate() through
+     * completeCoreUpdate()/finalizeCoreUpdate(), so both update routes leave
+     * the installation in exactly the same state.
+     */
     private function applyCoreUpdateFromZip(string $zipPath): bool
     {
         $errors = $this->preflight('core', '');
@@ -340,8 +347,8 @@ class UpdateManager
         require_once __DIR__ . '/repo_install.php';
 
         $zip = new ZipArchive();
-        $res = $zip->open($zipPath);
-        if ($res !== true) {
+        if ($zip->open($zipPath) !== true) {
+            error_log('BB CORE FAIL zip open');
             return false;
         }
 
@@ -353,56 +360,11 @@ class UpdateManager
 
         if (!$ok) {
             $this->backup->deleteRecursive($tmpExtract);
+            error_log('BB CORE FAIL unsafe zip');
             return false;
         }
 
-        $topDirs = glob($tmpExtract . '*', GLOB_ONLYDIR);
-        $sourceDir = (count($topDirs) === 1) ? $topDirs[0] : $tmpExtract;
-        if (!file_exists($sourceDir . '/index.php') || !file_exists($sourceDir . '/VERSION')) {
-            $this->backup->deleteRecursive($tmpExtract);
-            error_log('BB CORE FAIL invalid package structure');
-            return false;
-        }
-
-        $backupPath = $this->backup->backupCore();
-        if ($backupPath === null) {
-            error_log('BB CORE FAIL: backup failed, aborting update');
-            $this->backup->deleteRecursive($tmpExtract);
-            return false;
-        }
-
-        $root = rtrim(__DIR__ . '/../', '/');
-
-        try {
-            $this->backup->copyRecursive($sourceDir, $root);
-        } catch (\Throwable $e) {
-            if ($backupPath !== null) {
-                $this->backup->restoreCoreBackup($backupPath);
-            }
-            $this->backup->deleteRecursive($tmpExtract);
-            error_log('BB CORE FAIL copy error: ' . $e->getMessage());
-            return false;
-        }
-        $this->backup->deleteRecursive($tmpExtract);
-
-        foreach (glob($root . '/bulletinbored-core-*', GLOB_ONLYDIR) as $nested) {
-            foreach (glob($nested . '/*') as $item) {
-                $base = basename($item);
-                $dest = $root . '/' . $base;
-                if (is_dir($item)) {
-                    $this->backup->copyRecursive($item, $dest);
-                } elseif (is_file($item)) {
-                    if (is_dir($dest)) {
-                        $this->backup->deleteRecursive($dest);
-                    }
-                    copy($item, $dest);
-                }
-            }
-            $this->backup->deleteRecursive($nested);
-        }
-
-        $this->fetcher->clearCache();
-        return true;
+        return $this->completeCoreUpdate($tmpExtract);
     }
 
     public function applyCoreUpdate(string $tag): bool
@@ -445,13 +407,30 @@ class UpdateManager
             return false;
         }
 
-        $topDirs = glob($tmpExtract . '*', GLOB_ONLYDIR);
+        return $this->completeCoreUpdate($tmpExtract, $tag);
+    }
+
+    /**
+     * Install an already extracted core package and finalize it.
+     *
+     * @param string      $tmpExtract Directory the archive was extracted into.
+     * @param string|null $tag        Version being applied; when null it is read
+     *                                from the VERSION file in the package.
+     */
+    private function completeCoreUpdate(string $tmpExtract, ?string $tag = null): bool
+    {
+        $topDirs = glob($tmpExtract . '*', GLOB_ONLYDIR) ?: [];
         $sourceDir = (count($topDirs) === 1) ? $topDirs[0] : $tmpExtract;
         if (!file_exists($sourceDir . '/index.php') || !file_exists($sourceDir . '/VERSION')) {
             $this->backup->deleteRecursive($tmpExtract);
             error_log('BB CORE FAIL invalid package structure');
             return false;
         }
+
+        // Read the version shipped in the package before the files are copied:
+        // the manual ZIP route has no tag to fall back on.
+        $packageVersion = $this->readPackageVersion($sourceDir);
+        $version = $tag !== null ? $tag : $packageVersion;
 
         $backupPath = $this->backup->backupCore();
         if ($backupPath === null) {
@@ -460,22 +439,50 @@ class UpdateManager
             return false;
         }
 
-        $root = rtrim(__DIR__ . '/../', '/');
+        $root = $this->rootDir;
 
         try {
             $this->backup->copyRecursive($sourceDir, $root);
         } catch (\Throwable $e) {
-            if ($backupPath !== null) {
-                $this->backup->restoreCoreBackup($backupPath);
-            }
+            $this->backup->restoreCoreBackup($backupPath);
             $this->backup->deleteRecursive($tmpExtract);
             error_log('BB CORE FAIL copy error: ' . $e->getMessage());
             return false;
         }
         $this->backup->deleteRecursive($tmpExtract);
 
-        foreach (glob($root . '/bulletinbored-core-*', GLOB_ONLYDIR) as $nested) {
-            foreach (glob($nested . '/*') as $item) {
+        $this->flattenNestedCoreDir($root);
+        error_log('BB CORE extracted');
+
+        return $this->finalizeCoreUpdate($root, $version);
+    }
+
+    /**
+     * Extract a version number from a package VERSION file.
+     * Returns null when the file is missing or does not look like a version.
+     */
+    private function readPackageVersion(string $sourceDir): ?string
+    {
+        $raw = @file_get_contents($sourceDir . '/VERSION');
+        if ($raw === false) {
+            return null;
+        }
+        $version = trim($raw);
+        if ($version === '' || !preg_match('/^v?\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/', $version)) {
+            return null;
+        }
+        return $version;
+    }
+
+    /**
+     * GitHub archives sometimes contain a top-level project folder that ends up
+     * nested inside the installation root (e.g. bulletinbored-core-1.0.0/).
+     * Move its contents one level up and remove the wrapper directory.
+     */
+    private function flattenNestedCoreDir(string $root): void
+    {
+        foreach (glob($root . '/bulletinbored-core-*', GLOB_ONLYDIR) ?: [] as $nested) {
+            foreach (glob($nested . '/*') ?: [] as $item) {
                 $base = basename($item);
                 $dest = $root . '/' . $base;
                 if (is_dir($item)) {
@@ -489,26 +496,42 @@ class UpdateManager
             }
             $this->backup->deleteRecursive($nested);
         }
+    }
 
+    /**
+     * Post-copy steps shared by every core update route.
+     *
+     * Keeping them in one place is what makes "update from upload" behave like
+     * "update from repository": installer scripts are removed, the version is
+     * recorded in the manifest, in VERSION and in config.json, and the update
+     * cache is cleared.
+     */
+    private function finalizeCoreUpdate(string $root, ?string $version): bool
+    {
         $this->removeInstallerScripts($root);
-        error_log('BB CORE extracted');
 
-        $this->setVersion('core', 'core', $tag);
-        $versionFile = __DIR__ . '/../VERSION';
-        if (is_writable($versionFile)) {
-            file_put_contents($versionFile, $tag);
+        $normalized = $version !== null ? ltrim(trim($version), 'v') : '';
+        if ($normalized !== '' && preg_match('/^\d+\.\d+\.\d+/', $normalized)) {
+            $this->setVersion('core', 'core', $normalized);
+
+            $versionFile = rtrim($root, '/') . '/VERSION';
+            if (is_file($versionFile) && is_writable($versionFile)) {
+                file_put_contents($versionFile, $normalized);
+            }
+
+            $this->updateVersionInConfig($root, $normalized);
+        } else {
+            error_log('BB CORE WARN: package version unknown, version metadata left unchanged');
         }
-
-        $this->updateVersionInConfig($tag);
 
         $this->fetcher->clearCache();
         return true;
     }
 
-    private function updateVersionInConfig(string $tag): void
+    private function updateVersionInConfig(string $root, string $tag): void
     {
-        $configJsonPath = __DIR__ . '/../config.json';
-        $legacyConfigPath = __DIR__ . '/../config.php';
+        $configJsonPath = rtrim($root, '/') . '/config.json';
+        $legacyConfigPath = rtrim($root, '/') . '/config.php';
         $version = ltrim($tag, 'v');
 
         if (file_exists($configJsonPath) && is_writable($configJsonPath)) {
@@ -617,6 +640,16 @@ class UpdateManager
         return $this->applyExtensionUpdateFromZip($type, $name, $tmpZip);
     }
 
+    /**
+     * Remove the web installer scripts after a core update.
+     *
+     * Only the setup wizards are removed: they can create a config.json and
+     * reset the database, so they must not survive on a live installation.
+     * api/install.php is deliberately kept — it is a runtime admin endpoint
+     * (plugin/theme install from the catalog) protected by a database-backed
+     * administrator check, and deleting it would leave updated installations
+     * different from freshly installed ones.
+     */
     private function removeInstallerScripts(string $root): void
     {
         if (!file_exists($root . '/config.json')) {
@@ -626,7 +659,6 @@ class UpdateManager
             $root . '/install.php',
             $root . '/install2.php',
             $root . '/install3.php',
-            $root . '/api/install.php',
         ];
         foreach ($installerScripts as $f) {
             if (is_file($f)) {

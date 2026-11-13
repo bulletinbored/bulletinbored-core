@@ -25,6 +25,17 @@ function test_version_files_consistent(): Test
     $t->assert('config-sample.json is valid JSON', is_array($sample));
     $t->assertEquals('config-sample version matches VERSION', $version, (string)($sample['version'] ?? ''));
 
+    // The changelog is versioned in the repository: it must document the
+    // version that is about to ship.
+    $changelogFile = $root . '/CHANGELOG.md';
+    $t->assert('CHANGELOG.md exists', is_file($changelogFile));
+    if (is_file($changelogFile)) {
+        $changelog = (string)file_get_contents($changelogFile);
+        $hasEntry = (bool)preg_match('/^##\s+\[' . preg_quote($version, '/') . '\]/m', $changelog);
+        $t->assert("CHANGELOG has an entry for {$version}", $hasEntry);
+        $t->assert('CHANGELOG documents the unreleased work', (bool)preg_match('/^##\s+\[Unreleased\]/m', $changelog));
+    }
+
     // RELEASE-NOTES.md is gitignored, so it may be absent in a packaged
     // distribution: only check it when present.
     $notesFile = $root . '/RELEASE-NOTES.md';

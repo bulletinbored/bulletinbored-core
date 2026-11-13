@@ -75,9 +75,27 @@ function handle_admin_user_edit(string $method, array $params = []): \Bulletin\R
         $newRole = $_POST['role'] ?? 'user';
         $newStatus = $_POST['status'] ?? 'active';
         if ($newUsername !== '') {
-            $pdo->prepare("UPDATE users SET username = ?, email = ?, role = ?, status = ? WHERE id = ?")
-                ->execute([$newUsername, $newEmail, $newRole, $newStatus, $editUserId]);
-            log_admin_action('user_update', ['target_id' => $editUserId, 'username' => $newUsername, 'role' => $newRole, 'status' => $newStatus]);
+            // A change of role or status must invalidate every session already
+            // open for that account: the session caches user_role/user_status,
+            // so without a bump a demoted admin would keep admin UI access
+            // until logout. Bumping session_version forces re-authentication.
+            $privilegesChanged = $newRole !== ($editUser['role'] ?? '')
+                || $newStatus !== ($editUser['status'] ?? '');
+
+            $sql = "UPDATE users SET username = ?, email = ?, role = ?, status = ?";
+            if ($privilegesChanged) {
+                $sql .= ", session_version = COALESCE(session_version, 0) + 1";
+            }
+            $sql .= " WHERE id = ?";
+
+            $pdo->prepare($sql)->execute([$newUsername, $newEmail, $newRole, $newStatus, $editUserId]);
+            log_admin_action('user_update', [
+                'target_id' => $editUserId,
+                'username' => $newUsername,
+                'role' => $newRole,
+                'status' => $newStatus,
+                'sessions_invalidated' => $privilegesChanged,
+            ]);
         }
         return redirect(url('admin_user_edit', ['id' => $editUserId]));
     }
@@ -193,7 +211,7 @@ function handle_unban_user_post(): \Bulletin\Response|bool
     }
     $userId = (int)($_POST['id'] ?? $_GET['id'] ?? 0);
     if ($userId > 0) {
-        $pdo->prepare("UPDATE users SET status = 'active', suspension_time = 0 WHERE id = ?")->execute([$userId]);
+        $pdo->prepare("UPDATE users SET status = 'active', suspension_time = 0, session_version = COALESCE(session_version, 0) + 1 WHERE id = ?")->execute([$userId]);
         log_admin_action('user_unban', ['target_id' => $userId]);
     }
     return redirect(url('admin_users'));
@@ -211,7 +229,7 @@ function handle_ban_user_post(): \Bulletin\Response|bool
     }
     $userId = (int)($_POST['id'] ?? $_GET['id'] ?? 0);
     if ($userId > 0) {
-        $pdo->prepare("UPDATE users SET status = 'banned' WHERE id = ? AND role <> 'admin'")->execute([$userId]);
+        $pdo->prepare("UPDATE users SET status = 'banned', session_version = COALESCE(session_version, 0) + 1 WHERE id = ? AND role <> 'admin'")->execute([$userId]);
         log_admin_action('user_ban', ['target_id' => $userId]);
     }
     return redirect(url('admin_users'));
@@ -231,7 +249,7 @@ function handle_suspend_user_post(): \Bulletin\Response|bool
     $days = max(1, (int)($_POST['days'] ?? 1));
     $suspensionTime = time() + ($days * 86400);
     if ($userId > 0) {
-        $pdo->prepare("UPDATE users SET status = 'suspended', suspension_time = ? WHERE id = ?")
+        $pdo->prepare("UPDATE users SET status = 'suspended', suspension_time = ?, session_version = COALESCE(session_version, 0) + 1 WHERE id = ?")
             ->execute([$suspensionTime, $userId]);
         log_admin_action('user_suspend', ['target_id' => $userId, 'days' => $days]);
     }
