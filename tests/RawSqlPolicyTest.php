@@ -157,13 +157,18 @@ function raw_sql_php_files(): array
     foreach (glob($root . '/*.php') ?: [] as $file) {
         $files[] = $file;
     }
-    $it = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($root . '/plugins', FilesystemIterator::SKIP_DOTS | FilesystemIterator::CURRENT_AS_FILEINFO),
-        RecursiveIteratorIterator::LEAVES_ONLY
-    );
-    foreach ($it as $file) {
-        if ($file->isFile() && $file->getExtension() === 'php' && !str_contains($file->getPathname(), '/tests/')) {
-            $files[] = $file->getPathname();
+
+    // plugins/ is not tracked in git (only the bundled example may be), so a
+    // fresh checkout has no such directory: never assume it exists.
+    if (is_dir($root . '/plugins')) {
+        $it = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($root . '/plugins', FilesystemIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::LEAVES_ONLY
+        );
+        foreach ($it as $file) {
+            if ($file->isFile() && $file->getExtension() === 'php' && !str_contains($file->getPathname(), '/tests/')) {
+                $files[] = $file->getPathname();
+            }
         }
     }
 
@@ -177,6 +182,7 @@ function test_raw_sql_uses_literals(): Test
     $root = dirname(__DIR__);
     $files = raw_sql_php_files();
     $t->assert('Scanned some files', count($files) > 40);
+    $t->assert('A checkout without plugins/ does not break the scan', raw_sql_php_files() === $files);
 
     $violations = [];
     foreach ($files as $file) {
