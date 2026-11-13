@@ -25,7 +25,6 @@ $root = dirname(__DIR__);
 /** Files shipped at the archive root. */
 const RELEASE_ROOT_FILES = [
     '.htaccess',
-    'CHANGELOG.md',
     'CLA.md',
     'LICENSE',
     'README.md',
@@ -231,7 +230,7 @@ if ($verify->open($output) !== true) {
 
 $problems = [];
 $requiredInPackage = [
-    '.htaccess', 'VERSION', 'index.php', 'bb.php', 'config-sample.json', 'CHANGELOG.md',
+    '.htaccess', 'VERSION', 'index.php', 'bb.php', 'config-sample.json',
     'api/install.php', 'lib/AdminAuth.php', 'lib/UpdateManager.php', 'lib/Migrator.php',
     'src/bootstrap.php', 'src/Helpers/Mail.php', 'lang/en.json', 'data/.htaccess',
     'uploads/.htaccess', 'themes/freshbored/manifest.json', 'migrations',

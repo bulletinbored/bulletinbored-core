@@ -79,7 +79,7 @@ function test_release_package_contents(): Test
 
         $required = [
             '.htaccess', 'VERSION', 'index.php', 'bb.php', 'router.php', 'nginx.conf', 'web.config',
-            'config-sample.json', 'CHANGELOG.md', 'README.md', 'LICENSE',
+            'config-sample.json', 'README.md', 'LICENSE',
             'install.php', 'install2.php', 'install3.php',
             'api/install.php',
             'lib/BbPdo.php', 'lib/DbQuery.php', 'lib/Migrator.php', 'lib/UpdateManager.php', 'lib/AdminAuth.php',

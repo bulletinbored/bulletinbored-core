@@ -217,10 +217,10 @@ and migrations. CI runs both checks.
 
 ## Release process
 
-Version numbers live in `VERSION` (and must match `config-sample.json` and
-`CHANGELOG.md` — `tests/VersionConsistencyTest.php` enforces it). Every user-visible
-change is recorded in [CHANGELOG.md](CHANGELOG.md) under `[Unreleased]`; a release
-moves that section under the new version number.
+Version numbers live in `VERSION` and must match `config-sample.json`
+(`tests/VersionConsistencyTest.php` enforces it). Release notes are not kept in
+the repository: the release workflow generates them on the GitHub Release, so
+the tag, `VERSION` and the published notes always refer to the same commit.
 
 Pre-releases use SemVer suffixes: `VERSION` is `1.0.0-rc.1`, the tag is
 `v1.0.0-rc.1`, and the GitHub release is published as a **prerelease** so the

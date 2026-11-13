@@ -1,10 +1,10 @@
 <?php
 
 /**
- * VersionConsistencyTest — the packaged version, the sample config and the
- * release notes must not drift apart. Guards against shipping a config-sample
- * or changelog whose version disagrees with the VERSION file (which is what
- * the installer and telemetry report).
+ * VersionConsistencyTest — the packaged version and the sample config must not
+ * drift apart. Guards against shipping a config-sample whose version disagrees
+ * with the VERSION file (which is what the installer and telemetry report).
+ * Release notes live on GitHub Releases, not in the repository.
  */
 
 require_once __DIR__ . '/harness.php';
@@ -28,18 +28,6 @@ function test_version_files_consistent(): Test
     $sample = json_decode($sampleRaw, true);
     $t->assert('config-sample.json is valid JSON', is_array($sample));
     $t->assertEquals('config-sample version matches VERSION', $version, (string)($sample['version'] ?? ''));
-
-    // The changelog is versioned in the repository: it must document the
-    // version that is about to ship.
-    $changelogFile = $root . '/CHANGELOG.md';
-    $t->assert('CHANGELOG.md exists', is_file($changelogFile));
-    if (is_file($changelogFile)) {
-        $changelog = (string)file_get_contents($changelogFile);
-        $hasEntry = (bool)preg_match('/^##\s+\[' . preg_quote($version, '/') . '\]/m', $changelog);
-        $t->assert('CHANGELOG heading is escaped-safe for prereleases', str_contains($changelog, '[' . $version . ']'));
-        $t->assert("CHANGELOG has an entry for {$version}", $hasEntry);
-        $t->assert('CHANGELOG documents the unreleased work', (bool)preg_match('/^##\s+\[Unreleased\]/m', $changelog));
-    }
 
     // RELEASE-NOTES.md is gitignored, so it may be absent in a packaged
     // distribution: only check it when present.
