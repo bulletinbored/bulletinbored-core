@@ -472,7 +472,67 @@ function test_failed_backup_survives_a_failed_cleanup(): Test
     return $t;
 }
 
+function test_backup_is_discarded_when_the_manifest_is_partial(): Test
+{
+    $t = new Test('Update backup - a truncated manifest discards the backup');
+
+    $root = update_backup_root();
+
+    // A disk that fills up mid-write: the bytes reported are fewer than the
+    // content length, which file_put_contents() does without returning false.
+    $partial = new class($root . '/data', $root) extends UpdateBackup {
+        protected function writeFile(string $path, string $content): int
+        {
+            @file_put_contents($path, substr($content, 0, 10));
+            return 10;
+        }
+    };
+
+    try {
+        $t->assertNull('Backup reported as failed', $partial->backupCore());
+        $t->assertCount('Backup directory removed', 0, glob($root . '/data/backups/core_*') ?: []);
+        $t->assertCount('No manifest left behind', 0, glob($root . '/data/backups/core_*.json') ?: []);
+        $t->assertCount('Nothing to restore', 0, $partial->listBackups());
+    } finally {
+        update_backup_cleanup($root);
+    }
+
+    return $t;
+}
+
+function test_pruning_failure_does_not_break_the_backup(): Test
+{
+    $t = new Test('Update backup - a failed prune is reported, not fatal');
+
+    $root = update_backup_root();
+
+    $stubborn = new class($root . '/data', $root, 1) extends UpdateBackup {
+        public function deleteRecursive(string $dir): bool
+        {
+            if (str_contains(basename($dir), 'core_')) {
+                return false;
+            }
+            return parent::deleteRecursive($dir);
+        }
+    };
+
+    try {
+        $first = $stubborn->backupCore();
+        $t->assertNotNull('First backup created', $first);
+        usleep(1000);
+        $second = $stubborn->backupCore();
+        $t->assertNotNull('Second backup created despite the failed prune', $second);
+        $t->assertCount('Both backups are still listed', 2, $stubborn->listBackups());
+    } finally {
+        update_backup_cleanup($root);
+    }
+
+    return $t;
+}
+
 register_tests(
+    'test_backup_is_discarded_when_the_manifest_is_partial',
+    'test_pruning_failure_does_not_break_the_backup',
     'test_copy_refuses_a_destination_it_cannot_replace',
     'test_failed_backup_survives_a_failed_cleanup',
     'test_restore_fails_when_a_residue_cannot_be_removed',

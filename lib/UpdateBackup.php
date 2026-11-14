@@ -91,11 +91,21 @@ class UpdateBackup
             'entries' => $entries,
         ];
         $json = json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
-        if ($json === false || @file_put_contents($this->manifestPath($backupPath), $json) === false) {
+        // file_put_contents() can write fewer bytes than requested (a disk that
+        // fills up mid-write) and still return a positive number: only an exact
+        // match proves the manifest is readable, and the manifest is what
+        // authorises the cleanup during a rollback.
+        $written = is_string($json) ? $this->writeFile($this->manifestPath($backupPath), $json) : 0;
+        if (!is_string($json) || $written !== strlen($json)) {
             if (!$this->deleteRecursive($backupPath)) {
                 error_log('UpdateBackup: could not remove the unverified backup at ' . $backupPath);
             }
-            error_log('UpdateBackup: cannot write the backup manifest, backup discarded');
+            @unlink($this->manifestPath($backupPath));
+            error_log(sprintf(
+                'UpdateBackup: cannot write the backup manifest (%d of %d bytes), backup discarded',
+                $written,
+                is_string($json) ? strlen($json) : 0
+            ));
             return null;
         }
 
@@ -317,6 +327,21 @@ class UpdateBackup
         return $entries;
     }
 
+    /**
+     * Write a file and report how many bytes reached the disk.
+     *
+     * Protected so the partial-write path (ENOSPC in the middle of the write)
+     * can be tested by overriding it: file_put_contents() cannot be made to
+     * write half a string on demand.
+     *
+     * @return int bytes written, 0 on failure
+     */
+    protected function writeFile(string $path, string $content): int
+    {
+        $written = @file_put_contents($path, $content, LOCK_EX);
+        return $written === false ? 0 : (int)$written;
+    }
+
     private function manifestPath(string $backupPath): string
     {
         return rtrim($backupPath, '/') . self::MANIFEST_SUFFIX;
@@ -346,7 +371,11 @@ class UpdateBackup
             usort($backups, fn($a, $b) => (int)@filemtime($a) <=> (int)@filemtime($b));
             $toDelete = array_slice($backups, 0, count($backups) - $this->maxBackups);
             foreach ($toDelete as $old) {
-                $this->deleteRecursive($old);
+                if (!$this->deleteRecursive($old)) {
+                    // Not fatal: the backup simply stays until it can be
+                    // removed. Report it so the disk does not fill up silently.
+                    error_log('UpdateBackup: could not prune old backup ' . $old);
+                }
                 @unlink($this->manifestPath($old));
             }
         }
