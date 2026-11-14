@@ -602,10 +602,13 @@ class UpdateManager
     private function flattenNestedCoreDir(string $root): void
     {
         foreach (glob($root . '/bulletinbored-core-*', GLOB_ONLYDIR) ?: [] as $nested) {
-            foreach (glob($nested . '/*') ?: [] as $item) {
+            // listEntries(), not glob(): glob('*') skips dotfiles, so a nested
+            // package would lose .htaccess while the wrapper directory (and
+            // whatever it still contains) was deleted.
+            foreach ($this->backup->listEntries($nested) as $item) {
                 $base = basename($item);
                 $dest = $root . '/' . $base;
-                if (is_dir($item)) {
+                if (is_dir($item) && !is_link($item)) {
                     $this->backup->copyRecursive($item, $dest);
                 } elseif (is_file($item)) {
                     if (is_dir($dest)) {

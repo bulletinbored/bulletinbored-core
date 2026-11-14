@@ -89,6 +89,7 @@ function test_core_zip_update_finalizes_like_remote_update(): Test
         'index.php' => "<?php // new core 1.0.0\n",
         'VERSION' => '1.0.0',
         'install.php' => "<?php // installer shipped in package\n",
+        '.htaccess' => "# new htaccess 1.0.0\n",
     ]);
 
     $manifestPath = $root . '/data/update_manifest.json';
@@ -114,6 +115,7 @@ function test_core_zip_update_finalizes_like_remote_update(): Test
             $t->assertFalse("{$installer} removed after update", is_file($root . '/' . $installer));
         }
         $t->assertTrue('api/install.php kept (runtime admin endpoint)', is_file($root . '/api/install.php'));
+        $t->assertEquals('Hidden file from the package installed', "# new htaccess 1.0.0\n", file_get_contents($root . '/.htaccess'));
     } finally {
         core_zip_cleanup($root);
         if ($zipPath !== '') {
@@ -135,9 +137,13 @@ function test_core_zip_update_flattens_nested_directory(): Test
 
     $root = core_zip_root('0.9.8');
     $zipPath = core_zip_build([
+        'index.php' => "<?php // stale root copy\n",
+        'VERSION' => '1.1.0',
         'bulletinbored-core-1.1.0/index.php' => "<?php // new core 1.1.0\n",
         'bulletinbored-core-1.1.0/VERSION' => '1.1.0',
         'bulletinbored-core-1.1.0/lib/BbPdo.php' => "<?php // bbpdo 1.1.0\n",
+        'bulletinbored-core-1.1.0/.htaccess' => "# new htaccess 1.1.0\n",
+        'bulletinbored-core-1.1.0/.hidden-from-package' => "hidden\n",
     ]);
 
     $manager = new UpdateManager($root . '/data/update_manifest.json', null, null, null, $root);
@@ -146,6 +152,8 @@ function test_core_zip_update_flattens_nested_directory(): Test
         $t->assertTrue('applyUpdate() succeeded', $manager->applyUpdate('core', 'core', $zipPath));
         $t->assertEquals('Nested package version applied', '1.1.0', trim((string)file_get_contents($root . '/VERSION')));
         $t->assertTrue('Nested files landed in the root', is_file($root . '/lib/BbPdo.php'));
+        $t->assertEquals('Nested .htaccess moved to the root', "# new htaccess 1.1.0\n", file_get_contents($root . '/.htaccess'));
+        $t->assertTrue('Nested hidden file moved to the root', is_file($root . '/.hidden-from-package'));
         $t->assertFalse('Wrapper directory removed', is_dir($root . '/bulletinbored-core-1.1.0'));
     } finally {
         core_zip_cleanup($root);
