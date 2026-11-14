@@ -161,17 +161,19 @@ function test_ratelimit_gc_skips_locked_bucket(): Test
     $t->assertTrue('Bucket locked', flock($fp, LOCK_EX | LOCK_NB));
 
     try {
-        // Simulate the writer that is recording a hit right now.
-        $removed = rate_limit_gc(ratelimit_dir(), 86400);
+        // Simulate the writer that is recording a hit right now: the GC passes
+        // over the bucket and must report no removal for it.
+        rate_limit_gc(ratelimit_dir(), 86400);
         $t->assertTrue('Locked bucket is not removed', is_file($file));
+        $t->assertEquals('Nothing was collected while the bucket was locked', 0, rate_limit_gc(ratelimit_dir(), 86400));
 
-        // Once released, the next pass removes it.
+        // Once released, the next pass removes it and reports it.
         flock($fp, LOCK_UN);
         fclose($fp);
         $fp = null;
-        rate_limit_gc(ratelimit_dir(), 86400);
+        $collected = rate_limit_gc(ratelimit_dir(), 86400);
         $t->assertFalse('Bucket removed after the lock is released', is_file($file));
-        $t->assert('GC reported at least this removal', $removed >= 0);
+        $t->assertTrue('GC counted the removal (' . $collected . ')', $collected >= 1);
     } finally {
         if (is_resource($fp)) {
             flock($fp, LOCK_UN);

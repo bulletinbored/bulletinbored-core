@@ -44,15 +44,28 @@ class UpdateBackup
         return $backupPath;
     }
 
+    /**
+     * Restore the installation root from a core backup.
+     *
+     * Beyond copying the backup back, this removes the top-level entries the
+     * interrupted update had already created: a failed copy can leave a new
+     * root file behind, which would otherwise survive a "rolled back" update.
+     * User-owned paths (data/, plugins/, themes/, uploads/, vendor/ and the
+     * configuration) are never touched, and the pruning only runs when the
+     * backup looks complete (it contains index.php), so a truncated backup
+     * cannot delete the installation.
+     */
     public function restoreCoreBackup(string $backupPath): bool
     {
         if (!is_dir($backupPath)) {
             return false;
         }
 
-        $items = glob($backupPath . '/*');
+        $restored = [];
+        $items = glob($backupPath . '/*') ?: [];
         foreach ($items as $item) {
             $basename = basename($item);
+            $restored[$basename] = true;
             $dest = $this->rootDir . '/' . $basename;
             if (is_dir($item)) {
                 if (is_dir($dest)) {
@@ -61,6 +74,24 @@ class UpdateBackup
                 $this->copyRecursive($item, $dest);
             } else {
                 copy($item, $dest);
+            }
+        }
+
+        if (!is_file($backupPath . '/index.php')) {
+            // Incomplete backup: restore only, never prune.
+            return true;
+        }
+
+        $keep = ['data', 'plugins', 'themes', 'uploads', 'vendor', 'config.json', 'config.php'];
+        foreach (glob($this->rootDir . '/*') ?: [] as $entry) {
+            $basename = basename($entry);
+            if (isset($restored[$basename]) || in_array($basename, $keep, true)) {
+                continue;
+            }
+            if (is_dir($entry)) {
+                $this->deleteRecursive($entry);
+            } else {
+                @unlink($entry);
             }
         }
 

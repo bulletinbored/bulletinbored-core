@@ -251,17 +251,32 @@ function test_set_version_reports_write_failure(): Test
  */
 class DiskFullBackup extends UpdateBackup
 {
+    /** Copies performed outside the package install (backup and restore). */
     public int $copies = 0;
+    /** Top-level package entries transferred before the failure. */
+    public int $packageEntriesCopied = 0;
+    /** How many package entries to write before failing. */
+    public int $failAfter = 3;
 
     public function copyRecursive(string $src, string $dst): void
     {
         // The install copy comes from the extraction directory; the backup and
         // the restore copy from/to data/backups, which must keep working.
-        if (str_contains($src, 'bb_upd_') || str_contains($src, 'bb_core_')) {
-            throw new RuntimeException('SQLSTATE[HY000]: General error: 3 Error writing file (disk full)');
+        if (!str_contains($src, 'bb_upd_') && !str_contains($src, 'bb_core_')) {
+            $this->copies++;
+            parent::copyRecursive($src, $dst);
+            return;
         }
-        $this->copies++;
-        parent::copyRecursive($src, $dst);
+
+        // A real ENOSPC happens in the middle of the copy: transfer a few
+        // entries first, then fail, so the rollback has something to undo.
+        $entries = glob(rtrim($src, '/') . '/*') ?: [];
+        sort($entries);
+        foreach (array_slice($entries, 0, $this->failAfter) as $entry) {
+            parent::copyRecursive($entry, rtrim($dst, '/') . '/' . basename($entry));
+            $this->packageEntriesCopied++;
+        }
+        throw new RuntimeException('SQLSTATE[HY000]: General error: 3 Error writing file (disk full)');
     }
 }
 
@@ -278,6 +293,7 @@ function test_core_zip_update_recovers_from_disk_full(): Test
     $zipPath = core_zip_build([
         'index.php' => "<?php // new core 1.0.0\n",
         'VERSION' => '1.0.0',
+        'brand-new.php' => "<?php // file added by the new release\n",
         'lib/NewFile.php' => "<?php // new file\n",
     ]);
 
@@ -288,12 +304,14 @@ function test_core_zip_update_recovers_from_disk_full(): Test
     try {
         $t->assertFalse('Update reported as failed', $manager->applyUpdate('core', 'core', $zipPath));
         $t->assert('The backup was taken before the failure', $backup->copies > 0);
+        $t->assert('Some package files were copied before the failure', $backup->packageEntriesCopied >= 2);
 
         $t->assertEquals('index.php restored', "<?php // old core\n", file_get_contents($root . '/index.php'));
         $t->assertEquals('VERSION untouched', '0.9.8', trim((string)file_get_contents($root . '/VERSION')));
         $config = json_decode((string)file_get_contents($root . '/config.json'), true);
         $t->assertEquals('config.json version untouched', '0.9.8', $config['version'] ?? null);
         $t->assertFalse('Partial new file not left behind', is_file($root . '/lib/NewFile.php'));
+        $t->assertFalse('New root file created by the failed update is removed', is_file($root . '/brand-new.php'));
         $t->assertTrue('Installer still present (nothing was finalised)', is_file($root . '/install.php'));
 
         $tmpAfter = glob(sys_get_temp_dir() . '/bb_upd_*') ?: [];
