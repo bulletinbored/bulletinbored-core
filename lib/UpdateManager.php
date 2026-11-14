@@ -550,7 +550,11 @@ class UpdateManager
         try {
             $this->backup->copyRecursive($sourceDir, $root);
         } catch (\Throwable $e) {
-            $this->backup->restoreCoreBackup($backupPath);
+            // The files may be half copied (full disk, permissions): put the
+            // previous installation back before reporting the failure.
+            if (!$this->backup->restoreCoreBackup($backupPath)) {
+                error_log('BB CORE FAIL: rollback could not restore the backup at ' . $backupPath);
+            }
             $this->backup->deleteRecursive($tmpExtract);
             error_log('BB CORE FAIL copy error: ' . $e->getMessage());
             return false;
