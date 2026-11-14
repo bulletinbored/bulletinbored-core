@@ -392,7 +392,89 @@ function test_restore_fails_when_a_residue_cannot_be_removed(): Test
     return $t;
 }
 
+function test_copy_refuses_a_destination_it_cannot_replace(): Test
+{
+    $t = new Test('Update backup - a file cannot be copied onto a stuck directory');
+
+    $root = update_backup_root();
+    $backup = new UpdateBackup($root . '/data', $root);
+
+    try {
+        @mkdir($root . '/stuck', 0755, true);
+        file_put_contents($root . '/stuck/keep.txt', 'x');
+
+        // deleteRecursive() fails (locked file, permissions, ...): copying a
+        // file onto that path must fail loudly, not silently leave the old dir.
+        $stubborn = new class($root . '/data', $root) extends UpdateBackup {
+            public function deleteRecursive(string $dir): bool
+            {
+                if (basename($dir) === 'stuck') {
+                    return false;
+                }
+                return parent::deleteRecursive($dir);
+            }
+        };
+
+        $t->assertThrows(
+            'Copy onto an undeletable directory throws',
+            fn() => $stubborn->copyRecursive($root . '/index.php', $root . '/stuck'),
+            RuntimeException::class
+        );
+        $t->assertTrue('The directory is still there', is_dir($root . '/stuck'));
+    } finally {
+        update_backup_cleanup($root);
+    }
+
+    return $t;
+}
+
+function test_failed_backup_survives_a_failed_cleanup(): Test
+{
+    $t = new Test('Update backup - a failed cleanup does not break the backup');
+
+    $root = update_backup_root();
+
+    // The copy fails and the partial directory cannot be removed either: the
+    // method must still return null (never throw) and leave no manifest.
+    $broken = new class($root . '/data', $root) extends UpdateBackup {
+        public function copyRecursive(string $src, string $dst): void
+        {
+            throw new RuntimeException('No space left on device');
+        }
+
+        public function deleteRecursive(string $dir): bool
+        {
+            return false;
+        }
+    };
+
+    try {
+        $threw = false;
+        $result = 'unset';
+        try {
+            $result = $broken->backupCore();
+        } catch (\Throwable $e) {
+            $threw = true;
+        }
+        $t->assertFalse('backupCore does not throw', $threw);
+        $t->assertNull('backupCore returns null', $result);
+        $t->assertCount('No manifest is written', 0, glob($root . '/data/backups/core_*.json') ?: []);
+
+        $listed = $broken->listBackups();
+        $t->assertCount('The unverified backup is not offered for restore', 0, array_filter(
+            $listed,
+            fn($b) => !empty($b['complete'])
+        ));
+    } finally {
+        update_backup_cleanup($root);
+    }
+
+    return $t;
+}
+
 register_tests(
+    'test_copy_refuses_a_destination_it_cannot_replace',
+    'test_failed_backup_survives_a_failed_cleanup',
     'test_restore_fails_when_a_residue_cannot_be_removed',
     'test_restore_reports_failure_instead_of_throwing',
     'test_restore_aborts_when_a_directory_cannot_be_cleared',

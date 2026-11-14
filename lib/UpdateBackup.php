@@ -73,8 +73,12 @@ class UpdateBackup
                 $entries[] = $basename;
             }
         } catch (\Throwable $e) {
-            // A partial backup is worthless and dangerous: remove it.
-            $this->deleteRecursive($backupPath);
+            // A partial backup is worthless and dangerous: remove it. Without a
+            // manifest it can never be used, but leftovers are still reported so
+            // they can be cleaned up by hand.
+            if (!$this->deleteRecursive($backupPath)) {
+                error_log('UpdateBackup: could not remove the partial backup at ' . $backupPath);
+            }
             @unlink($this->manifestPath($backupPath));
             error_log('UpdateBackup: backup failed, aborted: ' . $e->getMessage());
             return null;
@@ -88,7 +92,9 @@ class UpdateBackup
         ];
         $json = json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
         if ($json === false || @file_put_contents($this->manifestPath($backupPath), $json) === false) {
-            $this->deleteRecursive($backupPath);
+            if (!$this->deleteRecursive($backupPath)) {
+                error_log('UpdateBackup: could not remove the unverified backup at ' . $backupPath);
+            }
             error_log('UpdateBackup: cannot write the backup manifest, backup discarded');
             return null;
         }
@@ -221,8 +227,10 @@ class UpdateBackup
         }
 
         if (is_file($src)) {
-            if (is_dir($dst)) {
-                $this->deleteRecursive($dst);
+            if (is_dir($dst) && !$this->deleteRecursive($dst)) {
+                // Copying onto a directory that is still there would fail with
+                // an obscure error: report the real cause.
+                throw new RuntimeException('cannot replace directory ' . $dst . ' with a file');
             }
             if (!@copy($src, $dst)) {
                 throw new RuntimeException('cannot copy ' . $src . ' to ' . $dst);
