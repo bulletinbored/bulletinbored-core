@@ -561,7 +561,17 @@ class UpdateManager
         }
         $this->backup->deleteRecursive($tmpExtract);
 
-        $this->flattenNestedCoreDir($root);
+        try {
+            $this->flattenNestedCoreDir($root);
+        } catch (\Throwable $e) {
+            // Moving the nested package into place is still part of the file
+            // installation: undo it exactly like a failed copy.
+            if (!$this->backup->restoreCoreBackup($backupPath)) {
+                error_log('BB CORE FAIL: rollback could not restore the backup at ' . $backupPath);
+            }
+            error_log('BB CORE FAIL while flattening the package: ' . $e->getMessage());
+            return false;
+        }
         error_log('BB CORE extracted');
 
         return $this->finalizeCoreUpdate($root, $version);
@@ -601,7 +611,9 @@ class UpdateManager
                     if (is_dir($dest)) {
                         $this->backup->deleteRecursive($dest);
                     }
-                    copy($item, $dest);
+                    // copyRecursive() checks the result and throws; a bare
+                    // copy() would fail silently on a full disk.
+                    $this->backup->copyRecursive($item, $dest);
                 }
             }
             $this->backup->deleteRecursive($nested);

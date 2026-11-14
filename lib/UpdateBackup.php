@@ -56,7 +56,7 @@ class UpdateBackup
 
         $entries = [];
         try {
-            foreach ($this->entries($this->rootDir) as $entry) {
+            foreach ($this->listEntries($this->rootDir) as $entry) {
                 $basename = basename($entry);
                 if (in_array($basename, self::PRESERVED, true)) {
                     continue;
@@ -115,7 +115,7 @@ class UpdateBackup
 
         $manifest = $this->readManifest($backupPath);
 
-        $items = $this->entries($backupPath);
+        $items = $this->listEntries($backupPath);
         foreach ($items as $item) {
             $basename = basename($item);
             $dest = $this->rootDir . '/' . $basename;
@@ -141,7 +141,7 @@ class UpdateBackup
         }
 
         $restored = array_flip($manifest['entries']);
-        foreach ($this->entries($this->rootDir) as $entry) {
+        foreach ($this->listEntries($this->rootDir) as $entry) {
             $basename = basename($entry);
             if (isset($restored[$basename]) || in_array($basename, self::PRESERVED, true)) {
                 continue;
@@ -197,7 +197,7 @@ class UpdateBackup
                     throw new RuntimeException('cannot create directory ' . $dst);
                 }
             }
-            foreach ($this->entries($src) as $item) {
+            foreach ($this->listEntries($src) as $item) {
                 $this->copyRecursive($item, $dst . '/' . basename($item));
             }
             return;
@@ -216,40 +216,72 @@ class UpdateBackup
         throw new RuntimeException('unsupported source ' . $src);
     }
 
+    /**
+     * Recursively delete a path. Returns false when anything could not be
+     * removed, and logs what was left behind: a cleanup that silently leaves
+     * files behind is worse than a noisy one.
+     */
     public function deleteRecursive(string $dir): bool
     {
-        if (!is_dir($dir)) {
+        if (!is_dir($dir) || is_link($dir)) {
             return @unlink($dir);
         }
+
         // scandir(), not glob(): hidden entries must be removed too.
         $items = @scandir($dir);
         if ($items === false) {
+            error_log('UpdateBackup: cannot list ' . $dir . ' for deletion');
             return false;
         }
+
+        $ok = true;
         foreach ($items as $item) {
             if ($item === '.' || $item === '..') {
                 continue;
             }
             $path = $dir . '/' . $item;
-            if (is_dir($path) && !is_link($path)) {
-                $this->deleteRecursive($path);
-            } else {
-                @unlink($path);
+            $removed = (is_dir($path) && !is_link($path))
+                ? $this->deleteRecursive($path)
+                : @unlink($path);
+            if (!$removed) {
+                $ok = false;
+                error_log('UpdateBackup: could not delete ' . $path);
             }
         }
-        return @rmdir($dir);
+
+        if (!@rmdir($dir)) {
+            $ok = false;
+        }
+        return $ok;
     }
 
     /**
      * All entries of a directory, hidden ones included.
+     *
+     * Throws when the directory cannot be read: returning an empty list would
+     * make an unreadable directory indistinguishable from an empty one, and the
+     * backup would be marked complete while silently missing files.
+     *
+     * Public so the contract can be unit-tested (permission bits do not stop a
+     * root user, so the failure is triggered with a non-directory path).
+     *
      * @return string[]
+     * @throws RuntimeException
      */
-    private function entries(string $dir): array
+    public function listEntries(string $dir): array
     {
+        if (!is_dir($dir)) {
+            throw new RuntimeException('not a directory: ' . $dir);
+        }
+
         $items = @scandir($dir);
         if ($items === false) {
-            return [];
+            // Clear the cached stat/read state: a retry after a mount or
+            // permission fix must not see the stale failure.
+            clearstatcache(true, $dir);
+            throw new RuntimeException('cannot read directory: ' . $dir);
         }
+
         $entries = [];
         foreach ($items as $item) {
             if ($item === '.' || $item === '..') {

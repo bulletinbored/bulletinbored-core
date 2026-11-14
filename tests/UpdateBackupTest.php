@@ -184,7 +184,95 @@ function test_restore_prunes_only_with_a_manifest(): Test
     return $t;
 }
 
+function test_list_entries_reports_read_failures(): Test
+{
+    $t = new Test('Update backup - unreadable directories are an error');
+
+    $root = update_backup_root();
+    $backup = new UpdateBackup($root . '/data', $root);
+
+    try {
+        $entries = $backup->listEntries($root . '/lib');
+        $names = array_map('basename', $entries);
+        $t->assertContains('Hidden file listed', '.hidden', $names);
+        $t->assertContains('Visible file listed', 'BbPdo.php', $names);
+        $t->assertCount('No "." or ".." entries', count(scandir($root . '/lib')) - 2, $entries);
+
+        // A file is not a readable directory: it must throw, never look empty.
+        $t->assertThrows(
+            'A non-directory path throws',
+            fn() => $backup->listEntries($root . '/index.php'),
+            RuntimeException::class
+        );
+        $t->assertThrows(
+            'A missing directory throws',
+            fn() => $backup->listEntries($root . '/does-not-exist'),
+            RuntimeException::class
+        );
+    } finally {
+        update_backup_cleanup($root);
+    }
+
+    return $t;
+}
+
+function test_backup_aborts_when_a_directory_cannot_be_read(): Test
+{
+    $t = new Test('Update backup - unreadable directory aborts the backup');
+
+    $root = update_backup_root();
+
+    // Simulates scandir() failing deep inside the tree: the backup must be
+    // discarded instead of being recorded as complete.
+    $failing = new class($root . '/data', $root) extends UpdateBackup {
+        public function listEntries(string $dir): array
+        {
+            if (str_contains($dir, '/lib')) {
+                throw new RuntimeException('cannot read directory: ' . $dir);
+            }
+            return parent::listEntries($dir);
+        }
+    };
+
+    try {
+        $t->assertNull('Backup discarded', $failing->backupCore());
+        $t->assertCount('No backup directory left', 0, glob($root . '/data/backups/core_*') ?: []);
+        $t->assertCount('No manifest left', 0, glob($root . '/data/backups/core_*.json') ?: []);
+    } finally {
+        update_backup_cleanup($root);
+    }
+
+    return $t;
+}
+
+function test_delete_recursive_reports_result(): Test
+{
+    $t = new Test('Update backup - deletion reports its result');
+
+    $root = update_backup_root();
+    $backup = new UpdateBackup($root . '/data', $root);
+
+    try {
+        $target = $root . '/todelete';
+        @mkdir($target . '/nested', 0755, true);
+        file_put_contents($target . '/nested/.hidden', 'x');
+        file_put_contents($target . '/file.txt', 'x');
+
+        $t->assertTrue('Existing tree deleted', $backup->deleteRecursive($target));
+        $t->assertFalse('Directory is gone', is_dir($target));
+
+        $t->assertFalse('Deleting a missing path reports failure', $backup->deleteRecursive($root . '/missing'));
+    } finally {
+        update_backup_cleanup($root);
+    }
+
+    return $t;
+}
+
 register_tests(
+    'test_list_entries_reports_read_failures',
+    'test_backup_aborts_when_a_directory_cannot_be_read',
+    'test_delete_recursive_reports_result',
     'test_backup_includes_hidden_files_and_manifest',
     'test_backup_failure_leaves_no_partial_backup',
     'test_copy_recursive_reports_failure',
