@@ -149,21 +149,24 @@ class UpdateBackup
             }
 
             $restored = array_flip($manifest['entries']);
+            $cleanupOk = true;
             foreach ($this->listEntries($this->rootDir) as $entry) {
                 $basename = basename($entry);
                 if (isset($restored[$basename]) || in_array($basename, self::PRESERVED, true)) {
                     continue;
                 }
-                if (is_dir($entry) && !is_link($entry)) {
-                    if (!$this->deleteRecursive($entry)) {
-                        error_log('UpdateBackup: could not remove ' . $entry . ' created by the failed update');
-                    }
-                } elseif (!@unlink($entry)) {
+                $removed = (is_dir($entry) && !is_link($entry))
+                    ? $this->deleteRecursive($entry)
+                    : @unlink($entry);
+                if (!$removed) {
+                    // Residues of the failed update are still on disk: the
+                    // installation is not back to its previous state.
+                    $cleanupOk = false;
                     error_log('UpdateBackup: could not remove ' . $entry . ' created by the failed update');
                 }
             }
 
-            return true;
+            return $cleanupOk;
         } catch (\Throwable $e) {
             error_log('UpdateBackup: restore aborted: ' . $e->getMessage());
             return false;

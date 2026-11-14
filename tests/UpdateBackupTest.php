@@ -351,7 +351,49 @@ function test_restore_aborts_when_a_directory_cannot_be_cleared(): Test
     return $t;
 }
 
+function test_restore_fails_when_a_residue_cannot_be_removed(): Test
+{
+    $t = new Test('Update backup - leftover files must be removed for success');
+
+    $root = update_backup_root();
+    $backup = new UpdateBackup($root . '/data', $root);
+
+    try {
+        $path = $backup->backupCore();
+        $t->assertNotNull('Backup created', $path);
+        if ($path === null) {
+            return $t;
+        }
+
+        // An entry created by the failed update, which cannot be removed.
+        @mkdir($root . '/straydir', 0755, true);
+        file_put_contents($root . '/straydir/leftover.php', "<?php // leftover\n");
+
+        $stubborn = new class($root . '/data', $root) extends UpdateBackup {
+            public function deleteRecursive(string $dir): bool
+            {
+                if (basename($dir) === 'straydir') {
+                    return false;
+                }
+                return parent::deleteRecursive($dir);
+            }
+        };
+
+        $t->assertFalse('Restore reports failure when a residue stays', $stubborn->restoreCoreBackup((string)$path));
+        $t->assertTrue('The residue is indeed still there', is_dir($root . '/straydir'));
+
+        // Once it can be removed, the same backup restores successfully.
+        $t->assertTrue('Restore succeeds when cleanup works', $backup->restoreCoreBackup((string)$path));
+        $t->assertFalse('Residue removed', is_dir($root . '/straydir'));
+    } finally {
+        update_backup_cleanup($root);
+    }
+
+    return $t;
+}
+
 register_tests(
+    'test_restore_fails_when_a_residue_cannot_be_removed',
     'test_restore_reports_failure_instead_of_throwing',
     'test_restore_aborts_when_a_directory_cannot_be_cleared',
     'test_list_entries_reports_read_failures',
