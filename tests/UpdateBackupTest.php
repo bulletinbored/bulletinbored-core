@@ -269,7 +269,91 @@ function test_delete_recursive_reports_result(): Test
     return $t;
 }
 
+function test_restore_reports_failure_instead_of_throwing(): Test
+{
+    $t = new Test('Update backup - restore never throws, it reports failure');
+
+    $root = update_backup_root();
+    $backup = new UpdateBackup($root . '/data', $root);
+
+    try {
+        $path = $backup->backupCore();
+        $t->assertNotNull('Backup created', $path);
+        if ($path === null) {
+            return $t;
+        }
+
+        // An unreadable backup must fail the restore, not escape as an exception
+        // (the caller is already handling the original update error).
+        $unreadable = new class($root . '/data', $root) extends UpdateBackup {
+            public string $failPrefix = '';
+
+            public function listEntries(string $dir): array
+            {
+                if ($this->failPrefix !== '' && str_contains($dir, $this->failPrefix)) {
+                    throw new RuntimeException('cannot read directory: ' . $dir);
+                }
+                return parent::listEntries($dir);
+            }
+        };
+        $unreadable->failPrefix = basename((string)$path);
+
+        $threw = false;
+        $result = true;
+        try {
+            $result = $unreadable->restoreCoreBackup((string)$path);
+        } catch (\Throwable $e) {
+            $threw = true;
+        }
+        $t->assertFalse('An unreadable backup does not throw', $threw);
+        $t->assertFalse('Restore reports failure', $result);
+    } finally {
+        update_backup_cleanup($root);
+    }
+
+    return $t;
+}
+
+function test_restore_aborts_when_a_directory_cannot_be_cleared(): Test
+{
+    $t = new Test('Update backup - restore fails if a directory cannot be cleared');
+
+    $root = update_backup_root();
+    $backup = new UpdateBackup($root . '/data', $root);
+
+    try {
+        $path = $backup->backupCore();
+        $t->assertNotNull('Backup created', $path);
+        if ($path === null) {
+            return $t;
+        }
+
+        file_put_contents($root . '/index.php', "<?php // broken update
+");
+
+        // Deleting the existing lib/ fails (locked file, permissions, ...): the
+        // restore must stop rather than copy over a half-deleted directory.
+        $undeletable = new class($root . '/data', $root) extends UpdateBackup {
+            public function deleteRecursive(string $dir): bool
+            {
+                if (basename($dir) === 'lib') {
+                    return false;
+                }
+                return parent::deleteRecursive($dir);
+            }
+        };
+
+        $t->assertFalse('Restore reports failure', $undeletable->restoreCoreBackup((string)$path));
+    } finally {
+        update_backup_cleanup($root);
+    }
+
+    return $t;
+}
+
 register_tests(
+    'test_restore_reports_failure_instead_of_throwing',
+    'test_restore_aborts_when_a_directory_cannot_be_cleared',
     'test_list_entries_reports_read_failures',
     'test_backup_aborts_when_a_directory_cannot_be_read',
     'test_delete_recursive_reports_result',

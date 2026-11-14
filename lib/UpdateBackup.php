@@ -113,47 +113,61 @@ class UpdateBackup
             return false;
         }
 
-        $manifest = $this->readManifest($backupPath);
+        // Everything below can fail (unreadable backup, a directory that cannot
+        // be replaced, a full disk). A restore either brings the installation
+        // back exactly, or reports failure: it never throws out of here, or the
+        // caller would lose the original error.
+        try {
+            $manifest = $this->readManifest($backupPath);
 
-        $items = $this->listEntries($backupPath);
-        foreach ($items as $item) {
-            $basename = basename($item);
-            $dest = $this->rootDir . '/' . $basename;
-            try {
+            foreach ($this->listEntries($backupPath) as $item) {
+                $basename = basename($item);
+                $dest = $this->rootDir . '/' . $basename;
+
+                if (is_link($item)) {
+                    // Recorded in the manifest, never followed: leave the
+                    // existing entry in place so it is not pruned.
+                    continue;
+                }
                 if (is_dir($item)) {
-                    if (is_dir($dest)) {
-                        $this->deleteRecursive($dest);
+                    if (is_dir($dest) && !$this->deleteRecursive($dest)) {
+                        // Copying over a half-deleted directory could leave files
+                        // from the failed update inside it.
+                        error_log('UpdateBackup: restore aborted, cannot clear ' . $dest);
+                        return false;
                     }
                     $this->copyRecursive($item, $dest);
-                } elseif (!is_link($item) && !@copy($item, $dest)) {
-                    throw new RuntimeException('cannot restore ' . $basename);
+                } else {
+                    $this->copyRecursive($item, $dest);
                 }
-            } catch (\Throwable $e) {
-                error_log('UpdateBackup: restore failed for ' . $basename . ': ' . $e->getMessage());
-                return false;
             }
-        }
 
-        if ($manifest === null) {
-            // No verified manifest: copy back only, never prune.
-            error_log('UpdateBackup: backup has no valid manifest, skipping cleanup of extra files');
+            if ($manifest === null) {
+                // No verified manifest: copy back only, never prune.
+                error_log('UpdateBackup: backup has no valid manifest, skipping cleanup of extra files');
+                return true;
+            }
+
+            $restored = array_flip($manifest['entries']);
+            foreach ($this->listEntries($this->rootDir) as $entry) {
+                $basename = basename($entry);
+                if (isset($restored[$basename]) || in_array($basename, self::PRESERVED, true)) {
+                    continue;
+                }
+                if (is_dir($entry) && !is_link($entry)) {
+                    if (!$this->deleteRecursive($entry)) {
+                        error_log('UpdateBackup: could not remove ' . $entry . ' created by the failed update');
+                    }
+                } elseif (!@unlink($entry)) {
+                    error_log('UpdateBackup: could not remove ' . $entry . ' created by the failed update');
+                }
+            }
+
             return true;
+        } catch (\Throwable $e) {
+            error_log('UpdateBackup: restore aborted: ' . $e->getMessage());
+            return false;
         }
-
-        $restored = array_flip($manifest['entries']);
-        foreach ($this->listEntries($this->rootDir) as $entry) {
-            $basename = basename($entry);
-            if (isset($restored[$basename]) || in_array($basename, self::PRESERVED, true)) {
-                continue;
-            }
-            if (is_dir($entry) && !is_link($entry)) {
-                $this->deleteRecursive($entry);
-            } else {
-                @unlink($entry);
-            }
-        }
-
-        return true;
     }
 
     public function listBackups(): array
