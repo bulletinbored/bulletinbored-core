@@ -322,6 +322,25 @@ Everything a plugin needs to know about authentication:
   `admin` middleware). `tests/RouteAuthorizationTest.php` fails the build when a
   route is registered outside the group it needs.
 
+## Rate limiting
+
+File-based, with no Redis or Memcached: one JSON bucket per action+key under
+`data/ratelimit`, written under `flock()` so concurrent requests cannot exceed
+the limit. Sensitive actions (login, registration, password reset, uploads, admin
+operations) **fail closed** when the bucket cannot be written; everything else
+stays available so a storage hiccup does not take the forum down.
+
+| Option | Default | Meaning |
+|---|---|---|
+| `rate_limit_multiplier` | `1` | Scales every limit globally: `0.5` is stricter, `2` more permissive. Clamped to 0.1–10 and deliberately global — a per-action setting is an easy way to lock yourself out of the admin panel. |
+
+Inspect the buckets with `php bb.php ratelimit:stats` and remove the expired ones
+with `php bb.php ratelimit:gc` (they are also collected opportunistically).
+
+SQLite installations rely on PDO's 60-second busy timeout, so a second writer
+waits instead of failing with "database is locked"; `sqlite_busy_timeout`
+(milliseconds) overrides it for hosts that need something different.
+
 ## Security model & known risks
 
 For the full security model, trust boundary, and known risks (including why plugin/

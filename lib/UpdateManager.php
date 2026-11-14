@@ -22,7 +22,8 @@ class UpdateManager
         ?string $githubToken = null,
         ?string $updateMirror = null,
         ?string $rootDir = null,
-        ?UpdateFetcher $fetcher = null
+        ?UpdateFetcher $fetcher = null,
+        ?UpdateBackup $backup = null
     ) {
         $this->manifestPath = $manifestPath;
         $this->updateServer = $updateServer;
@@ -32,7 +33,9 @@ class UpdateManager
 
         $dataDir = dirname($manifestPath);
         $this->fetcher = $fetcher ?? new UpdateFetcher($dataDir, $updateServer, $githubToken, $updateMirror);
-        $this->backup = new UpdateBackup($dataDir, $this->rootDir);
+        // Injectable so the failure paths (disk full, permission denied) can be
+        // exercised without filling a filesystem.
+        $this->backup = $backup ?? new UpdateBackup($dataDir, $this->rootDir);
 
         // Prereleases are opt-in: a stable installation must never be offered
         // 1.0.0-rc.1, while an installation already running a prerelease may

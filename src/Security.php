@@ -182,6 +182,16 @@ function rate_limit_sensitive_actions(): array
 
 function rate_limit(string $action, int $max = 10, int $window = 300, ?string $key = null): bool
 {
+    // A single global multiplier lets an administrator tighten or relax every
+    // limit without touching the call sites (config: rate_limit_multiplier).
+    // It is deliberately global: a per-action configuration invites locking
+    // yourself out of the admin panel.
+    $factor = (float)(App::getInstance()->config['rate_limit_multiplier'] ?? 1.0);
+    if (is_finite($factor) && $factor > 0) {
+        $factor = max(0.1, min(10.0, $factor));
+        $max = max(1, (int)round($max * $factor));
+    }
+
     $ip = rate_limit_client_ip();
     $key = $key ?? $ip;
     $bucket = preg_replace('/[^a-z0-9._-]/i', '_', $action . '_' . $key);

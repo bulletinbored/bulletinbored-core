@@ -1,5 +1,6 @@
 {
     "db_driver": "sqlite",
+    "sqlite_busy_timeout": 60000,
     "db_path": "__DIR__/data/database.sqlite",
     "db_host": "localhost",
     "db_name": "forum",
@@ -44,5 +45,6 @@
     "allow_prerelease_updates": false,
     "telemetry": true,
     "telemetry_url": "https://www.bulletinbored.net/heartbeat.php",
+    "rate_limit_multiplier": 1,
     "trusted_proxies": ["127.0.0.1", "::1"]
 }

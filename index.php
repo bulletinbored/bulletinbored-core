@@ -83,7 +83,14 @@ if (is_logged_in()) {
         exit;
     }
     if ($row['status'] === 'suspended' && (int)($row['suspension_time'] ?? 0) > 0 && time() >= (int)$row['suspension_time']) {
-        $pdo->prepare("UPDATE users SET status = 'active', suspension_time = 0 WHERE id = ?")->execute([$userId]);
+        // Expired suspension: reactivate and invalidate the older sessions of
+        // this account (a status change always bumps session_version). The
+        // current session is refreshed immediately so this request is kept.
+        $pdo->prepare("UPDATE users SET status = 'active', suspension_time = 0, session_version = COALESCE(session_version, 0) + 1 WHERE id = ?")
+            ->execute([$userId]);
+        $versionStmt = $pdo->prepare("SELECT session_version FROM users WHERE id = ?");
+        $versionStmt->execute([$userId]);
+        $_SESSION['session_version'] = (int)$versionStmt->fetchColumn();
         $_SESSION['user_status'] = 'active';
         $_SESSION['user_suspension_time'] = 0;
     }

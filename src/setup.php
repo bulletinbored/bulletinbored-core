@@ -64,7 +64,8 @@ if ($dbDriver === 'mysql') {
     $isNewDb = !file_exists($dbPath);
     $pdo = new PDO('sqlite:' . $dbPath);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    $pdo->exec("PRAGMA foreign_keys = ON");
+    // foreign_keys + busy_timeout (concurrent writers wait instead of failing).
+    BbPdo::configureSqlite($pdo, $config);
 }
 
 App::getInstance()->pdo = $pdo;

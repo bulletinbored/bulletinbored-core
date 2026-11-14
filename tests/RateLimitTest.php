@@ -215,7 +215,72 @@ function test_ratelimit_detects_replaced_bucket(): Test
     return $t;
 }
 
+function test_ratelimit_global_multiplier(): Test
+{
+    $t = new Test('Rate limit - global multiplier');
+
+    $app = App::getInstance();
+    $original = $app->config;
+
+    $action = 'bb_factor_' . bin2hex(random_bytes(4));
+    $bucket = ratelimit_dir() . '/' . $action . '_shared.json';
+
+    try {
+        // 0.5 halves the effective limit: max 4 -> 2 allowed.
+        $app->config = array_merge($original, ['rate_limit_multiplier' => 0.5]);
+        @unlink($bucket);
+        $allowed = 0;
+        for ($i = 0; $i < 6; $i++) {
+            if (rate_limit($action, 4, 300, 'shared')) {
+                $allowed++;
+            }
+        }
+        $t->assertEquals('Half multiplier halves the limit', 2, $allowed);
+
+        // 2.0 doubles it: max 2 -> 4 allowed.
+        $app->config = array_merge($original, ['rate_limit_multiplier' => 2]);
+        @unlink($bucket);
+        $allowed = 0;
+        for ($i = 0; $i < 8; $i++) {
+            if (rate_limit($action, 2, 300, 'shared')) {
+                $allowed++;
+            }
+        }
+        $t->assertEquals('Double multiplier doubles the limit', 4, $allowed);
+
+        // Nonsense values fall back to the default multiplier.
+        foreach ([0, -3, 'abc', null] as $value) {
+            $app->config = array_merge($original, ['rate_limit_multiplier' => $value]);
+            @unlink($bucket);
+            $allowed = 0;
+            for ($i = 0; $i < 6; $i++) {
+                if (rate_limit($action, 3, 300, 'shared')) {
+                    $allowed++;
+                }
+            }
+            $t->assertEquals('Invalid multiplier ignored (' . var_export($value, true) . ')', 3, $allowed);
+        }
+
+        // Extreme values are clamped instead of disabling the limiter.
+        $app->config = array_merge($original, ['rate_limit_multiplier' => 1000]);
+        @unlink($bucket);
+        $allowed = 0;
+        for ($i = 0; $i < 15; $i++) {
+            if (rate_limit($action, 1, 300, 'shared')) {
+                $allowed++;
+            }
+        }
+        $t->assertEquals('Multiplier clamped to 10x', 10, $allowed);
+    } finally {
+        $app->config = $original;
+        @unlink($bucket);
+    }
+
+    return $t;
+}
+
 register_tests(
+    'test_ratelimit_global_multiplier',
     'test_ratelimit_gc_removes_expired_buckets',
     'test_ratelimit_gc_skips_locked_bucket',
     'test_ratelimit_detects_replaced_bucket',

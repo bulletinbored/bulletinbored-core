@@ -86,13 +86,15 @@ function handle_admin_user_edit(string $method, array $params = []): \Bulletin\R
             $privilegesChanged = $newRole !== ($editUser['role'] ?? '')
                 || $newStatus !== ($editUser['status'] ?? '');
 
-            $sql = "UPDATE users SET username = ?, email = ?, role = ?, status = ?";
-            if ($privilegesChanged) {
-                $sql .= ", session_version = COALESCE(session_version, 0) + 1";
-            }
-            $sql .= " WHERE id = ?";
-
-            $pdo->prepare($sql)->execute([$newUsername, $newEmail, $newRole, $newStatus, $editUserId]);
+            // The bump is a bound value instead of conditionally concatenated
+            // SQL: one statement to review, and the policy test can see that
+            // every role/status update touches session_version.
+            $pdo->prepare("
+                UPDATE users
+                SET username = ?, email = ?, role = ?, status = ?,
+                    session_version = COALESCE(session_version, 0) + ?
+                WHERE id = ?
+            ")->execute([$newUsername, $newEmail, $newRole, $newStatus, $privilegesChanged ? 1 : 0, $editUserId]);
             log_admin_action('user_update', [
                 'target_id' => $editUserId,
                 'username' => $newUsername,
