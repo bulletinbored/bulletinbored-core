@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/Version.php';
+require_once __DIR__ . '/AtomicFile.php';
 require_once __DIR__ . '/UpdateFetcher.php';
 require_once __DIR__ . '/UpdateBackup.php';
 require_once __DIR__ . '/PackageInstaller.php';
@@ -135,74 +136,15 @@ class UpdateManager
      */
     protected function writeFileAtomically(string $path, string $contents, bool $mustBeJson = false): bool
     {
-        $dir = dirname($path);
-        if (!is_dir($dir)) {
-            error_log('UpdateManager: directory does not exist for ' . $path);
-            return false;
-        }
-
-        $tmp = rtrim($dir, '/') . '/.bb-tmp-' . bin2hex(random_bytes(8));
-        // Create the temporary file owner-only BEFORE writing anything: with the
-        // process umask it would exist as 0644 while config.json (database
-        // credentials) is being written into it.
-        if (!@touch($tmp) || !@chmod($tmp, 0600) || !is_file($tmp)) {
-            @unlink($tmp);
-            error_log('UpdateManager: cannot create a protected temporary file in ' . $dir);
-            return false;
-        }
-
-        $written = $this->putContents($tmp, $contents);
-        if ($written !== strlen($contents)) {
-            @unlink($tmp);
-            error_log(sprintf(
-                'UpdateManager: partial write of %s (%d of %d bytes), file left unchanged',
-                $path,
-                $written,
-                strlen($contents)
-            ));
-            return false;
-        }
-
-        if ($mustBeJson && !is_array(json_decode((string)@file_get_contents($tmp), true))) {
-            @unlink($tmp);
-            error_log('UpdateManager: refusing to install invalid JSON at ' . $path);
-            return false;
-        }
-
-        // The temporary file was created with the process umask, and rename()
-        // keeps the inode of the source: without this step a config.json
-        // restricted to 0600 would come back as 0644 after the update.
-        $mode = $this->targetMode($path);
-        if (!@chmod($tmp, $mode)) {
-            @unlink($tmp);
-            error_log(sprintf('UpdateManager: cannot set mode %04o on %s, file left unchanged', $mode, $path));
-            return false;
-        }
-
-        if (!@rename($tmp, $path)) {
-            @unlink($tmp);
-            error_log('UpdateManager: cannot replace ' . $path);
-            return false;
-        }
-
-        // rename() keeps the attributes of the source inode on POSIX, but some
-        // filesystems (emulated ones, network mounts) preserve the destination
-        // mode instead. Verify the result instead of assuming either behaviour.
-        clearstatcache(true, $path);
-        $actual = @fileperms($path);
-        if ($actual === false || ($actual & 0777) !== $mode) {
-            if (!@chmod($path, $mode)) {
-                error_log(sprintf(
-                    'UpdateManager: %s ended with mode %s instead of %04o',
-                    $path,
-                    $actual === false ? 'unknown' : decoct($actual & 0777),
-                    $mode
-                ));
-                return false;
-            }
-        }
-
-        return true;
+        // One implementation for every metadata write of the project: see
+        // lib/AtomicFile.php. putContents() stays a seam for the tests.
+        return AtomicFile::write(
+            $path,
+            $contents,
+            $this->targetMode($path),
+            $mustBeJson,
+            fn(string $tmp, string $data): int => $this->putContents($tmp, $data)
+        );
     }
 
     /**
@@ -211,8 +153,7 @@ class UpdateManager
      */
     protected function putContents(string $path, string $contents): int
     {
-        $written = @file_put_contents($path, $contents, LOCK_EX);
-        return $written === false ? 0 : (int)$written;
+        return AtomicFile::putContents($path, $contents);
     }
 
     /**

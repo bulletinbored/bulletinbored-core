@@ -519,6 +519,19 @@ $registry->register('doctor', 'Run system diagnostics', function($args) use ($pd
     output('Configuration:');
     if (file_exists(BB_ROOT . '/config.json')) {
         success("  config.json exists");
+        // config.json holds the database credentials: on shared hosting a
+        // 0644 file is readable by every other account on the machine.
+        $configPath = BB_ROOT . '/config.json';
+        $perms = @fileperms($configPath);
+        if ($perms !== false && ($perms & 0077) !== 0) {
+            warning(sprintf(
+                "  config.json is readable by group/others (%04o): run chmod 600 config.json",
+                $perms & 0777
+            ));
+            $warnings++;
+        } else {
+            success('  config.json permissions are restrictive');
+        }
     } elseif (file_exists(BB_ROOT . '/config.php')) {
         success("  config.json exists (legacy)");
     } else {

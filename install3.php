@@ -395,7 +395,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install']) && !valida
             'telemetry_url' => 'https://www.bulletinbored.net/heartbeat.php',
         ];
 
-        if (file_put_contents(__DIR__ . '/config.json', json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE), LOCK_EX) === false) {
+        // config.json holds the database credentials: write it atomically and
+        // owner-only (0600). A plain file_put_contents() would create it
+        // world-readable and could leave a truncated file on a full disk.
+        require_once __DIR__ . '/lib/AtomicFile.php';
+        $configJson = json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        if (!is_string($configJson) || !AtomicFile::write(__DIR__ . '/config.json', $configJson, 0600, true)) {
             throw new RuntimeException('Could not write config.json. Check that the installation directory is writable by the web server.');
         }
 

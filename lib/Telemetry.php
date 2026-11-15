@@ -12,6 +12,8 @@
  * network call is ever made. Every failure is swallowed: telemetry must never
  * break or noticeably slow down the forum.
  */
+require_once __DIR__ . '/AtomicFile.php';
+
 class Telemetry
 {
     /** Minimum seconds between successful pings. */
@@ -59,6 +61,21 @@ class Telemetry
         );
     }
 
+    /**
+     * Permission bits for config.json: keep the current ones, but never let
+     * group or others read a file that holds credentials.
+     */
+    private function configFileMode(): int
+    {
+        if ($this->configPath !== null && is_file($this->configPath)) {
+            $perms = @fileperms($this->configPath);
+            if ($perms !== false && ($perms & 0777) !== 0 && ($perms & 0077) === 0) {
+                return $perms & 0777;
+            }
+        }
+        return 0600;
+    }
+
     public function isEnabled(): bool
     {
         // Opt-out: telemetry is on unless explicitly disabled. Defaulting to
@@ -98,12 +115,10 @@ class Telemetry
             return null;
         }
         $config['install_id'] = $id;
-        $written = @file_put_contents(
-            $this->configPath,
-            json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE),
-            LOCK_EX
-        );
-        if ($written === false) {
+        $json = json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        // The same guarantees as every other configuration write: no truncated
+        // file and no widening of the permissions of a credentials file.
+        if (!is_string($json) || !AtomicFile::write($this->configPath, $json, $this->configFileMode(), true)) {
             return null;
         }
 
