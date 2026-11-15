@@ -113,8 +113,17 @@ class Telemetry
         // then re-read inside the lock: whoever arrives second adopts the id the
         // first one already wrote.
         $lock = @fopen($this->dataDir . '/.install-id.lock', 'c');
-        if ($lock !== false) {
-            @flock($lock, LOCK_EX);
+        if ($lock === false) {
+            // Without the lock the read-modify-write could generate two ids and
+            // overwrite each other: skip this attempt instead (the next request
+            // tries again).
+            error_log('Telemetry: cannot create the install_id lock in ' . $this->dataDir);
+            return null;
+        }
+        if (!@flock($lock, LOCK_EX)) {
+            @fclose($lock);
+            error_log('Telemetry: cannot lock install_id generation');
+            return null;
         }
 
         try {
@@ -143,10 +152,8 @@ class Telemetry
             $this->config['install_id'] = $id;
             return $id;
         } finally {
-            if ($lock !== false) {
-                @flock($lock, LOCK_UN);
-                @fclose($lock);
-            }
+            @flock($lock, LOCK_UN);
+            @fclose($lock);
         }
     }
 

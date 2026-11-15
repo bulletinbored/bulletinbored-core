@@ -317,3 +317,33 @@ PHP;
 }
 
 register_tests('test_telemetry_install_id_is_race_free');
+
+function test_telemetry_skips_generation_without_a_lock(): Test
+{
+    $t = new Test('Telemetry - no install_id without the lock');
+
+    $dir = telemetry_tmp_dir();
+    $configPath = $dir . '/config.json';
+    file_put_contents($configPath, json_encode(['telemetry' => true, 'version' => '1.0.0']));
+
+    // A data directory that is a regular file: the lock file cannot be created,
+    // so the read-modify-write must not happen at all.
+    $notADir = $dir . '/data-is-a-file';
+    file_put_contents($notADir, 'x');
+
+    try {
+        $telemetry = new Telemetry($notADir, ['telemetry' => true], $configPath);
+        $t->assertNull('installId returns null', $telemetry->installId());
+
+        $stored = json_decode((string)file_get_contents($configPath), true);
+        $t->assertFalse('config.json is left untouched', isset($stored['install_id']));
+        $t->assertFalse('maybePing does not send without an id', $telemetry->maybePing());
+    } finally {
+        @unlink($notADir);
+        telemetry_rm_dir($dir);
+    }
+
+    return $t;
+}
+
+register_tests('test_telemetry_skips_generation_without_a_lock');
