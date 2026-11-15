@@ -118,11 +118,54 @@ class UpdateManager
             error_log('UpdateManager: cannot encode the update manifest');
             return false;
         }
-        $written = @file_put_contents($this->manifestPath, $json);
-        if ($written === false) {
-            error_log('UpdateManager: cannot write the update manifest ' . $this->manifestPath);
+        return $this->writeFileAtomically($this->manifestPath, $json, true);
+    }
+
+    /**
+     * Write a file so that a partial or failed write can never be observed.
+     *
+     * file_put_contents() returns the number of bytes written and can stop at a
+     * positive number smaller than the content (a disk that fills up mid-write),
+     * which a `=== false` check does not catch. The content goes to a temporary
+     * file in the same directory, the exact byte count and (optionally) the JSON
+     * validity are verified, and only then is the original replaced with
+     * rename(). A failure leaves the previous file untouched.
+     *
+     * Protected so the partial-write path can be tested by overriding it.
+     */
+    protected function writeFileAtomically(string $path, string $contents, bool $mustBeJson = false): bool
+    {
+        $dir = dirname($path);
+        if (!is_dir($dir)) {
+            error_log('UpdateManager: directory does not exist for ' . $path);
             return false;
         }
+
+        $tmp = $path . '.tmp-' . bin2hex(random_bytes(6));
+        $written = @file_put_contents($tmp, $contents, LOCK_EX);
+        if ($written === false || $written !== strlen($contents)) {
+            @unlink($tmp);
+            error_log(sprintf(
+                'UpdateManager: partial write of %s (%s of %d bytes), file left unchanged',
+                $path,
+                $written === false ? 'none' : (string)$written,
+                strlen($contents)
+            ));
+            return false;
+        }
+
+        if ($mustBeJson && !is_array(json_decode((string)@file_get_contents($tmp), true))) {
+            @unlink($tmp);
+            error_log('UpdateManager: refusing to install invalid JSON at ' . $path);
+            return false;
+        }
+
+        if (!@rename($tmp, $path)) {
+            @unlink($tmp);
+            error_log('UpdateManager: cannot replace ' . $path);
+            return false;
+        }
+
         return true;
     }
 
@@ -340,8 +383,13 @@ class UpdateManager
         }
 
         $version = $result['manifest']['version'] ?? '1.0.0';
-        $this->setVersion($group, $name, $version);
         $this->fetcher->clearCache();
+        if (!$this->setVersion($group, $name, $version)) {
+            // The files are installed but the recorded version is stale: report
+            // the update as failed instead of claiming success.
+            error_log('BB EXTENSION UPDATE FAIL (' . $type . ' ' . $name . '): cannot write the update manifest');
+            return false;
+        }
         return true;
     }
 
@@ -653,10 +701,8 @@ class UpdateManager
             }
 
             $versionFile = rtrim($root, '/') . '/VERSION';
-            if (is_file($versionFile)) {
-                if (@file_put_contents($versionFile, $normalized) === false) {
-                    $failures[] = 'VERSION';
-                }
+            if (is_file($versionFile) && !$this->writeFileAtomically($versionFile, $normalized)) {
+                $failures[] = 'VERSION';
             }
 
             if (!$this->updateVersionInConfig($root, $normalized)) {
@@ -699,11 +745,11 @@ class UpdateManager
             }
             $config['version'] = $version;
             $json = json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-            if ($json === false || @file_put_contents($configJsonPath, $json) === false) {
-                error_log('UpdateManager: cannot write config.json, version not updated');
+            if (!is_string($json)) {
+                error_log('UpdateManager: cannot encode config.json, version not updated');
                 return false;
             }
-            return true;
+            return $this->writeFileAtomically($configJsonPath, $json, true);
         }
 
         if (file_exists($legacyConfigPath)) {
@@ -723,11 +769,7 @@ class UpdateManager
             if (!is_string($updated)) {
                 return false;
             }
-            if (@file_put_contents($legacyConfigPath, $updated) === false) {
-                error_log('UpdateManager: cannot write config.php, version not updated');
-                return false;
-            }
-            return true;
+            return $this->writeFileAtomically($legacyConfigPath, $updated);
         }
 
         // No configuration file at all: there is no version to update, but that

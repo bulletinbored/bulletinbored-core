@@ -546,6 +546,80 @@ function umWriteTheme(string $root, string $name): void
  * The UpdateManager must delegate plugin updates to PluginManager::updateFromZip()
  * and persist the new version reported by the manager's manifest.
  */
+/**
+ * Exposes the protected atomic-write helper for direct testing.
+ */
+class UmExposedWriteManager extends UpdateManager
+{
+    public function writeAtomically(string $path, string $contents, bool $mustBeJson = false): bool
+    {
+        return $this->writeFileAtomically($path, $contents, $mustBeJson);
+    }
+}
+
+function test_atomic_metadata_writes(): Test
+{
+    $t = new Test('UpdateManager - metadata writes are atomic and verified');
+
+    $tmp = umTmpDir('atomic');
+    @mkdir($tmp . '/data', 0755, true);
+    $manager = new UmExposedWriteManager($tmp . '/data/updates.json', null, null, null, $tmp);
+
+    try {
+        $file = $tmp . '/data/config.json';
+
+        $t->assertTrue('First write succeeds', $manager->writeAtomically($file, '{"version":"0.9.8"}', true));
+        $t->assertEquals('Content written exactly', '{"version":"0.9.8"}', file_get_contents($file));
+        $t->assertCount('No temporary file left behind', 0, glob($tmp . '/data/*.tmp-*') ?: []);
+
+        $t->assertTrue('Overwrite succeeds', $manager->writeAtomically($file, '{"version":"1.0.0"}', true));
+        $t->assertEquals('Overwritten content', '{"version":"1.0.0"}', file_get_contents($file));
+
+        // Invalid JSON must never replace a good file.
+        $t->assertFalse('Invalid JSON rejected', $manager->writeAtomically($file, '{"version":', true));
+        $t->assertEquals('Previous file untouched', '{"version":"1.0.0"}', file_get_contents($file));
+
+        // Missing directory: no write, no crash, nothing created.
+        $t->assertFalse('Missing directory rejected', $manager->writeAtomically($tmp . '/nope/file.json', '{}', true));
+        $t->assertFalse('Nothing created', is_dir($tmp . '/nope'));
+    } finally {
+        umCleanup($tmp);
+    }
+
+    return $t;
+}
+
+function test_extension_update_fails_when_manifest_cannot_be_written(): Test
+{
+    $t = new Test('UpdateManager - extension update needs the manifest write');
+
+    $tmp = umTmpDir('ext_manifest');
+    $data = $tmp . '/data';
+    mkdir($data, 0755, true);
+    umWritePlugin($tmp, 'umplug', '1.0.0');
+    // updates.json is a directory: the manifest can never be written.
+    mkdir($data . '/updates.json', 0755, true);
+
+    $um = new UpdateManager($data . '/updates.json', null, null, null, $tmp);
+
+    $zip = $tmp . '/v2.zip';
+    umZip([
+        'manifest.json' => json_encode(['name' => 'umplug', 'version' => '2.0.0']),
+        'umplug.php' => "<?php\nfunction umplug_init() {}\n",
+    ], $zip);
+
+    try {
+        $t->assertFalse('applyUpdate reports failure', $um->applyUpdate('plugins', 'umplug', $zip));
+
+        $manifest = json_decode((string)file_get_contents($tmp . '/plugins/umplug/manifest.json'), true);
+        $t->assertEquals('The files were installed', '2.0.0', $manifest['version'] ?? null);
+    } finally {
+        umCleanup($tmp);
+    }
+
+    return $t;
+}
+
 function test_update_manager_plugin_update_success(): Test
 {
     $t = new Test('UpdateManager - Plugin Update Delegates And Records Version');
@@ -660,6 +734,8 @@ function test_update_manager_theme_update_rolls_back_on_bad_package(): Test
 }
 
 register_tests(
+    'test_atomic_metadata_writes',
+    'test_extension_update_fails_when_manifest_cannot_be_written',
     'test_zip_slip_traversal_blocked',
     'test_zip_absolute_path_blocked',
     'test_valid_zip_extracts',
