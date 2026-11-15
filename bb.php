@@ -525,7 +525,8 @@ $registry->register('doctor', 'Run system diagnostics', function($args) use ($pd
         $perms = @fileperms($configPath);
         if ($perms !== false && ($perms & 0077) !== 0) {
             warning(sprintf(
-                "  config.json is readable by group/others (%04o): run chmod 600 config.json",
+                "  config.json is readable by group/others (%04o) and could not be fixed automatically:"
+                . " run chmod 600 config.json",
                 $perms & 0777
             ));
             $warnings++;

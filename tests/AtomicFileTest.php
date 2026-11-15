@@ -109,7 +109,41 @@ function test_atomic_file_detects_a_short_write(): Test
     return $t;
 }
 
+function test_harden_mode_is_self_healing(): Test
+{
+    $t = new Test('AtomicFile - hardenMode tightens a readable file');
+
+    $dir = atomic_file_dir('harden');
+    $file = $dir . '/config.json';
+
+    try {
+        file_put_contents($file, '{"db_pass":"secret"}');
+        chmod($file, 0644);
+        $t->assertTrue('Readable file tightened', AtomicFile::hardenMode($file));
+        $t->assertEquals('Mode is now 0600', 0600, atomic_file_mode($file));
+        $t->assertEquals('Content untouched', '{"db_pass":"secret"}', file_get_contents($file));
+
+        $t->assertTrue('Second call is a no-op', AtomicFile::hardenMode($file));
+        $t->assertEquals('Mode unchanged', 0600, atomic_file_mode($file));
+
+        chmod($file, 0640);
+        AtomicFile::hardenMode($file);
+        $t->assertEquals('Group-readable file tightened', 0600, atomic_file_mode($file));
+
+        chmod($file, 0400);
+        AtomicFile::hardenMode($file);
+        $t->assertEquals('An owner-only mode is left alone', 0400, atomic_file_mode($file));
+
+        $t->assertFalse('Missing file is not an error case', AtomicFile::hardenMode($dir . '/nope.json'));
+    } finally {
+        atomic_file_cleanup($dir);
+    }
+
+    return $t;
+}
+
 register_tests(
+    'test_harden_mode_is_self_healing',
     'test_atomic_file_writes_with_the_requested_mode',
     'test_atomic_file_rejects_bad_input',
     'test_atomic_file_detects_a_short_write'

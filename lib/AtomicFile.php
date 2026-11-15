@@ -97,6 +97,47 @@ final class AtomicFile
         return true;
     }
 
+    /**
+     * Make an existing sensitive file unreadable by group and others.
+     *
+     * Shared hosting often leaves config.json at 0644 (created by an installer
+     * without an explicit chmod), which exposes the database credentials to
+     * every other account on the machine. This is the self-healing half: it runs
+     * on boot and is a no-op once the mode is right.
+     *
+     * @return bool true when the file is restrictive afterwards
+     */
+    public static function hardenMode(string $path, int $mode = 0600): bool
+    {
+        if (!is_file($path)) {
+            return false;
+        }
+
+        $perms = @fileperms($path);
+        if ($perms === false) {
+            return false;
+        }
+        if (($perms & 0077) === 0) {
+            return true; // already owner-only
+        }
+
+        if (!@chmod($path, $mode)) {
+            // Not the owner (or a read-only mount): the admin has to fix it by
+            // hand, `bb.php doctor` reports it. Stay quiet here to avoid one log
+            // line per request.
+            return false;
+        }
+
+        clearstatcache(true, $path);
+        error_log(sprintf(
+            'AtomicFile: tightened permissions of %s from %04o to %04o',
+            $path,
+            $perms & 0777,
+            $mode
+        ));
+        return true;
+    }
+
     /** Bytes accepted by the filesystem, 0 on failure. */
     public static function putContents(string $path, string $contents): int
     {
