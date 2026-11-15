@@ -141,7 +141,16 @@ class UpdateManager
             return false;
         }
 
-        $tmp = $path . '.tmp-' . bin2hex(random_bytes(6));
+        $tmp = rtrim($dir, '/') . '/.bb-tmp-' . bin2hex(random_bytes(8));
+        // Create the temporary file owner-only BEFORE writing anything: with the
+        // process umask it would exist as 0644 while config.json (database
+        // credentials) is being written into it.
+        if (!@touch($tmp) || !@chmod($tmp, 0600) || !is_file($tmp)) {
+            @unlink($tmp);
+            error_log('UpdateManager: cannot create a protected temporary file in ' . $dir);
+            return false;
+        }
+
         $written = $this->putContents($tmp, $contents);
         if ($written !== strlen($contents)) {
             @unlink($tmp);
@@ -176,6 +185,23 @@ class UpdateManager
             return false;
         }
 
+        // rename() keeps the attributes of the source inode on POSIX, but some
+        // filesystems (emulated ones, network mounts) preserve the destination
+        // mode instead. Verify the result instead of assuming either behaviour.
+        clearstatcache(true, $path);
+        $actual = @fileperms($path);
+        if ($actual === false || ($actual & 0777) !== $mode) {
+            if (!@chmod($path, $mode)) {
+                error_log(sprintf(
+                    'UpdateManager: %s ended with mode %s instead of %04o',
+                    $path,
+                    $actual === false ? 'unknown' : decoct($actual & 0777),
+                    $mode
+                ));
+                return false;
+            }
+        }
+
         return true;
     }
 
@@ -196,18 +222,27 @@ class UpdateManager
      */
     protected function targetMode(string $path): int
     {
+        $sensitive = in_array(basename($path), ['config.json', 'config.php'], true);
+
         if (file_exists($path)) {
             $perms = @fileperms($path);
             if ($perms !== false && ($perms & 0777) !== 0) {
-                return $perms & 0777;
+                $mode = $perms & 0777;
+                if ($sensitive && ($mode & 0077) !== 0) {
+                    // The file holds credentials: never keep a mode that lets
+                    // group or others read it, even if the operator set one.
+                    error_log(sprintf(
+                        'UpdateManager: tightening %s from %04o to 0600',
+                        $path,
+                        $mode
+                    ));
+                    return 0600;
+                }
+                return $mode;
             }
         }
 
-        $basename = basename($path);
-        if (in_array($basename, ['config.json', 'config.php'], true)) {
-            return 0600;
-        }
-        return 0644;
+        return $sensitive ? 0600 : 0644;
     }
 
     private function getSection(string $type, string $name): array
