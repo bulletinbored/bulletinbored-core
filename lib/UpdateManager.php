@@ -142,13 +142,13 @@ class UpdateManager
         }
 
         $tmp = $path . '.tmp-' . bin2hex(random_bytes(6));
-        $written = @file_put_contents($tmp, $contents, LOCK_EX);
-        if ($written === false || $written !== strlen($contents)) {
+        $written = $this->putContents($tmp, $contents);
+        if ($written !== strlen($contents)) {
             @unlink($tmp);
             error_log(sprintf(
-                'UpdateManager: partial write of %s (%s of %d bytes), file left unchanged',
+                'UpdateManager: partial write of %s (%d of %d bytes), file left unchanged',
                 $path,
-                $written === false ? 'none' : (string)$written,
+                $written,
                 strlen($contents)
             ));
             return false;
@@ -160,6 +160,16 @@ class UpdateManager
             return false;
         }
 
+        // The temporary file was created with the process umask, and rename()
+        // keeps the inode of the source: without this step a config.json
+        // restricted to 0600 would come back as 0644 after the update.
+        $mode = $this->targetMode($path);
+        if (!@chmod($tmp, $mode)) {
+            @unlink($tmp);
+            error_log(sprintf('UpdateManager: cannot set mode %04o on %s, file left unchanged', $mode, $path));
+            return false;
+        }
+
         if (!@rename($tmp, $path)) {
             @unlink($tmp);
             error_log('UpdateManager: cannot replace ' . $path);
@@ -167,6 +177,37 @@ class UpdateManager
         }
 
         return true;
+    }
+
+    /**
+     * Bytes accepted by the filesystem, 0 on failure.
+     * Protected so a short write (disk full mid-write) can be tested.
+     */
+    protected function putContents(string $path, string $contents): int
+    {
+        $written = @file_put_contents($path, $contents, LOCK_EX);
+        return $written === false ? 0 : (int)$written;
+    }
+
+    /**
+     * Permission bits to give the replacement file: the ones of the file it
+     * replaces, or a conservative default for a new one. Credentials-bearing
+     * configuration defaults to owner-only.
+     */
+    protected function targetMode(string $path): int
+    {
+        if (file_exists($path)) {
+            $perms = @fileperms($path);
+            if ($perms !== false && ($perms & 0777) !== 0) {
+                return $perms & 0777;
+            }
+        }
+
+        $basename = basename($path);
+        if (in_array($basename, ['config.json', 'config.php'], true)) {
+            return 0600;
+        }
+        return 0644;
     }
 
     private function getSection(string $type, string $name): array

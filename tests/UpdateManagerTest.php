@@ -589,6 +589,80 @@ function test_atomic_metadata_writes(): Test
     return $t;
 }
 
+/**
+ * Simulates a filesystem that accepts only part of the content (disk full).
+ */
+class UmShortWriteManager extends UmExposedWriteManager
+{
+    protected function putContents(string $path, string $contents): int
+    {
+        $partial = substr($contents, 0, 5);
+        @file_put_contents($path, $partial);
+        return strlen($partial);
+    }
+}
+
+function test_atomic_write_keeps_file_permissions(): Test
+{
+    $t = new Test('UpdateManager - atomic write keeps the file permissions');
+
+    $tmp = umTmpDir('permissions');
+    @mkdir($tmp . '/data', 0755, true);
+    $manager = new UmExposedWriteManager($tmp . '/data/updates.json', null, null, null, $tmp);
+
+    try {
+        // An existing file keeps its mode (config.json holds credentials).
+        $config = $tmp . '/data/config.json';
+        file_put_contents($config, '{"version":"0.9.8"}');
+        chmod($config, 0600);
+        clearstatcache(true, $config);
+
+        $t->assertTrue('Write over a restricted file succeeds', $manager->writeAtomically($config, '{"version":"1.0.0"}', true));
+        clearstatcache(true, $config);
+        $t->assertEquals('Mode preserved (0600)', 0600, fileperms($config) & 0777);
+        $t->assertEquals('Content updated', '{"version":"1.0.0"}', file_get_contents($config));
+
+        // A brand-new non-sensitive file gets the default mode.
+        $fresh = $tmp . '/data/updates-new.json';
+        $t->assertTrue('New file written', $manager->writeAtomically($fresh, '{"a":1}', true));
+        clearstatcache(true, $fresh);
+        $t->assertEquals('New file gets 0644', 0644, fileperms($fresh) & 0777);
+
+        // A brand-new configuration file is owner-only (exact name: config.json).
+        @mkdir($tmp . '/fresh', 0755, true);
+        $freshConfig = $tmp . '/fresh/config.json';
+        $t->assertTrue('New config written', $manager->writeAtomically($freshConfig, '{"a":1}', true));
+        clearstatcache(true, $freshConfig);
+        $t->assertEquals('New config gets 0600', 0600, fileperms($freshConfig) & 0777);
+    } finally {
+        umCleanup($tmp);
+    }
+
+    return $t;
+}
+
+function test_atomic_write_rejects_a_short_write(): Test
+{
+    $t = new Test('UpdateManager - a short write leaves the file untouched');
+
+    $tmp = umTmpDir('shortwrite');
+    @mkdir($tmp . '/data', 0755, true);
+    $manager = new UmShortWriteManager($tmp . '/data/updates.json', null, null, null, $tmp);
+
+    try {
+        $file = $tmp . '/data/config.json';
+        file_put_contents($file, '{"version":"0.9.8"}');
+
+        $t->assertFalse('Short write reports failure', $manager->writeAtomically($file, '{"version":"1.0.0"}', true));
+        $t->assertEquals('Original content untouched', '{"version":"0.9.8"}', file_get_contents($file));
+        $t->assertCount('No temporary file left behind', 0, glob($tmp . '/data/*.tmp-*') ?: []);
+    } finally {
+        umCleanup($tmp);
+    }
+
+    return $t;
+}
+
 function test_extension_update_fails_when_manifest_cannot_be_written(): Test
 {
     $t = new Test('UpdateManager - extension update needs the manifest write');
@@ -734,6 +808,8 @@ function test_update_manager_theme_update_rolls_back_on_bad_package(): Test
 }
 
 register_tests(
+    'test_atomic_write_keeps_file_permissions',
+    'test_atomic_write_rejects_a_short_write',
     'test_atomic_metadata_writes',
     'test_extension_update_fails_when_manifest_cannot_be_written',
     'test_zip_slip_traversal_blocked',
