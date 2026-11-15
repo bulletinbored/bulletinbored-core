@@ -106,6 +106,7 @@ function test_release_package_contents(): Test
             'rate limit buckets' => '#^data/ratelimit/#',
             'backups' => '#^data/backups/#',
             'migration lock' => '#^data/\.migration_lock$#',
+            'telemetry runtime state' => '#^data/telemetry\.json$#',
             'editor screenshot' => '#^editor\.png$#',
             'user ini' => '#^\.user\.ini$#',
             'uploaded files' => '#^uploads/(?!\.htaccess)#',

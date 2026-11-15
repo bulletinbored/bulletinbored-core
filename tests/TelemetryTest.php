@@ -241,3 +241,79 @@ register_tests(
     'test_telemetry_persists_missing_install_id',
     'test_telemetry_defaults_on_when_key_missing'
 );
+
+/**
+ * Four processes ask for an install_id at the same time on a config without
+ * one: they must all get the same value (the lock serialises the read-modify-
+ * write of config.json).
+ */
+function test_telemetry_install_id_is_race_free(): Test
+{
+    $t = new Test('Telemetry - concurrent install_id generation');
+
+    if (!function_exists('proc_open')) {
+        $t->assert('Skipped: proc_open not available', true);
+        return $t;
+    }
+
+    $dir = telemetry_tmp_dir();
+    $configPath = $dir . '/config.json';
+    file_put_contents($configPath, json_encode(['telemetry' => true, 'version' => '1.0.0']));
+
+    $script = <<<'PHP'
+<?php
+require $argv[1] . '/lib/AtomicFile.php';
+require $argv[1] . '/lib/Telemetry.php';
+$dir = $argv[2];
+$configPath = $dir . '/config.json';
+$telemetry = new Telemetry($dir, ['telemetry' => true], $configPath);
+echo (string)$telemetry->installId();
+PHP;
+
+    $scriptFile = $dir . '/worker.php';
+    file_put_contents($scriptFile, $script);
+
+    $processes = 4;
+    $procs = [];
+    for ($i = 0; $i < $processes; $i++) {
+        $cmd = escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($scriptFile)
+            . ' ' . escapeshellarg(dirname(__DIR__))
+            . ' ' . escapeshellarg($dir);
+        $proc = @proc_open($cmd, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+        if (is_resource($proc)) {
+            $procs[] = [$proc, $pipes];
+        }
+    }
+
+    $ids = [];
+    foreach ($procs as [$proc, $pipes]) {
+        $out = trim((string)stream_get_contents($pipes[1]));
+        stream_get_contents($pipes[2]);
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+        proc_close($proc);
+        if ($out !== '') {
+            $ids[] = $out;
+        }
+    }
+
+    try {
+        if (count($ids) < $processes) {
+            $t->assert('Skipped: only ' . count($ids) . ' workers answered', true);
+            return $t;
+        }
+
+        $unique = array_values(array_unique($ids));
+        $t->assertCount('Every worker received the same id', 1, $unique);
+
+        $stored = json_decode((string)file_get_contents($configPath), true);
+        $t->assertEquals('config.json holds exactly that id', $unique[0], $stored['install_id'] ?? null);
+        $t->assertTrue('The id is a UUID v4', (bool)preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/', $unique[0]));
+    } finally {
+        telemetry_rm_dir($dir);
+    }
+
+    return $t;
+}
+
+register_tests('test_telemetry_install_id_is_race_free');

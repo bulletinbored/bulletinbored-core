@@ -14,7 +14,13 @@
  * This helper writes to a temporary file in the same directory (so the final
  * rename stays atomic), protects it before a single byte is written, verifies
  * the byte count and the JSON, replaces the target and checks the permissions
- * that ended up on disk. On any failure the previous file is left untouched.
+ * that ended up on disk.
+ *
+ * Every failure before the rename leaves the previous file untouched. The one
+ * case that cannot promise it is the verification after the rename: on a
+ * filesystem that keeps the destination's attributes the content is already
+ * replaced, and if the corrective chmod also fails the file has the new content
+ * with the old mode — the call returns false, so the caller reports the failure.
  */
 final class AtomicFile
 {
