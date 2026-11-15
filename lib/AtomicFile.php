@@ -113,6 +113,10 @@ final class AtomicFile
             return false;
         }
 
+        // stat() results are cached per request and chmod() does not invalidate
+        // them on every PHP version: without this the check would act on a
+        // stale mode (seen on 8.2, not on 8.4).
+        clearstatcache(true, $path);
         $perms = @fileperms($path);
         if ($perms === false) {
             return false;
