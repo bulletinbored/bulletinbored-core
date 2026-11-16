@@ -126,22 +126,6 @@ placeholder such as `changeme123`. After the first login, change it from your pr
 | **LiteSpeed** | `.htaccess` (included) | ✅ Automatic | ✅ Automatic | Apache-compatible |
 | **PHP built-in** | None needed | ✅ Internal | N/A | Development only |
 
-## HTTPS behind a reverse proxy
-
-If you run Nginx or another reverse proxy that terminates SSL in front of PHP-FPM, set this header so bulletinbored detects HTTPS correctly:
-
-```nginx
-proxy_set_header X-Forwarded-Proto $scheme;
-```
-
-Without it, the `force_https` redirect may loop. You can also disable HTTPS forcing in `config.json`:
-
-```json
-{
-    "force_https": false
-}
-```
-
 ## Documentation
 
 Full documentation lives in the separate [`docs`](https://github.com/bulletinbored/docs) repository (published at https://docs.bulletinbored.net):
@@ -202,6 +186,13 @@ Run the full CLI test suite with:
 php tests/run.php
 ```
 
+Run it **from a clean checkout** as well — CI does, and a working copy hides
+untracked state (`plugins/`, `config.json`, `data/*`):
+
+```bash
+mkdir -p /tmp/clean && git archive HEAD | tar -x -C /tmp/clean && cd /tmp/clean && php tests/run.php
+```
+
 Coverage (Xdebug or PCOV required) and a regression floor over `src/` + `lib/`:
 
 ```bash
@@ -222,13 +213,13 @@ Version numbers live in `VERSION` and must match `config-sample.json`
 the repository: the release workflow generates them on the GitHub Release, so
 the tag, `VERSION` and the published notes always refer to the same commit.
 
-Pre-releases use SemVer suffixes: `VERSION` is `1.0.0-rc.1`, the tag is
-`v1.0.0-rc.1`, and the GitHub release is published as a **prerelease** so the
+Pre-releases use SemVer suffixes: `VERSION` is `1.0.0-rc.2`, the tag is
+`v1.0.0-rc.2`, and the GitHub release is published as a **prerelease** so the
 update checker (`/releases/latest`, which skips prereleases) never offers it to
 stable installations. A stable installation that wants prereleases can set
 `allow_prerelease_updates: true`; an installation already running a prerelease
 follows the next ones automatically. `version_compare()` keeps the SemVer
-ordering (`1.0.0-rc.1 < 1.0.0`), while extension requirements (`"core":
+ordering (`1.0.0-rc.2 < 1.0.0`), while extension requirements (`"core":
 ">=1.0.0"`) are matched against the base version so plugins can be tested on a
 release candidate.
 
@@ -269,7 +260,16 @@ Upgrading an existing installation:
 `force_https` (default `true`) redirects plain-HTTP visitors to HTTPS, and the
 `Secure` session cookie is controlled by `cookie_secure`. Both decisions use the
 forwarded headers validated against `trusted_proxies`, so reverse-proxy setups
-work without extra configuration.
+work without extra configuration: behind Nginx or another TLS terminator, forward
+the scheme and make sure the proxy address is listed in `trusted_proxies`.
+
+```nginx
+proxy_set_header X-Forwarded-Proto $scheme;
+```
+
+Without the header the `force_https` redirect may loop on a proxy that terminates
+TLS; `"force_https": false` is the escape hatch (for example while a certificate
+is being issued).
 
 HSTS is sent only when the visitor is actually on HTTPS (directly or through a
 trusted proxy):
@@ -287,6 +287,59 @@ password is only base64-encoded on the wire: bulletinbored logs a warning and
 keeps working, and `mail_require_tls_for_auth: true` makes it refuse instead.
 Server certificates are always verified — a self-signed or expired certificate
 makes the delivery fail rather than sending credentials to an unknown host.
+
+## API scope (1.0)
+
+bulletinbored 1.0 is **HTML-first**. The router can emit JSON (when the request
+path starts with `api/` or the client sends `Accept: application/json`), and some
+handlers return arrays that are serialised automatically, but that is a
+convenience of the front controller, **not a versioned public API**:
+
+- there is no `/api/v1` namespace, no OpenAPI schema and no compatibility
+  promise on the JSON shape;
+- the only endpoint under `api/` is `api/install.php`, an admin-only action
+  guarded by a database-backed administrator check;
+- server-to-server clients should use a plugin that registers its own routes
+  (`$router->api()`), where the route is part of the plugin's contract.
+
+API tokens, scopes and a stable JSON surface are potential 1.x work, not 1.0
+features. If your integration needs one today, implement it as a plugin.
+
+## Session contract
+
+Everything a plugin needs to know about authentication:
+
+- `$_SESSION['user_id']`, `user_role`, `user_status` and `session_version` are set
+  at login. Nothing else in the session is authoritative.
+- `users.session_version` is incremented whenever credentials, role or status
+  change (password reset, role edit, ban, suspend, unban, "log out other
+  devices", admin "disconnect sessions"). Every stored session with an older
+  value is invalidated on its next `is_logged_in()` call.
+- `is_logged_in()` re-reads `session_version` from the database and destroys the
+  session when the row is gone or the version is stale.
+- Code that runs outside `src/bootstrap.php` must not trust `$_SESSION['user_role']`:
+  call `AdminAuth::verifySession($pdo, $_SESSION)` first (or use the router's
+  `admin` middleware). `tests/RouteAuthorizationTest.php` fails the build when a
+  route is registered outside the group it needs.
+
+## Rate limiting
+
+File-based, with no Redis or Memcached: one JSON bucket per action+key under
+`data/ratelimit`, written under `flock()` so concurrent requests cannot exceed
+the limit. Sensitive actions (login, registration, password reset, uploads, admin
+operations) **fail closed** when the bucket cannot be written; everything else
+stays available so a storage hiccup does not take the forum down.
+
+| Option | Default | Meaning |
+|---|---|---|
+| `rate_limit_multiplier` | `1` | Scales every limit globally: `0.5` is stricter, `2` more permissive. Clamped to 0.1–10 and deliberately global — a per-action setting is an easy way to lock yourself out of the admin panel. |
+
+Inspect the buckets with `php bb.php ratelimit:stats` and remove the expired ones
+with `php bb.php ratelimit:gc` (they are also collected opportunistically).
+
+SQLite installations rely on PDO's 60-second busy timeout, so a second writer
+waits instead of failing with "database is locked"; `sqlite_busy_timeout`
+(milliseconds) overrides it for hosts that need something different.
 
 ## Security model & known risks
 

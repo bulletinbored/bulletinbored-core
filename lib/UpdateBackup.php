@@ -1,7 +1,29 @@
 <?php
 
+/**
+ * UpdateBackup — copy the installation for a core update, and restore it when
+ * the update fails.
+ *
+ * Reliability rules this class follows, because these files are the only way
+ * back from a broken update:
+ *
+ *   - every filesystem operation is checked; a failed copy() returns false and
+ *     does NOT throw on its own (a full disk produces a warning and false), so
+ *     the result is turned into an exception here;
+ *   - hidden files are part of the package (.htaccess is shipped and would
+ *     otherwise be overwritten without a copy to restore);
+ *   - a backup is only valid when it completed: a manifest written next to the
+ *     directory records the entries it contains, and a restore refuses to prune
+ *     anything without it.
+ */
 class UpdateBackup
 {
+    /** Suffix of the manifest that marks a complete backup. */
+    public const MANIFEST_SUFFIX = '.json';
+
+    /** Top-level paths that belong to the installation, never to a core update. */
+    private const PRESERVED = ['data', 'plugins', 'themes', 'uploads', 'vendor', 'config.json', 'config.php'];
+
     private string $backupDir;
     private string $rootDir;
     private int $maxBackups;
@@ -13,30 +35,78 @@ class UpdateBackup
         $this->maxBackups = $maxBackups;
     }
 
+    /**
+     * Copy the installation root, excluding the user-owned directories.
+     *
+     * Returns null when the copy could not be completed: the partial directory
+     * is removed, so a half-written backup is never used to restore anything.
+     */
     public function backupCore(): ?string
     {
-        if (!is_dir($this->backupDir)) {
-            @mkdir($this->backupDir, 0755, true);
-        }
-
-        $backupPath = $this->backupDir . '/core_' . date('Ymd_His') . '_' . uniqid();
-        if (!mkdir($backupPath, 0755, true)) {
+        if (!is_dir($this->backupDir) && !@mkdir($this->backupDir, 0755, true) && !is_dir($this->backupDir)) {
+            error_log('UpdateBackup: cannot create ' . $this->backupDir);
             return null;
         }
 
-        $exclude = ['data', 'plugins', 'themes', 'uploads', 'vendor'];
-        $items = glob($this->rootDir . '/*');
-        foreach ($items as $item) {
-            $basename = basename($item);
-            if (in_array($basename, $exclude, true)) {
-                continue;
+        $backupPath = $this->backupDir . '/core_' . date('Ymd_His') . '_' . uniqid();
+        if (!@mkdir($backupPath, 0755, true)) {
+            error_log('UpdateBackup: cannot create ' . $backupPath);
+            return null;
+        }
+
+        $entries = [];
+        try {
+            foreach ($this->listEntries($this->rootDir) as $entry) {
+                $basename = basename($entry);
+                if (in_array($basename, self::PRESERVED, true)) {
+                    continue;
+                }
+                if (is_link($entry)) {
+                    // Never follow a link: it may point at user data or outside
+                    // the installation. The entry is recorded so a restore does
+                    // not prune it.
+                    error_log('UpdateBackup: skipping symlink ' . $basename);
+                    $entries[] = $basename;
+                    continue;
+                }
+                $this->copyRecursive($entry, $backupPath . '/' . $basename);
+                $entries[] = $basename;
             }
-            $dest = $backupPath . '/' . $basename;
-            if (is_dir($item)) {
-                $this->copyRecursive($item, $dest);
-            } else {
-                copy($item, $dest);
+        } catch (\Throwable $e) {
+            // A partial backup is worthless and dangerous: remove it. Without a
+            // manifest it can never be used, but leftovers are still reported so
+            // they can be cleaned up by hand.
+            if (!$this->deleteRecursive($backupPath)) {
+                error_log('UpdateBackup: could not remove the partial backup at ' . $backupPath);
             }
+            @unlink($this->manifestPath($backupPath));
+            error_log('UpdateBackup: backup failed, aborted: ' . $e->getMessage());
+            return null;
+        }
+
+        $manifest = [
+            'complete' => true,
+            'created_at' => date('c'),
+            'version' => trim((string)@file_get_contents($this->rootDir . '/VERSION')),
+            'entries' => $entries,
+        ];
+        $json = json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+        // file_put_contents() can write fewer bytes than requested (a disk that
+        // fills up mid-write) and still return a positive number: only an exact
+        // match proves the manifest is readable, and the manifest is what
+        // authorises the cleanup during a rollback.
+        $written = is_string($json) ? $this->writeFile($this->manifestPath($backupPath), $json) : 0;
+        if (!is_string($json) || $written !== strlen($json)) {
+            if (!$this->deleteRecursive($backupPath)) {
+                error_log('UpdateBackup: could not remove the unverified backup at ' . $backupPath);
+            }
+            @unlink($this->manifestPath($backupPath));
+            error_log(sprintf(
+                'UpdateBackup: cannot write the backup manifest (%d of %d bytes), backup discarded',
+                $written,
+                is_string($json) ? strlen($json) : 0
+            ));
+            return null;
         }
 
         $this->pruneOldBackups();
@@ -44,27 +114,79 @@ class UpdateBackup
         return $backupPath;
     }
 
+    /**
+     * Restore the installation root from a core backup.
+     *
+     * Beyond copying the backup back, this removes the top-level entries the
+     * interrupted update had already created (a failed copy can leave a new root
+     * file behind). The pruning happens only when the backup carries a valid
+     * manifest: without it nothing is deleted, so an incomplete backup can never
+     * remove files that simply were not copied.
+     */
     public function restoreCoreBackup(string $backupPath): bool
     {
         if (!is_dir($backupPath)) {
             return false;
         }
 
-        $items = glob($backupPath . '/*');
-        foreach ($items as $item) {
-            $basename = basename($item);
-            $dest = $this->rootDir . '/' . $basename;
-            if (is_dir($item)) {
-                if (is_dir($dest)) {
-                    $this->deleteRecursive($dest);
-                }
-                $this->copyRecursive($item, $dest);
-            } else {
-                copy($item, $dest);
-            }
-        }
+        // Everything below can fail (unreadable backup, a directory that cannot
+        // be replaced, a full disk). A restore either brings the installation
+        // back exactly, or reports failure: it never throws out of here, or the
+        // caller would lose the original error.
+        try {
+            $manifest = $this->readManifest($backupPath);
 
-        return true;
+            foreach ($this->listEntries($backupPath) as $item) {
+                $basename = basename($item);
+                $dest = $this->rootDir . '/' . $basename;
+
+                if (is_link($item)) {
+                    // Recorded in the manifest, never followed: leave the
+                    // existing entry in place so it is not pruned.
+                    continue;
+                }
+                if (is_dir($item)) {
+                    if (is_dir($dest) && !$this->deleteRecursive($dest)) {
+                        // Copying over a half-deleted directory could leave files
+                        // from the failed update inside it.
+                        error_log('UpdateBackup: restore aborted, cannot clear ' . $dest);
+                        return false;
+                    }
+                    $this->copyRecursive($item, $dest);
+                } else {
+                    $this->copyRecursive($item, $dest);
+                }
+            }
+
+            if ($manifest === null) {
+                // No verified manifest: copy back only, never prune.
+                error_log('UpdateBackup: backup has no valid manifest, skipping cleanup of extra files');
+                return true;
+            }
+
+            $restored = array_flip($manifest['entries']);
+            $cleanupOk = true;
+            foreach ($this->listEntries($this->rootDir) as $entry) {
+                $basename = basename($entry);
+                if (isset($restored[$basename]) || in_array($basename, self::PRESERVED, true)) {
+                    continue;
+                }
+                $removed = (is_dir($entry) && !is_link($entry))
+                    ? $this->deleteRecursive($entry)
+                    : @unlink($entry);
+                if (!$removed) {
+                    // Residues of the failed update are still on disk: the
+                    // installation is not back to its previous state.
+                    $cleanupOk = false;
+                    error_log('UpdateBackup: could not remove ' . $entry . ' created by the failed update');
+                }
+            }
+
+            return $cleanupOk;
+        } catch (\Throwable $e) {
+            error_log('UpdateBackup: restore aborted: ' . $e->getMessage());
+            return false;
+        }
     }
 
     public function listBackups(): array
@@ -74,12 +196,14 @@ class UpdateBackup
         }
 
         $backups = [];
-        foreach (glob($this->backupDir . '/core_*', GLOB_ONLYDIR) as $dir) {
+        foreach (glob($this->backupDir . '/core_*', GLOB_ONLYDIR) ?: [] as $dir) {
+            $manifest = $this->readManifest($dir);
             $backups[] = [
                 'path' => $dir,
                 'name' => basename($dir),
-                'date' => date('Y-m-d H:i:s', filemtime($dir)),
+                'date' => date('Y-m-d H:i:s', (int)@filemtime($dir)),
                 'size' => $this->dirSize($dir),
+                'complete' => $manifest !== null,
             ];
         }
 
@@ -87,73 +211,187 @@ class UpdateBackup
         return $backups;
     }
 
-    private function pruneOldBackups(): void
-    {
-        $backups = glob($this->backupDir . '/core_*', GLOB_ONLYDIR);
-        if (count($backups) > $this->maxBackups) {
-            usort($backups, fn($a, $b) => filemtime($a) <=> filemtime($b));
-            $toDelete = array_slice($backups, 0, count($backups) - $this->maxBackups);
-            foreach ($toDelete as $old) {
-                $this->deleteRecursive($old);
-            }
-        }
-    }
-
+    /**
+     * Copy a file or a directory tree. Throws on the first failure: a silent
+     * partial copy is what turns a full disk into a half-updated installation.
+     */
     public function copyRecursive(string $src, string $dst): void
     {
+        if (is_link($src)) {
+            throw new RuntimeException('refusing to copy symlink ' . $src);
+        }
+
         if (is_dir($src)) {
             if (!is_dir($dst)) {
-                if (file_exists($dst)) {
-                    @unlink($dst);
+                if (file_exists($dst) && !@unlink($dst)) {
+                    throw new RuntimeException('cannot replace ' . $dst);
                 }
-                mkdir($dst, 0755, true);
-            }
-            $items = glob($src . '/*');
-            foreach ($items as $item) {
-                $basename = basename($item);
-                $target = $dst . '/' . $basename;
-                if (is_dir($item)) {
-                    $this->copyRecursive($item, $target);
-                } elseif (is_file($item)) {
-                    copy($item, $target);
+                if (!@mkdir($dst, 0755, true) && !is_dir($dst)) {
+                    throw new RuntimeException('cannot create directory ' . $dst);
                 }
             }
-        } elseif (is_file($src)) {
-            if (is_dir($dst)) {
-                $this->deleteRecursive($dst);
+            foreach ($this->listEntries($src) as $item) {
+                $this->copyRecursive($item, $dst . '/' . basename($item));
             }
-            copy($src, $dst);
+            return;
         }
+
+        if (is_file($src)) {
+            if (is_dir($dst) && !$this->deleteRecursive($dst)) {
+                // Copying onto a directory that is still there would fail with
+                // an obscure error: report the real cause.
+                throw new RuntimeException('cannot replace directory ' . $dst . ' with a file');
+            }
+            if (!@copy($src, $dst)) {
+                throw new RuntimeException('cannot copy ' . $src . ' to ' . $dst);
+            }
+            return;
+        }
+
+        throw new RuntimeException('unsupported source ' . $src);
     }
 
+    /**
+     * Recursively delete a path. Returns false when anything could not be
+     * removed, and logs what was left behind: a cleanup that silently leaves
+     * files behind is worse than a noisy one.
+     */
     public function deleteRecursive(string $dir): bool
     {
-        if (!is_dir($dir)) {
+        if (!is_dir($dir) || is_link($dir)) {
             return @unlink($dir);
         }
+
+        // scandir(), not glob(): hidden entries must be removed too.
         $items = @scandir($dir);
         if ($items === false) {
+            error_log('UpdateBackup: cannot list ' . $dir . ' for deletion');
             return false;
         }
+
+        $ok = true;
         foreach ($items as $item) {
             if ($item === '.' || $item === '..') {
                 continue;
             }
             $path = $dir . '/' . $item;
-            if (is_dir($path)) {
-                $this->deleteRecursive($path);
-            } else {
-                @unlink($path);
+            $removed = (is_dir($path) && !is_link($path))
+                ? $this->deleteRecursive($path)
+                : @unlink($path);
+            if (!$removed) {
+                $ok = false;
+                error_log('UpdateBackup: could not delete ' . $path);
             }
         }
-        return @rmdir($dir);
+
+        if (!@rmdir($dir)) {
+            $ok = false;
+        }
+        return $ok;
+    }
+
+    /**
+     * All entries of a directory, hidden ones included.
+     *
+     * Throws when the directory cannot be read: returning an empty list would
+     * make an unreadable directory indistinguishable from an empty one, and the
+     * backup would be marked complete while silently missing files.
+     *
+     * Public so the contract can be unit-tested (permission bits do not stop a
+     * root user, so the failure is triggered with a non-directory path).
+     *
+     * @return string[]
+     * @throws RuntimeException
+     */
+    public function listEntries(string $dir): array
+    {
+        if (!is_dir($dir)) {
+            throw new RuntimeException('not a directory: ' . $dir);
+        }
+
+        $items = @scandir($dir);
+        if ($items === false) {
+            // Clear the cached stat/read state: a retry after a mount or
+            // permission fix must not see the stale failure.
+            clearstatcache(true, $dir);
+            throw new RuntimeException('cannot read directory: ' . $dir);
+        }
+
+        $entries = [];
+        foreach ($items as $item) {
+            if ($item === '.' || $item === '..') {
+                continue;
+            }
+            $entries[] = rtrim($dir, '/') . '/' . $item;
+        }
+        return $entries;
+    }
+
+    /**
+     * Write a file and report how many bytes reached the disk.
+     *
+     * Protected so the partial-write path (ENOSPC in the middle of the write)
+     * can be tested by overriding it: file_put_contents() cannot be made to
+     * write half a string on demand.
+     *
+     * @return int bytes written, 0 on failure
+     */
+    protected function writeFile(string $path, string $content): int
+    {
+        $written = @file_put_contents($path, $content, LOCK_EX);
+        return $written === false ? 0 : (int)$written;
+    }
+
+    private function manifestPath(string $backupPath): string
+    {
+        return rtrim($backupPath, '/') . self::MANIFEST_SUFFIX;
+    }
+
+    /**
+     * @return array{complete: bool, entries: string[], created_at?: string}|null
+     */
+    private function readManifest(string $backupPath): ?array
+    {
+        $path = $this->manifestPath($backupPath);
+        if (!is_file($path)) {
+            return null;
+        }
+        $data = json_decode((string)@file_get_contents($path), true);
+        if (!is_array($data) || empty($data['complete']) || !isset($data['entries']) || !is_array($data['entries'])) {
+            return null;
+        }
+        $data['entries'] = array_values(array_map('strval', $data['entries']));
+        return $data;
+    }
+
+    private function pruneOldBackups(): void
+    {
+        $backups = glob($this->backupDir . '/core_*', GLOB_ONLYDIR) ?: [];
+        if (count($backups) > $this->maxBackups) {
+            usort($backups, fn($a, $b) => (int)@filemtime($a) <=> (int)@filemtime($b));
+            $toDelete = array_slice($backups, 0, count($backups) - $this->maxBackups);
+            foreach ($toDelete as $old) {
+                if (!$this->deleteRecursive($old)) {
+                    // Not fatal: the backup simply stays until it can be
+                    // removed. Report it so the disk does not fill up silently.
+                    error_log('UpdateBackup: could not prune old backup ' . $old);
+                }
+                @unlink($this->manifestPath($old));
+            }
+        }
     }
 
     private function dirSize(string $dir): int
     {
         $size = 0;
-        foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($dir, \RecursiveDirectoryIterator::SKIP_DOTS)) as $file) {
-            $size += $file->getSize();
+        if (!is_dir($dir)) {
+            return 0;
+        }
+        $it = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS)
+        );
+        foreach ($it as $file) {
+            $size += (int)$file->getSize();
         }
         return $size;
     }

@@ -12,6 +12,8 @@
  * network call is ever made. Every failure is swallowed: telemetry must never
  * break or noticeably slow down the forum.
  */
+require_once __DIR__ . '/AtomicFile.php';
+
 class Telemetry
 {
     /** Minimum seconds between successful pings. */
@@ -59,6 +61,21 @@ class Telemetry
         );
     }
 
+    /**
+     * Permission bits for config.json: keep the current ones, but never let
+     * group or others read a file that holds credentials.
+     */
+    private function configFileMode(): int
+    {
+        if ($this->configPath !== null && is_file($this->configPath)) {
+            $perms = @fileperms($this->configPath);
+            if ($perms !== false && ($perms & 0777) !== 0 && ($perms & 0077) === 0) {
+                return $perms & 0777;
+            }
+        }
+        return 0600;
+    }
+
     public function isEnabled(): bool
     {
         // Opt-out: telemetry is on unless explicitly disabled. Defaulting to
@@ -91,24 +108,46 @@ class Telemetry
             return null;
         }
 
-        $id = self::generateInstallId();
-        $raw = @file_get_contents($this->configPath);
-        $config = is_string($raw) ? json_decode($raw, true) : null;
-        if (!is_array($config)) {
-            return null;
-        }
-        $config['install_id'] = $id;
-        $written = @file_put_contents(
-            $this->configPath,
-            json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE),
-            LOCK_EX
-        );
-        if ($written === false) {
-            return null;
+        // Read-modify-write of config.json: two first requests at the same time
+        // would otherwise generate two ids and overwrite each other. Serialise,
+        // then re-read inside the lock: whoever arrives second adopts the id the
+        // first one already wrote.
+        $lock = @fopen($this->dataDir . '/.install-id.lock', 'c');
+        if ($lock !== false) {
+            @flock($lock, LOCK_EX);
         }
 
-        $this->config['install_id'] = $id;
-        return $id;
+        try {
+            $raw = @file_get_contents($this->configPath);
+            $config = is_string($raw) ? json_decode($raw, true) : null;
+            if (!is_array($config)) {
+                return null;
+            }
+
+            $existing = (string)($config['install_id'] ?? '');
+            if ($existing !== '') {
+                $this->config['install_id'] = $existing;
+                return $existing;
+            }
+
+            $id = self::generateInstallId();
+            $config['install_id'] = $id;
+            $json = json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+            // The same guarantees as every other configuration write: no
+            // truncated file and no widening of the permissions of a
+            // credentials file.
+            if (!is_string($json) || !AtomicFile::write($this->configPath, $json, $this->configFileMode(), true)) {
+                return null;
+            }
+
+            $this->config['install_id'] = $id;
+            return $id;
+        } finally {
+            if ($lock !== false) {
+                @flock($lock, LOCK_UN);
+                @fclose($lock);
+            }
+        }
     }
 
     /**

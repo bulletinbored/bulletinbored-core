@@ -10,6 +10,7 @@ data/ratelimit/
 data/sessions/
 data/logs/
 data/.migration_lock
+data/telemetry.json
 data/backups/
 .user.ini
 

@@ -83,7 +83,14 @@ if (is_logged_in()) {
         exit;
     }
     if ($row['status'] === 'suspended' && (int)($row['suspension_time'] ?? 0) > 0 && time() >= (int)$row['suspension_time']) {
-        $pdo->prepare("UPDATE users SET status = 'active', suspension_time = 0 WHERE id = ?")->execute([$userId]);
+        // Expired suspension: reactivate and invalidate the older sessions of
+        // this account (a status change always bumps session_version). The
+        // current session is refreshed immediately so this request is kept.
+        $pdo->prepare("UPDATE users SET status = 'active', suspension_time = 0, session_version = COALESCE(session_version, 0) + 1 WHERE id = ?")
+            ->execute([$userId]);
+        $versionStmt = $pdo->prepare("SELECT session_version FROM users WHERE id = ?");
+        $versionStmt->execute([$userId]);
+        $_SESSION['session_version'] = (int)$versionStmt->fetchColumn();
         $_SESSION['user_status'] = 'active';
         $_SESSION['user_suspension_time'] = 0;
     }
@@ -153,6 +160,7 @@ $router->middleware('auth')->group(function($router) {
     $router->post('/unwatch', fn() => handle_unwatch());
     $router->post('/upload-image', fn() => handle_upload_image());
     $router->post('/logout', fn() => handle_logout());
+    $router->post('/logout-others', fn() => handle_logout_others_post());
     $router->get('/edit-profile', fn() => handle_edit_profile('GET'));
     $router->post('/edit-profile', fn() => handle_edit_profile('POST'));
     $router->post('/remove-avatar', fn() => handle_remove_avatar('POST'));
@@ -199,6 +207,7 @@ $router->middleware('admin')->group(function($router) {
     $router->post('/admin/ban-user', fn() => handle_ban_user_post());
     $router->post('/admin/unban-user', fn() => handle_unban_user_post());
     $router->post('/admin/suspend-user', fn() => handle_suspend_user_post());
+    $router->post('/admin/disconnect-user', fn() => handle_admin_disconnect_user_post());
 });
 
 // --- Permission-based routes (moderators + admins) ---

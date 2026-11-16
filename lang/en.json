@@ -421,7 +421,6 @@
     "theme_verify_files_hint": "Check that installed files match the manifest; skip to disable",
     "json_translation_file": "JSON Translation File",
     "file_must_be_json_array": "File must be a JSON array of \"key\": \"translation\" strings.",
-
     "site_logo": "Site Logo",
     "site_logo_hint": "Upload or select an image to use as the site logo. Recommended: PNG or SVG, max 500px wide.",
     "image_formats_hint": "Recommended formats: PNG, SVG, ICO. Max 2MB.",
@@ -432,15 +431,12 @@
     "no_logo_set": "No logo set",
     "remove_logo": "Remove Logo",
     "logo_removed": "Logo removed successfully.",
-
     "favicon": "Favicon",
-    "favicon_hint": "Upload or select a favicon. Recommended: 32x32 or 16x16 PNG, ICO, or SVG.",
     "upload_favicon": "Upload Favicon",
     "current_favicon": "Current Favicon",
     "no_favicon_set": "Using default favicon",
     "remove_favicon": "Remove Favicon",
     "favicon_removed": "Favicon removed successfully.",
-
     "smtp_settings": "SMTP Settings",
     "smtp_configuration": "SMTP Configuration",
     "smtp_host": "SMTP Host",
@@ -479,5 +475,10 @@
     "error_occurred": "An error occurred",
     "upload_new_image": "Upload New Image",
     "image_library": "Image Library",
-    "back_to_settings": "Back to Settings"
+    "back_to_settings": "Back to Settings",
+    "logout_others": "Log out other devices",
+    "logout_others_hint": "Signs you out everywhere except on this device.",
+    "disconnect_user": "Disconnect sessions",
+    "disconnect_confirm": "Sign this user out of every device?",
+    "disconnected": "Sessions invalidated"
 }

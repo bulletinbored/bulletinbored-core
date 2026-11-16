@@ -144,6 +144,10 @@ function url($action, $params = [], $absolute = false) {
             return $base . '/admin/ban-user' . (!empty($query) ? '?' . http_build_query($query) : '');
         case 'unban_user':
             return $base . '/admin/unban-user' . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'disconnect_user':
+            return $base . '/admin/disconnect-user' . (!empty($query) ? '?' . http_build_query($query) : '');
+        case 'logout_others':
+            return $base . '/logout-others' . (!empty($query) ? '?' . http_build_query($query) : '');
         case 'download':
             $id = (int)($params['id'] ?? 0);
             unset($query['id']);

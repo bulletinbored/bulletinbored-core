@@ -57,7 +57,6 @@ const RELEASE_EXTRA_FILES = [
     'data/.htaccess',
     'data/catalog.json',
     'data/lang-meta.json',
-    'data/telemetry.json',
     'data/themes.json',
     'lang/en.json',
     'uploads/.htaccess',
@@ -81,6 +80,9 @@ const RELEASE_FORBIDDEN_PATTERNS = [
     '#^data/ratelimit/#',
     '#^data/backups/#',
     '#^data/\.migration_lock$#',
+    // Runtime state, not configuration: shipping it would make a fresh install
+    // skip its first heartbeat for 24 hours.
+    '#^data/telemetry\.json$#',
     '#^data/update-cache\.json$#',
     '#^uploads/(?!\.htaccess)#',
     '#\.(zip|sha256)$#',

@@ -24,6 +24,15 @@ foreach (['data', 'plugins', 'uploads', 'uploads/avatars', 'uploads/private'] as
 require_once __DIR__ . '/Helpers/Upload.php';
 ensure_private_uploads_dir();
 
+// config.json holds the database credentials: an installer (or a restore from a
+// backup) can leave it readable by group/others. Tighten it once here instead of
+// asking the administrator to run chmod on a host without SSH. Best effort: when
+// the file is not owned by the web server user the chmod fails and
+// `php bb.php doctor` tells the admin.
+require_once __DIR__ . '/../lib/AtomicFile.php';
+AtomicFile::hardenMode(__DIR__ . '/../config.json');
+AtomicFile::hardenMode(__DIR__ . '/../config.php');
+
 // db_path only exists for SQLite installations: reading it unconditionally
 // raised "Undefined array key" warnings on every MySQL request.
 $dbPath = $config['db_path'] ?? '';
@@ -64,7 +73,8 @@ if ($dbDriver === 'mysql') {
     $isNewDb = !file_exists($dbPath);
     $pdo = new PDO('sqlite:' . $dbPath);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    $pdo->exec("PRAGMA foreign_keys = ON");
+    // foreign_keys + busy_timeout (concurrent writers wait instead of failing).
+    BbPdo::configureSqlite($pdo, $config);
 }
 
 App::getInstance()->pdo = $pdo;
@@ -83,8 +93,11 @@ if (!$db->table('users')->where('role', 'admin')->exists()) {
         $adminPassword = bin2hex(random_bytes(12));
         error_log('bulletinbored: No admin user exists and no admin_pass in config. Generated temporary password: ' . $adminPassword . ' — CHANGE THIS IMMEDIATELY.');
     }
+    // A hand-written config.json may omit admin_user: falling back to "admin"
+    // beats a NOT NULL violation and a bare 500 on the first request.
+    $adminUser = trim((string)($config['admin_user'] ?? '')) ?: 'admin';
     $db->table('users')->insert([
-        'username' => $config['admin_user'],
+        'username' => $adminUser,
         'password' => password_hash($adminPassword, PASSWORD_DEFAULT),
         'role' => 'admin',
     ]);

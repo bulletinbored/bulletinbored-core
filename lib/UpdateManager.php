@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/Version.php';
+require_once __DIR__ . '/AtomicFile.php';
 require_once __DIR__ . '/UpdateFetcher.php';
 require_once __DIR__ . '/UpdateBackup.php';
 require_once __DIR__ . '/PackageInstaller.php';
@@ -22,7 +23,8 @@ class UpdateManager
         ?string $githubToken = null,
         ?string $updateMirror = null,
         ?string $rootDir = null,
-        ?UpdateFetcher $fetcher = null
+        ?UpdateFetcher $fetcher = null,
+        ?UpdateBackup $backup = null
     ) {
         $this->manifestPath = $manifestPath;
         $this->updateServer = $updateServer;
@@ -32,7 +34,9 @@ class UpdateManager
 
         $dataDir = dirname($manifestPath);
         $this->fetcher = $fetcher ?? new UpdateFetcher($dataDir, $updateServer, $githubToken, $updateMirror);
-        $this->backup = new UpdateBackup($dataDir, $this->rootDir);
+        // Injectable so the failure paths (disk full, permission denied) can be
+        // exercised without filling a filesystem.
+        $this->backup = $backup ?? new UpdateBackup($dataDir, $this->rootDir);
 
         // Prereleases are opt-in: a stable installation must never be offered
         // 1.0.0-rc.1, while an installation already running a prerelease may
@@ -115,12 +119,71 @@ class UpdateManager
             error_log('UpdateManager: cannot encode the update manifest');
             return false;
         }
-        $written = @file_put_contents($this->manifestPath, $json);
-        if ($written === false) {
-            error_log('UpdateManager: cannot write the update manifest ' . $this->manifestPath);
-            return false;
+        return $this->writeFileAtomically($this->manifestPath, $json, true);
+    }
+
+    /**
+     * Write a file so that a partial or failed write can never be observed.
+     *
+     * file_put_contents() returns the number of bytes written and can stop at a
+     * positive number smaller than the content (a disk that fills up mid-write),
+     * which a `=== false` check does not catch. The content goes to a temporary
+     * file in the same directory, the exact byte count and (optionally) the JSON
+     * validity are verified, and only then is the original replaced with
+     * rename(). A failure leaves the previous file untouched.
+     *
+     * Protected so the partial-write path can be tested by overriding it.
+     */
+    protected function writeFileAtomically(string $path, string $contents, bool $mustBeJson = false): bool
+    {
+        // One implementation for every metadata write of the project: see
+        // lib/AtomicFile.php. putContents() stays a seam for the tests.
+        return AtomicFile::write(
+            $path,
+            $contents,
+            $this->targetMode($path),
+            $mustBeJson,
+            fn(string $tmp, string $data): int => $this->putContents($tmp, $data)
+        );
+    }
+
+    /**
+     * Bytes accepted by the filesystem, 0 on failure.
+     * Protected so a short write (disk full mid-write) can be tested.
+     */
+    protected function putContents(string $path, string $contents): int
+    {
+        return AtomicFile::putContents($path, $contents);
+    }
+
+    /**
+     * Permission bits to give the replacement file: the ones of the file it
+     * replaces, or a conservative default for a new one. Credentials-bearing
+     * configuration defaults to owner-only.
+     */
+    protected function targetMode(string $path): int
+    {
+        $sensitive = in_array(basename($path), ['config.json', 'config.php'], true);
+
+        if (file_exists($path)) {
+            $perms = @fileperms($path);
+            if ($perms !== false && ($perms & 0777) !== 0) {
+                $mode = $perms & 0777;
+                if ($sensitive && ($mode & 0077) !== 0) {
+                    // The file holds credentials: never keep a mode that lets
+                    // group or others read it, even if the operator set one.
+                    error_log(sprintf(
+                        'UpdateManager: tightening %s from %04o to 0600',
+                        $path,
+                        $mode
+                    ));
+                    return 0600;
+                }
+                return $mode;
+            }
         }
-        return true;
+
+        return $sensitive ? 0600 : 0644;
     }
 
     private function getSection(string $type, string $name): array
@@ -337,8 +400,13 @@ class UpdateManager
         }
 
         $version = $result['manifest']['version'] ?? '1.0.0';
-        $this->setVersion($group, $name, $version);
         $this->fetcher->clearCache();
+        if (!$this->setVersion($group, $name, $version)) {
+            // The files are installed but the recorded version is stale: report
+            // the update as failed instead of claiming success.
+            error_log('BB EXTENSION UPDATE FAIL (' . $type . ' ' . $name . '): cannot write the update manifest');
+            return false;
+        }
         return true;
     }
 
@@ -547,14 +615,28 @@ class UpdateManager
         try {
             $this->backup->copyRecursive($sourceDir, $root);
         } catch (\Throwable $e) {
-            $this->backup->restoreCoreBackup($backupPath);
+            // The files may be half copied (full disk, permissions): put the
+            // previous installation back before reporting the failure.
+            if (!$this->backup->restoreCoreBackup($backupPath)) {
+                error_log('BB CORE FAIL: rollback could not restore the backup at ' . $backupPath);
+            }
             $this->backup->deleteRecursive($tmpExtract);
             error_log('BB CORE FAIL copy error: ' . $e->getMessage());
             return false;
         }
         $this->backup->deleteRecursive($tmpExtract);
 
-        $this->flattenNestedCoreDir($root);
+        try {
+            $this->flattenNestedCoreDir($root);
+        } catch (\Throwable $e) {
+            // Moving the nested package into place is still part of the file
+            // installation: undo it exactly like a failed copy.
+            if (!$this->backup->restoreCoreBackup($backupPath)) {
+                error_log('BB CORE FAIL: rollback could not restore the backup at ' . $backupPath);
+            }
+            error_log('BB CORE FAIL while flattening the package: ' . $e->getMessage());
+            return false;
+        }
         error_log('BB CORE extracted');
 
         return $this->finalizeCoreUpdate($root, $version);
@@ -585,16 +667,21 @@ class UpdateManager
     private function flattenNestedCoreDir(string $root): void
     {
         foreach (glob($root . '/bulletinbored-core-*', GLOB_ONLYDIR) ?: [] as $nested) {
-            foreach (glob($nested . '/*') ?: [] as $item) {
+            // listEntries(), not glob(): glob('*') skips dotfiles, so a nested
+            // package would lose .htaccess while the wrapper directory (and
+            // whatever it still contains) was deleted.
+            foreach ($this->backup->listEntries($nested) as $item) {
                 $base = basename($item);
                 $dest = $root . '/' . $base;
-                if (is_dir($item)) {
+                if (is_dir($item) && !is_link($item)) {
                     $this->backup->copyRecursive($item, $dest);
                 } elseif (is_file($item)) {
                     if (is_dir($dest)) {
                         $this->backup->deleteRecursive($dest);
                     }
-                    copy($item, $dest);
+                    // copyRecursive() checks the result and throws; a bare
+                    // copy() would fail silently on a full disk.
+                    $this->backup->copyRecursive($item, $dest);
                 }
             }
             $this->backup->deleteRecursive($nested);
@@ -631,10 +718,8 @@ class UpdateManager
             }
 
             $versionFile = rtrim($root, '/') . '/VERSION';
-            if (is_file($versionFile)) {
-                if (@file_put_contents($versionFile, $normalized) === false) {
-                    $failures[] = 'VERSION';
-                }
+            if (is_file($versionFile) && !$this->writeFileAtomically($versionFile, $normalized)) {
+                $failures[] = 'VERSION';
             }
 
             if (!$this->updateVersionInConfig($root, $normalized)) {
@@ -677,11 +762,11 @@ class UpdateManager
             }
             $config['version'] = $version;
             $json = json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-            if ($json === false || @file_put_contents($configJsonPath, $json) === false) {
-                error_log('UpdateManager: cannot write config.json, version not updated');
+            if (!is_string($json)) {
+                error_log('UpdateManager: cannot encode config.json, version not updated');
                 return false;
             }
-            return true;
+            return $this->writeFileAtomically($configJsonPath, $json, true);
         }
 
         if (file_exists($legacyConfigPath)) {
@@ -701,11 +786,7 @@ class UpdateManager
             if (!is_string($updated)) {
                 return false;
             }
-            if (@file_put_contents($legacyConfigPath, $updated) === false) {
-                error_log('UpdateManager: cannot write config.php, version not updated');
-                return false;
-            }
-            return true;
+            return $this->writeFileAtomically($legacyConfigPath, $updated);
         }
 
         // No configuration file at all: there is no version to update, but that

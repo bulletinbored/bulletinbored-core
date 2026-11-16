@@ -18,6 +18,28 @@ class BbPdo extends PDO
         $this->mysql = stripos($dsn, 'mysql:') === 0;
     }
 
+    /**
+     * Apply the SQLite pragmas the application relies on.
+     *
+     * foreign_keys is mandatory (referential integrity). busy_timeout is left
+     * at the driver default (60 s with pdo_sqlite) unless the installation asks
+     * for something else: lowering it makes concurrent writers fail earlier
+     * with "database is locked" instead of waiting, so it is not a default.
+     *
+     * @param array $config Optional "sqlite_busy_timeout" in milliseconds.
+     */
+    public static function configureSqlite(PDO $pdo, array $config = []): void
+    {
+        $pdo->exec('PRAGMA foreign_keys = ON');
+
+        if (array_key_exists('sqlite_busy_timeout', $config)) {
+            $busyTimeout = (int)$config['sqlite_busy_timeout'];
+            if ($busyTimeout > 0) {
+                $pdo->exec('PRAGMA busy_timeout = ' . $busyTimeout);
+            }
+        }
+    }
+
     private function normalize(string $sql): string
     {
         if (!$this->mysql) {

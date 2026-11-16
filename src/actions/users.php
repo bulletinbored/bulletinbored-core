@@ -86,7 +86,14 @@ function handle_login(string $method): \Bulletin\Response|bool
                 $_SESSION['session_version'] = (int)($user['session_version'] ?? 1);
                 session_regenerate_id(true);
                 if ($user['status'] === 'suspended' && !empty($user['suspension_time']) && time() >= $user['suspension_time']) {
-                    $pdo->prepare("UPDATE users SET status = 'active', suspension_time = 0 WHERE id = ?")->execute([$user['id']]);
+                    // A status change invalidates sessions, like every other
+                    // one; the version stored above is refreshed right after so
+                    // the login that triggered it is not lost.
+                    $pdo->prepare("UPDATE users SET status = 'active', suspension_time = 0, session_version = COALESCE(session_version, 0) + 1 WHERE id = ?")
+                        ->execute([$user['id']]);
+                    $versionStmt = $pdo->prepare("SELECT session_version FROM users WHERE id = ?");
+                    $versionStmt->execute([$user['id']]);
+                    $_SESSION['session_version'] = (int)$versionStmt->fetchColumn();
                     $_SESSION['user_status'] = 'active';
                     $_SESSION['user_suspension_time'] = 0;
                 }
@@ -194,6 +201,43 @@ function handle_register(string $method): \Bulletin\Response|bool
 
     include __DIR__ . '/../../views/register.php';
     return true;
+}
+
+/**
+ * Sign out every other device of the current user.
+ *
+ * session_version is bumped (all cookies become stale) and the value stored in
+ * the current session is refreshed, so this device stays signed in: exactly the
+ * "log out my other devices" behaviour.
+ */
+function handle_logout_others_post(): \Bulletin\Response|bool
+{
+    if (!csrf_validate_request()) {
+        throw new \Bulletin\ForbiddenException('CSRF token invalid');
+    }
+
+    $userId = (int)($_SESSION['user_id'] ?? 0);
+    if ($userId <= 0) {
+        return redirect(url('login'));
+    }
+    if (!rate_limit('logout_others', 5, 3600, (string)$userId)) {
+        throw new \Bulletin\TooManyRequestsException('Too many requests. Please try again later.');
+    }
+
+    $pdo = App::getInstance()->pdo;
+    $pdo->prepare("UPDATE users SET session_version = COALESCE(session_version, 0) + 1 WHERE id = ?")
+        ->execute([$userId]);
+
+    $stmt = $pdo->prepare("SELECT session_version FROM users WHERE id = ?");
+    $stmt->execute([$userId]);
+    $version = $stmt->fetchColumn();
+    if ($version !== false) {
+        // Keep this device signed in with the new version.
+        $_SESSION['session_version'] = (int)$version;
+    }
+
+    log_security_event('logout_other_devices', ['user_id' => $userId]);
+    return redirect(url('edit_profile'));
 }
 
 function handle_logout(): \Bulletin\Response|bool
@@ -384,6 +428,7 @@ function handle_edit_profile(string $method): \Bulletin\Response|bool
                 $params[] = $newEmail;
             }
 
+            $passwordChanged = false;
             if (!empty($_POST['password'])) {
                 $pwErrors = validate_password_strength($_POST['password']);
                 if (!empty($pwErrors)) {
@@ -392,12 +437,29 @@ function handle_edit_profile(string $method): \Bulletin\Response|bool
                 }
                 $updates[] = "password = ?";
                 $params[] = password_hash($_POST['password'], PASSWORD_DEFAULT);
+                $passwordChanged = true;
             }
 
             if (!empty($updates)) {
+                if ($passwordChanged) {
+                    // Changing the password invalidates every other session,
+                    // exactly like the reset-password flow does.
+                    $updates[] = "session_version = COALESCE(session_version, 0) + 1";
+                }
+
                 $params[] = $_SESSION['user_id'];
+                // @session-version-reviewed: the bump is appended above when
+                // the password changes; the column list is built from a closed
+                // set of fragments defined in this handler.
                 $pdo->prepare("UPDATE users SET ".implode(', ', $updates)." WHERE id = ?")
                     ->execute($params);
+
+                if ($passwordChanged) {
+                    // Keep this device signed in with the new version.
+                    $versionStmt = $pdo->prepare("SELECT session_version FROM users WHERE id = ?");
+                    $versionStmt->execute([$_SESSION['user_id']]);
+                    $_SESSION['session_version'] = (int)$versionStmt->fetchColumn();
+                }
 
                 if (!empty($_POST['username'])) {
                     $_SESSION['username'] = validate_input($_POST['username']);
