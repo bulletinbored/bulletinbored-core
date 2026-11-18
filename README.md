@@ -173,10 +173,10 @@ the 767/1000-byte key limits of older MySQL/MariaDB builds.
 ## Troubleshooting a 500
 
 Unhandled errors are written to `data/logs/error.log` (message, file/line,
-request URI, PHP version, database driver — never passwords). If you cannot
-reach that file, upload `tools/diag.php` to the forum root as `diag.php` and open
-it: it reports PHP extensions, config sanity, directory permissions, the
-database connection and the migration state. **Delete it right after use.**
+request URI, PHP version, database driver, never passwords). If you have shell
+access, run `php bb.php doctor`: it reports the PHP version and extensions,
+directory permissions, the database connection, config permissions and the
+migration state. Without shell access, ask your host for `data/logs/error.log`.
 
 ## Testing notes
 
@@ -213,13 +213,13 @@ Version numbers live in `VERSION` and must match `config-sample.json`
 the repository: the release workflow generates them on the GitHub Release, so
 the tag, `VERSION` and the published notes always refer to the same commit.
 
-Pre-releases use SemVer suffixes: `VERSION` is `1.0.0-rc.2`, the tag is
-`v1.0.0-rc.2`, and the GitHub release is published as a **prerelease** so the
-update checker (`/releases/latest`, which skips prereleases) never offers it to
-stable installations. A stable installation that wants prereleases can set
+Pre-releases use SemVer suffixes: a prerelease `VERSION` such as `1.1.0-rc.1` is
+tagged `v1.1.0-rc.1` and the GitHub release is published as a **prerelease** so
+the update checker (`/releases/latest`, which skips prereleases) never offers it
+to stable installations. A stable installation that wants prereleases can set
 `allow_prerelease_updates: true`; an installation already running a prerelease
 follows the next ones automatically. `version_compare()` keeps the SemVer
-ordering (`1.0.0-rc.2 < 1.0.0`), while extension requirements (`"core":
+ordering (`1.1.0-rc.1 < 1.1.0`), while extension requirements (`"core":
 ">=1.0.0"`) are matched against the base version so plugins can be tested on a
 release candidate.
 
