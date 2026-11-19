@@ -82,9 +82,26 @@ class AuthZ
         }
 
         // Plugin-contributed permissions.
+        //
+        // The admin shortcut above means an administrator never reaches this
+        // code, so a plugin hook that throws used to break every permission
+        // check for everybody else (a 500 on posting, while the admin kept
+        // working). Extensions must not be able to take down authorization:
+        // log the failure and deny (fail closed).
         global $pluginManager;
-        if (isset($pluginManager) && $pluginManager->checkHook('permission_' . $permission, $role)) {
-            return true;
+        if (isset($pluginManager)) {
+            try {
+                if ($pluginManager->checkHook('permission_' . $permission, $role)) {
+                    return true;
+                }
+            } catch (\Throwable $e) {
+                error_log(sprintf(
+                    'AuthZ: permission hook for %s failed for role %s: %s',
+                    $permission,
+                    $role,
+                    $e->getMessage()
+                ));
+            }
         }
 
         return false;
