@@ -332,28 +332,13 @@ class InitialSchema
 
     private function seedDefaults(PDO $pdo): void
     {
-        // Default roles — permissions use "resource.action" notation.
-        // Ownership is expressed via AuthZ::canOnOwned() which checks for
-        // "resource.action_own" when the user is the resource owner.
-        $roles = [
-            ['admin', json_encode([
-                'admin.access',
-                'threads.approve', 'threads.delete', 'threads.edit', 'threads.lock',
-                'threads.sticky', 'threads.move', 'threads.split', 'threads.merge', 'threads.copy',
-                'posts.delete', 'posts.edit',
-                'users.ban', 'users.create', 'users.delete', 'users.edit',
-                'roles.manage', 'categories.manage', 'settings.manage',
-                'plugins.manage', 'themes.manage', 'langs.manage',
-            ])],
-            ['moderator', json_encode([
-                'threads.approve', 'threads.delete', 'threads.edit', 'threads.lock',
-                'threads.sticky', 'threads.move', 'threads.split', 'threads.merge', 'threads.copy',
-                'posts.delete', 'posts.edit',
-            ])],
-            ['user', json_encode([
-                'threads.create', 'posts.create', 'posts.edit_own', 'posts.delete_own',
-            ])],
-        ];
+        // Default roles — permissions use "resource.action" notation, defined
+        // once in lib/DefaultRoles.php (the web installer reads the same file).
+        require_once dirname(__DIR__) . '/lib/DefaultRoles.php';
+        $roles = [];
+        foreach (bb_default_role_permissions() as $roleName => $permissions) {
+            $roles[] = [$roleName, json_encode($permissions)];
+        }
 
         $driver = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
         $insertIgnore = $driver === 'mysql' ? 'INSERT IGNORE' : 'INSERT OR IGNORE';

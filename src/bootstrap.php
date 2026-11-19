@@ -11,6 +11,13 @@
  *   - the PSR-4 autoloader for the Bulletin\ namespace
  */
 
+// Typed HTTP exceptions (Bulletin\ForbiddenException, ...) live together in
+// src/Errors.php, which the PSR-4 autoloader cannot resolve by class name: it
+// looks for src/ForbiddenException.php. Without this require every `throw
+// new \Bulletin\ForbiddenException()` at runtime was an "Error: Class not
+// found" → 500 instead of a 403, reported from production.
+require_once __DIR__ . '/Errors.php';
+
 // Test mode detection - skip session/install logic if test bootstrap already loaded
 if (defined('BULLETIN_TEST_MODE') && BULLETIN_TEST_MODE) {
     date_default_timezone_set('UTC');

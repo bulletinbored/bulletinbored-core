@@ -211,11 +211,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install']) && !valida
                     ->execute([$adminUser, password_hash($adminPass, PASSWORD_DEFAULT), $adminEmail]);
             }
 
-            $defaultRoles = [
-                ['admin', json_encode(['can_approve_threads', 'can_delete_threads', 'can_delete_posts', 'can_lock_threads', 'can_sticky_threads', 'can_edit_posts', 'can_edit_threads', 'can_ban_users', 'can_manage_roles'])],
-                ['moderator', json_encode(['can_approve_threads', 'can_delete_threads', 'can_delete_posts', 'can_lock_threads', 'can_sticky_threads', 'can_edit_posts', 'can_edit_threads'])],
-                ['user', json_encode(['can_create_threads', 'can_create_posts', 'can_edit_own_posts', 'can_delete_own_posts'])],
-            ];
+            // Canonical "resource.action" permissions, shared with the
+            // migrations: the old "can_*" names made every permission check
+            // fail for non-admin users on installations created here.
+            require_once __DIR__ . '/lib/DefaultRoles.php';
+            $defaultRoles = [];
+            foreach (bb_default_role_permissions() as $roleName => $permissions) {
+                $defaultRoles[] = [$roleName, json_encode($permissions)];
+            }
             foreach ($defaultRoles as $role) {
                 $pdo->prepare("$insertIgnoreSql INTO roles (name, permissions) VALUES (?, ?)")->execute($role);
             }
@@ -332,11 +335,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install']) && !valida
                 $pdo->prepare("UPDATE users SET email_verified = 1 WHERE role = 'admin'")->execute();
             }
 
-            $defaultRoles = [
-                ['admin', json_encode(['can_approve_threads', 'can_delete_threads', 'can_delete_posts', 'can_lock_threads', 'can_sticky_threads', 'can_edit_posts', 'can_edit_threads', 'can_ban_users', 'can_manage_roles'])],
-                ['moderator', json_encode(['can_approve_threads', 'can_delete_threads', 'can_delete_posts', 'can_lock_threads', 'can_sticky_threads', 'can_edit_posts', 'can_edit_threads'])],
-                ['user', json_encode(['can_create_threads', 'can_create_posts', 'can_edit_own_posts', 'can_delete_own_posts'])],
-            ];
+            // Same canonical permissions as the SQLite branch above.
+            $defaultRoles = [];
+            foreach (bb_default_role_permissions() as $roleName => $permissions) {
+                $defaultRoles[] = [$roleName, json_encode($permissions)];
+            }
             foreach ($defaultRoles as $role) {
                 $pdo->prepare("$insertIgnoreSql INTO roles (name, permissions) VALUES (?, ?)")->execute($role);
             }

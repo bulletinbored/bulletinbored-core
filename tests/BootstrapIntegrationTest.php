@@ -89,6 +89,7 @@ echo json_encode([
     'tz'         => date_default_timezone_get(),
     'has_t'      => function_exists('t'),
     'has_router' => class_exists('Bulletin\\Router'),
+    'has_forbidden' => class_exists('Bulletin\\ForbiddenException'),
     'config'     => is_array(App::getInstance()->config),
 ]);
 PHP;
@@ -102,6 +103,9 @@ PHP;
         $t->assertEquals('Timezone pinned to UTC', 'UTC', $decoded['tz'] ?? null);
         $t->assertTrue('t() defined', !empty($decoded['has_t']));
         $t->assertTrue('PSR-4 autoloader registered (Router)', !empty($decoded['has_router']));
+        // Multi-class file: the autoloader cannot find it by name, so bootstrap
+        // must load it. Without this every typed HTTP error was a 500.
+        $t->assertTrue('Typed HTTP exceptions loaded (ForbiddenException)', !empty($decoded['has_forbidden']));
         $t->assertTrue('Config loaded into App', !empty($decoded['config']));
     } else {
         // Surface the failure reason for debugging.
