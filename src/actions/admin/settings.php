@@ -22,6 +22,7 @@ function handle_admin_settings_post(): ?string
     $dateFormat = trim($_POST['date_format'] ?? $config['date_format']);
     $timeFormat = trim($_POST['time_format'] ?? $config['time_format']);
     $attachmentsEnabled = !empty($_POST['attachments_enabled']) ? 1 : 0;
+    $threadedComments = !empty($_POST['threaded_comments']) ? 1 : 0;
     $allowCatalogOnly = !empty($_POST['allow_catalog_only']) ? 1 : 0;
     $pluginVerifyFiles = !empty($_POST['plugin_verify_files']) ? 1 : 0;
     $telemetry = !empty($_POST['telemetry']) ? 1 : 0;
@@ -35,6 +36,7 @@ function handle_admin_settings_post(): ?string
     $config['date_format'] = $dateFormat;
     $config['time_format'] = $timeFormat;
     $config['attachments_enabled'] = $attachmentsEnabled;
+    $config['threaded_comments'] = $threadedComments;
     $config['allow_catalog_only'] = $allowCatalogOnly;
     $config['plugin_verify_files'] = $pluginVerifyFiles;
     $config['telemetry'] = $telemetry;

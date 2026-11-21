@@ -95,6 +95,50 @@ function handle_upload_image(): \Bulletin\Response|bool
     return \Bulletin\Response::json(['ok' => true, 'url' => $privateUrl, 'markdown' => '![](' . $privateUrl . ')']);
 }
 
+/**
+ * Load visible posts of a thread, optionally restricted to top-level comments
+ * or to the direct children of a set of comments. The author metadata matches
+ * the flat thread query so both render modes share the same post shape.
+ *
+ * @param int[]|null $parentIds
+ */
+function bb_fetch_thread_posts(PDO $pdo, int $threadId, ?array $parentIds = null, bool $rootsOnly = false, int $limit = 0, int $offset = 0): array
+{
+    $where = "p.thread_id = ? AND p.status = 'visible'";
+    $params = [$threadId];
+
+    if ($rootsOnly) {
+        $where .= " AND p.parent_id IS NULL";
+    } elseif ($parentIds !== null) {
+        if ($parentIds === []) {
+            return [];
+        }
+        $placeholders = implode(',', array_fill(0, count($parentIds), '?'));
+        $where .= " AND p.parent_id IN ({$placeholders})";
+        foreach ($parentIds as $parentId) {
+            $params[] = (int)$parentId;
+        }
+    }
+
+    $sql = "
+        SELECT p.*, u.username as author, u.avatar as author_avatar, u.role as author_role,
+               u.created_at as author_joined,
+               (SELECT COUNT(*) FROM posts p2 WHERE p2.user_id = p.user_id AND p2.status = 'visible') as author_posts
+        FROM posts p
+        LEFT JOIN users u ON p.user_id = u.id
+        WHERE {$where}
+        ORDER BY p.created_at ASC, p.id ASC
+    ";
+
+    if ($limit > 0) {
+        $sql .= " LIMIT " . (int)$limit . " OFFSET " . (int)$offset;
+    }
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    return $stmt->fetchAll();
+}
+
 function handle_thread_view(array $params = []): \Bulletin\Response|bool
 {
     $pdo = App::getInstance()->pdo;
@@ -154,31 +198,120 @@ function handle_thread_view(array $params = []): \Bulletin\Response|bool
     $perPage = POSTS_PER_PAGE;
     $offset = ($postPage - 1) * $perPage;
 
-    $totalStmt = $pdo->prepare("
-        SELECT COUNT(*) FROM posts
-        WHERE thread_id = ? AND status = 'visible'
-    ");
-    $totalStmt->execute([$threadId]);
-    $totalPosts = $totalStmt->fetchColumn();
+    $config = App::getInstance()->config;
+    $threaded = (bool)($config['threaded_comments'] ?? true);
 
-    $totalPages = max(1, (int)ceil($totalPosts / $perPage));
+    $postNumbers = [];
+    $allById = [];
+    $childrenMap = [];
+    $rootIds = [];
+    $descendantCounts = [];
 
-    $postsStmt = $pdo->prepare("
-        SELECT p.*, u.username as author, u.avatar as author_avatar, u.role as author_role,
-               u.created_at as author_joined,
-               (SELECT COUNT(*) FROM posts p2 WHERE p2.user_id = p.user_id AND p2.status = 'visible') as author_posts
-        FROM posts p
-        LEFT JOIN users u ON p.user_id = u.id
-        WHERE p.thread_id = ? AND p.status = 'visible'
-        ORDER BY p.created_at ASC, p.id ASC
-        LIMIT ".(int)$perPage." OFFSET ".(int)$offset."
-    ");
-    $postsStmt->execute([$threadId]);
-    $posts = $postsStmt->fetchAll();
+    if ($threaded) {
+        // Pagination applies to top-level comments; every descendant of the
+        // comments on this page is loaded so a reply never loses its context.
+        $totalStmt = $pdo->prepare("
+            SELECT COUNT(*) FROM posts
+            WHERE thread_id = ? AND status = 'visible' AND parent_id IS NULL
+        ");
+        $totalStmt->execute([$threadId]);
+        $totalPosts = (int)$totalStmt->fetchColumn();
+        $totalPages = max(1, (int)ceil($totalPosts / $perPage));
+
+        $rootPosts = bb_fetch_thread_posts($pdo, $threadId, null, true, $perPage, $offset);
+
+        $posts = $rootPosts;
+        $frontier = array_map(fn($p) => (int)$p['id'], $rootPosts);
+        $seen = array_fill_keys($frontier, true);
+
+        while ($frontier !== []) {
+            $children = bb_fetch_thread_posts($pdo, $threadId, $frontier);
+            $next = [];
+            foreach ($children as $child) {
+                $childId = (int)$child['id'];
+                if (isset($seen[$childId])) {
+                    continue;
+                }
+                $seen[$childId] = true;
+                $posts[] = $child;
+                $next[] = $childId;
+            }
+            $frontier = $next;
+        }
+
+        // Stable #N numbers independent of the nesting order shown on screen.
+        $numbersStmt = $pdo->prepare("
+            SELECT id FROM posts
+            WHERE thread_id = ? AND status = 'visible'
+            ORDER BY created_at ASC, id ASC
+        ");
+        $numbersStmt->execute([$threadId]);
+        $number = 2;
+        foreach ($numbersStmt->fetchAll(PDO::FETCH_COLUMN) as $id) {
+            $postNumbers[(int)$id] = $number++;
+        }
+    } else {
+        $totalStmt = $pdo->prepare("
+            SELECT COUNT(*) FROM posts
+            WHERE thread_id = ? AND status = 'visible'
+        ");
+        $totalStmt->execute([$threadId]);
+        $totalPosts = $totalStmt->fetchColumn();
+        $totalPages = max(1, (int)ceil($totalPosts / $perPage));
+
+        $posts = bb_fetch_thread_posts($pdo, $threadId, null, false, $perPage, $offset);
+    }
 
     if (isset($pluginManager)) {
         $posts = $pluginManager->filter('thread_posts_before_view', $posts, $thread);
     }
+
+    if ($threaded) {
+        foreach ($posts as $postRow) {
+            $allById[(int)$postRow['id']] = $postRow;
+        }
+        foreach ($posts as $postRow) {
+            $postId = (int)$postRow['id'];
+            $parentId = (int)($postRow['parent_id'] ?? 0);
+            if ($parentId > 0 && isset($allById[$parentId])) {
+                $childrenMap[$parentId][] = $postId;
+            } else {
+                $rootIds[] = $postId;
+            }
+        }
+
+        // Number of descendants for each comment, used by the collapse control
+        // to show how many hidden comments sit under a branch.
+        $descendantCounts = [];
+        $visiting = [];
+        $countDescendants = function (int $id) use (&$countDescendants, &$descendantCounts, &$visiting, $childrenMap): int {
+            if (isset($descendantCounts[$id])) {
+                return $descendantCounts[$id];
+            }
+            if (isset($visiting[$id])) {
+                return 0;
+            }
+            $visiting[$id] = true;
+            $total = 0;
+            foreach ($childrenMap[$id] ?? [] as $childId) {
+                $total += 1 + $countDescendants((int)$childId);
+            }
+            unset($visiting[$id]);
+            return $descendantCounts[$id] = $total;
+        };
+        foreach (array_keys($allById) as $id) {
+            $countDescendants((int)$id);
+        }
+    }
+
+    $lastReplyStmt = $pdo->prepare("
+        SELECT created_at FROM posts
+        WHERE thread_id = ? AND status = 'visible'
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1
+    ");
+    $lastReplyStmt->execute([$threadId]);
+    $lastReplyAt = $lastReplyStmt->fetchColumn() ?: null;
 
     $categories = $pdo->query("SELECT * FROM categories ORDER BY position")->fetchAll();
 

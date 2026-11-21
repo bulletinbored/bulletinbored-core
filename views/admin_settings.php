@@ -43,6 +43,13 @@
                             <label class="form-check-label" for="attachments_enabled"><?= t('attachments_enabled') ?></label>
                         </div>
                         <div class="form-text"><?= t('attachments_enabled_hint') ?></div>
+                        <hr class="my-3">
+                        <div class="form-check form-switch">
+                            <input type="hidden" name="threaded_comments" value="0">
+                            <input class="form-check-input" type="checkbox" name="threaded_comments" value="1" id="threaded_comments" <?= ($config['threaded_comments'] ?? true) ? 'checked' : '' ?>>
+                            <label class="form-check-label" for="threaded_comments"><?= t('threaded_comments') ?></label>
+                        </div>
+                        <div class="form-text"><?= t('threaded_comments_hint') ?></div>
                     </div>
                 </div>
             </div>

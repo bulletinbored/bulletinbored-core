@@ -1,5 +1,57 @@
 <?php
 
+/**
+ * Page that will contain a freshly created reply. Threaded pagination counts
+ * top-level comments, so a reply belongs to the page of its root ancestor.
+ */
+function bb_reply_target_page(PDO $pdo, int $threadId, int $postId, int $parentId, bool $threaded): int
+{
+    if ($threaded) {
+        $targetId = $parentId > 0 ? $parentId : $postId;
+        $guard = 0;
+        while ($targetId > 0 && $guard++ < 1000) {
+            $stmt = $pdo->prepare("SELECT parent_id FROM posts WHERE id = ? AND thread_id = ?");
+            $stmt->execute([$targetId, $threadId]);
+            $parent = $stmt->fetchColumn();
+            if ($parent === false || $parent === null) {
+                break;
+            }
+            $targetId = (int)$parent;
+        }
+
+        $rootStmt = $pdo->prepare("SELECT created_at FROM posts WHERE id = ? AND thread_id = ?");
+        $rootStmt->execute([$targetId, $threadId]);
+        $createdAt = $rootStmt->fetchColumn();
+        if ($createdAt === false) {
+            return 1;
+        }
+
+        $countStmt = $pdo->prepare("
+            SELECT COUNT(*) FROM posts
+            WHERE thread_id = ? AND status = 'visible' AND parent_id IS NULL
+              AND (created_at < ? OR (created_at = ? AND id <= ?))
+        ");
+        $countStmt->execute([$threadId, $createdAt, $createdAt, $targetId]);
+    } else {
+        $postStmt = $pdo->prepare("SELECT created_at FROM posts WHERE id = ? AND thread_id = ?");
+        $postStmt->execute([$postId, $threadId]);
+        $createdAt = $postStmt->fetchColumn();
+        if ($createdAt === false) {
+            return 1;
+        }
+
+        $countStmt = $pdo->prepare("
+            SELECT COUNT(*) FROM posts
+            WHERE thread_id = ? AND status = 'visible'
+              AND (created_at < ? OR (created_at = ? AND id <= ?))
+        ");
+        $countStmt->execute([$threadId, $createdAt, $createdAt, $postId]);
+    }
+
+    $count = (int)$countStmt->fetchColumn();
+    return max(1, (int)ceil($count / POSTS_PER_PAGE));
+}
+
 function handle_reply_post(): \Bulletin\Response|bool
 {
     $pdo = App::getInstance()->pdo;
@@ -42,6 +94,24 @@ function handle_reply_post(): \Bulletin\Response|bool
         throw new \Bulletin\NotFoundException('Thread not found');
     }
 
+    // Threaded comments are on by default; when the administrator disables
+    // them every reply becomes a top-level reply again.
+    $threadedEnabled = (bool)(App::getInstance()->config['threaded_comments'] ?? true);
+    $parentId = $threadedEnabled ? (int)($_POST['parent_id'] ?? 0) : 0;
+
+    $parentAuthorId = 0;
+    if ($parentId > 0) {
+        $parentStmt = $pdo->prepare("SELECT id, user_id FROM posts WHERE id = ? AND thread_id = ? AND status = 'visible'");
+        $parentStmt->execute([$parentId, $threadId]);
+        $parentRow = $parentStmt->fetch();
+        if ($parentRow === false) {
+            $_SESSION['reply_error'] = 'The comment you are replying to no longer exists.';
+            $_SESSION['reply_content'] = $_POST['content'] ?? '';
+            return redirect(url('thread', ['id' => $threadId]));
+        }
+        $parentAuthorId = (int)($parentRow['user_id'] ?? 0);
+    }
+
     if ($thread['status'] === 'locked' && !$authz->can((int)$_SESSION['user_id'], 'threads.lock')) {
         $_SESSION['reply_error'] = 'Thread is locked';
         return redirect(url('thread', ['id' => $threadId]));
@@ -55,6 +125,7 @@ function handle_reply_post(): \Bulletin\Response|bool
         'thread_id' => $threadId,
         'user_id' => $_SESSION['user_id'],
         'content' => $content,
+        'parent_id' => $parentId > 0 ? $parentId : null,
         'created_at' => date('Y-m-d H:i:s'),
     ];
 
@@ -67,10 +138,16 @@ function handle_reply_post(): \Bulletin\Response|bool
     }
 
     $stmt = $pdo->prepare("
-        INSERT INTO posts (thread_id, user_id, content, created_at)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO posts (thread_id, user_id, content, parent_id, created_at)
+        VALUES (?, ?, ?, ?, ?)
     ");
-    $stmt->execute([$postData['thread_id'], $postData['user_id'], $postData['content'], $postData['created_at']]);
+    $stmt->execute([
+        $postData['thread_id'],
+        $postData['user_id'],
+        $postData['content'],
+        !empty($postData['parent_id']) ? (int)$postData['parent_id'] : null,
+        $postData['created_at'],
+    ]);
     $postId = $pdo->lastInsertId();
 
     $pdo->prepare("UPDATE threads SET updated_at = ? WHERE id = ?")->execute([$postData['created_at'], $threadId]);
@@ -79,7 +156,9 @@ function handle_reply_post(): \Bulletin\Response|bool
         $pluginManager->runHook('post_after_create', $postId, $postData, $thread);
     }
 
-    notify_thread_reply($thread, (int)$_SESSION['user_id'], $content);
+    $targetPage = bb_reply_target_page($pdo, $threadId, (int)$postId, $parentId, $threadedEnabled);
+
+    notify_thread_reply($thread, (int)$_SESSION['user_id'], $content, (int)$postId, $targetPage, $parentAuthorId);
     notify_mentioned_users(
         $pdo,
         $content,
@@ -89,7 +168,11 @@ function handle_reply_post(): \Bulletin\Response|bool
         (int)$_SESSION['user_id']
     );
 
-    return redirect(url('thread', ['id' => $threadId, 'slug' => slugify($thread['title'] ?? '')]));
+    $redirectParams = ['id' => $threadId, 'slug' => slugify($thread['title'] ?? '')];
+    if ($targetPage > 1) {
+        $redirectParams['post_page'] = $targetPage;
+    }
+    return redirect(url('thread', $redirectParams) . '#post-' . (int)$postId);
 }
 
 function handle_edit_post(string $method, array $params = []): \Bulletin\Response|bool
@@ -213,6 +296,11 @@ function handle_delete_post(array $params = []): \Bulletin\Response|bool
     if (isset($pluginManager)) {
         $pluginManager->runHook('post_before_delete', $postId, $post);
     }
+
+    // Keep the discussion intact: replies to the deleted comment move up to
+    // its parent instead of becoming unreachable orphans.
+    $pdo->prepare("UPDATE posts SET parent_id = ? WHERE parent_id = ?")
+        ->execute([$post['parent_id'] ?? null, $postId]);
 
     $pdo->prepare("DELETE FROM posts WHERE id = ?")->execute([$postId]);
 

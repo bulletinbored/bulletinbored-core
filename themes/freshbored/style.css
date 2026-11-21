@@ -615,6 +615,110 @@ hr { border-color: var(--fb-border); opacity: 1; }
 }
 .post-op { border-color: #d4b3e8; }
 
+/* ---------- threaded comments ---------- */
+.comment-node {
+    display: flex;
+    flex-direction: column;
+    gap: .85rem;
+}
+.comment-children {
+    display: flex;
+    flex-direction: column;
+    gap: .85rem;
+    margin-left: 1.25rem;
+    padding-left: .7rem;
+    border-left: 2px solid var(--fb-border);
+}
+.comment-children-flat {
+    margin-left: 0;
+    padding-left: 0;
+    border-left: none;
+}
+.comment-node.comment-collapsed > .comment-children { display: none; }
+.post-collapse {
+    width: auto;
+    min-width: 28px;
+    padding: 0 .4rem;
+    gap: .25rem;
+    font-size: .72rem;
+    font-weight: 700;
+}
+.post-collapse-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 .25rem;
+    border-radius: 999px;
+    background: var(--fb-border-soft);
+    color: var(--fb-muted);
+    font-size: .64rem;
+}
+.post-collapse[aria-expanded="false"] { color: var(--fb-brand); }
+.post-collapse[aria-expanded="false"] .post-collapse-count {
+    background: var(--fb-brand-soft);
+    color: var(--fb-brand);
+}
+
+/* Nested comments use a compact single-column layout: the author moves into
+   the header so the text keeps the full card width. */
+.post-nested {
+    background: transparent;
+    border-color: transparent;
+    border-radius: 9px;
+    box-shadow: none;
+}
+.post-nested:hover {
+    background: #fbfbfd;
+    border-color: var(--fb-border-soft);
+}
+.post-nested .post-main { padding: .7rem .85rem .8rem; }
+.post-head-compact {
+    flex-wrap: wrap;
+    gap: .35rem .4rem;
+    padding-bottom: .5rem;
+    margin-bottom: .55rem;
+}
+.post-compact-avatar { display: inline-flex; flex: 0 0 auto; }
+.post-compact-avatar .avatar {
+    width: 26px !important;
+    height: 26px !important;
+    font-size: 11px !important;
+}
+.post-compact-author { font-weight: 650; color: var(--fb-text); font-size: .84rem; }
+.post-compact-author:hover { color: var(--fb-brand); }
+.post-head-compact .role-badge { font-size: .58rem; padding: .1rem .35rem; }
+.post-head-compact .post-actions { margin-left: auto; }
+.post-nested .post-body { font-size: .9rem; line-height: 1.58; }
+.post-nested .post-attachments { margin-top: .7rem; padding-top: .55rem; }
+.post-nested .post-reply { margin-top: .55rem; }
+.post-reply { margin-top: .9rem; }
+.post-reply-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    border: none;
+    background: transparent;
+    color: var(--fb-muted);
+    font-size: .82rem;
+    font-weight: 600;
+    padding: .2rem .45rem;
+    border-radius: 7px;
+    cursor: pointer;
+    list-style: none;
+}
+.post-reply-toggle::-webkit-details-marker { display: none; }
+.post-reply-toggle::marker { content: ''; }
+.post-reply-toggle:hover { background: var(--fb-border-soft); color: var(--fb-brand); }
+.nested-reply-form { margin-top: .65rem; }
+.nested-reply-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: .5rem;
+    margin-top: .55rem;
+}
+
 .post-side {
     flex: 0 0 148px;
     padding: 1.15rem .85rem;
@@ -999,6 +1103,8 @@ hr { border-color: var(--fb-border); opacity: 1; }
     .post-side-avatar .avatar { width: 36px !important; height: 36px !important; font-size: 15px !important; }
     .post-side-meta { margin-left: auto; }
     .post-main { padding: .9rem 1rem 1rem; }
+    .comment-children { margin-left: .6rem; padding-left: .4rem; }
+    .comment-children-flat { margin-left: 0; padding-left: 0; border-left: none; }
 
     .thread-heading { font-size: 1.3rem; }
     .page-title { font-size: 1.35rem; }

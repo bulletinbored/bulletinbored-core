@@ -12,6 +12,16 @@ $replyError = $_SESSION['reply_error'] ?? '';
 $replyContent = $_SESSION['reply_content'] ?? '';
 unset($_SESSION['reply_error'], $_SESSION['reply_content']);
 $isLocked    = ($thread['status'] ?? '') === 'locked';
+$threaded          = !empty($threaded);
+$postNumbers       = $postNumbers ?? [];
+$allById           = $allById ?? [];
+$childrenMap       = $childrenMap ?? [];
+$rootIds           = $rootIds ?? [];
+$descendantCounts  = $descendantCounts ?? [];
+$lastReplyAt       = $lastReplyAt ?? null;
+// Below this depth a branch starts collapsed; opening a comment URL expands
+// the path to that comment automatically (see thread-mod.js).
+$autoCollapseDepth = 4;
 
 $categories = [];
 if ($canModerate) {
@@ -41,9 +51,8 @@ $sidebarInfo = [
     t('views')       => compact_number($viewCount),
     t('started')     => time_ago($thread['created_at'] ?? ''),
 ];
-if ($replyCount > 0 && !empty($posts)) {
-    $sidebarInfo[t('last_reply')] = time_ago(end($posts)['created_at'] ?? '');
-    reset($posts);
+if ($replyCount > 0) {
+    $sidebarInfo[t('last_reply')] = time_ago($lastReplyAt ?? '');
 }
 
 /** Renders one moderation button as a self contained form. */
@@ -66,26 +75,33 @@ function render_post($data, $number, $threadId, $threadUrl, $opts = []) {
     $canModerate = !empty($opts['can_moderate']);
     $categories  = $opts['categories'] ?? [];
     $isLogged    = !empty($opts['is_logged']);
-    $anchor     = $isOp ? 'post-1' : 'post-'.(int)($data['id'] ?? 0);
+    $anchor     = $isOp ? 'post-op' : 'post-'.(int)($data['id'] ?? 0);
     $author     = $data['author'] ?? '';
     $role       = $data['author_role'] ?? 'user';
+    $depth      = (int)($opts['depth'] ?? 0);
+    $threaded   = !empty($opts['threaded']);
     $canEdit    = function_exists('is_logged_in') && is_logged_in()
                 && (($_SESSION['user_id'] ?? 0) == ($data['user_id'] ?? -1) || (function_exists('is_admin') && is_admin()));
     $isLocked   = ($thread['status'] ?? '') === 'locked';
+    $compact    = $depth > 0;
+    $collapsed  = !empty($opts['collapsed']);
+    $hiddenCount = (int)($opts['hidden_count'] ?? 0);
     ?>
-    <article class="post <?= $isOp ? 'post-op' : '' ?>" id="<?= escape($anchor) ?>" data-post-id="<?= (int)($data['id'] ?? 0) ?>" data-is-op="<?= $isOp ? '1' : '0' ?>">
-        <div class="post-side">
-            <a href="<?= url('profile', ['user' => $author]) ?>" class="post-side-avatar">
-                <?= render_avatar($author, $data['author_avatar'] ?? '', 56) ?>
-            </a>
-            <a href="<?= url('profile', ['user' => $author]) ?>" class="post-author"><?= escape($author ?: '—') ?></a>
-            <?php if ($role === 'admin'): ?>
-                <span class="role-badge role-admin"><?= t('role_admin') ?></span>
-            <?php elseif ($role === 'moderator'): ?>
-                <span class="role-badge role-mod"><?= t('role_moderator') ?></span>
-            <?php endif; ?>
-            <span class="post-side-meta"><?= t('posts') ?> <?= compact_number($data['author_posts'] ?? 0) ?></span>
-        </div>
+    <article class="post <?= $isOp ? 'post-op' : '' ?> <?= $compact ? 'post-nested' : '' ?>" id="<?= escape($anchor) ?>" data-post-id="<?= (int)($data['id'] ?? 0) ?>" data-is-op="<?= $isOp ? '1' : '0' ?>" data-depth="<?= $depth ?>">
+        <?php if (!$compact): ?>
+            <div class="post-side">
+                <a href="<?= url('profile', ['user' => $author]) ?>" class="post-side-avatar">
+                    <?= render_avatar($author, $data['author_avatar'] ?? '', 56) ?>
+                </a>
+                <a href="<?= url('profile', ['user' => $author]) ?>" class="post-author"><?= escape($author ?: '—') ?></a>
+                <?php if ($role === 'admin'): ?>
+                    <span class="role-badge role-admin"><?= t('role_admin') ?></span>
+                <?php elseif ($role === 'moderator'): ?>
+                    <span class="role-badge role-mod"><?= t('role_moderator') ?></span>
+                <?php endif; ?>
+                <span class="post-side-meta"><?= t('posts') ?> <?= compact_number($data['author_posts'] ?? 0) ?></span>
+            </div>
+        <?php endif; ?>
 
         <div class="post-main">
             <?php if ($isOp && !empty($thread)): ?>
@@ -215,13 +231,35 @@ function render_post($data, $number, $threadId, $threadUrl, $opts = []) {
                 </div>
             <?php endif; ?>
 
-            <div class="post-head">
+            <div class="post-head<?= $compact ? ' post-head-compact' : '' ?>">
+                <?php if ($compact): ?>
+                    <a href="<?= url('profile', ['user' => $author]) ?>" class="post-compact-avatar">
+                        <?= render_avatar($author, $data['author_avatar'] ?? '', 26) ?>
+                    </a>
+                    <a href="<?= url('profile', ['user' => $author]) ?>" class="post-compact-author"><?= escape($author ?: '—') ?></a>
+                    <?php if ($role === 'admin'): ?>
+                        <span class="role-badge role-admin"><?= t('role_admin') ?></span>
+                    <?php elseif ($role === 'moderator'): ?>
+                        <span class="role-badge role-mod"><?= t('role_moderator') ?></span>
+                    <?php endif; ?>
+                <?php endif; ?>
                 <span class="post-number">#<?= (int)$number ?></span>
                 <span class="dot">·</span>
                 <time datetime="<?= escape($data['created_at'] ?? '') ?>" title="<?= escape($data['created_at'] ?? '') ?>">
-                    <?= t('published') ?> <?= time_ago($data['created_at'] ?? '') ?>
+                    <?= $compact ? '' : t('published').' ' ?><?= time_ago($data['created_at'] ?? '') ?>
                 </time>
                 <div class="post-actions">
+                    <?php if (!empty($opts['has_children'])): ?>
+                        <button type="button" class="post-action post-collapse"
+                                data-collapse-target="<?= escape($opts['children_id'] ?? '') ?>"
+                                data-collapse-label="<?= t('collapse_replies') ?>"
+                                data-expand-label="<?= t('expand_replies') ?>"
+                                aria-expanded="<?= $collapsed ? 'false' : 'true' ?>" aria-controls="<?= escape($opts['children_id'] ?? '') ?>"
+                                title="<?= $collapsed ? t('expand_replies') : t('collapse_replies') ?>">
+                            <i class="fas <?= $collapsed ? 'fa-plus' : 'fa-minus' ?>"></i>
+                            <?php if ($hiddenCount > 0): ?><span class="post-collapse-count"><?= $hiddenCount ?></span><?php endif; ?>
+                        </button>
+                    <?php endif; ?>
                     <a class="post-action" href="<?= $threadUrl ?>#<?= escape($anchor) ?>" title="<?= t('permalink') ?>"><i class="fas fa-link"></i></a>
                     <?php if ($canEdit): ?>
                         <a class="post-action" href="<?= url(!empty($opts['is_op']) ? 'edit_thread' : 'edit_post', ['id' => !empty($opts['is_op']) ? $threadId : $data['id']]) ?>" title="<?= t('edit') ?>"><i class="fas fa-pen"></i></a>
@@ -247,9 +285,78 @@ function render_post($data, $number, $threadId, $threadUrl, $opts = []) {
                     <?php endforeach; ?>
                 </div>
             <?php endif; ?>
+
+            <?php if ($threaded && $isLogged && (!$isLocked || $canModerate)): ?>
+                <details class="post-reply">
+                    <summary class="post-reply-toggle">
+                        <i class="fas fa-reply"></i> <?= t('reply_to_comment') ?>
+                    </summary>
+                    <form method="POST" action="<?= url('reply') ?>" class="nested-reply-form">
+                        <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                        <input type="hidden" name="thread_id" value="<?= (int)$threadId ?>">
+                        <input type="hidden" name="parent_id" value="<?= $isOp ? '' : (int)($data['id'] ?? 0) ?>">
+                        <?php // The editbored class makes the editor skip this field at page load; it is removed lazily when the composer opens. ?>
+                        <div class="nested-reply-editor editbored-wrap" data-reply-editor>
+                            <textarea name="content" class="form-control" rows="3"
+                                      placeholder="<?= t('reply_placeholder') ?>" required></textarea>
+                        </div>
+                        <div class="nested-reply-actions">
+                            <button type="button" class="btn btn-outline-soft btn-sm" data-reply-cancel><?= t('cancel') ?></button>
+                            <button type="submit" class="btn btn-brand btn-sm"><i class="fas fa-paper-plane me-1"></i><?= t('submit_reply') ?></button>
+                        </div>
+                    </form>
+                </details>
+            <?php endif; ?>
         </div>
     </article>
     <?php
+}
+
+/**
+ * Render a level of the comment tree. $visited guards against malformed data
+ * (for example a cycle introduced by a third-party plugin) so a thread can
+ * never recurse forever.
+ */
+function render_comment_tree($ids, $byId, $childrenMap, $depth, $ctx, $numbers, &$visited) {
+    foreach ($ids as $id) {
+        $id = (int)$id;
+        if (isset($visited[$id]) || !isset($byId[$id])) {
+            continue;
+        }
+        $visited[$id] = true;
+        $post = $byId[$id];
+        $hasChildren = !empty($childrenMap[$id]);
+        $childrenId = 'comment-children-'.$id;
+        $autoCollapseDepth = (int)($ctx['auto_collapse_depth'] ?? 4);
+        $collapsed = $hasChildren && $depth >= $autoCollapseDepth;
+
+        echo '<div class="comment-node'.($collapsed ? ' comment-collapsed' : '').'" data-depth="'.(int)$depth.'">';
+        render_post($post, $numbers[$id] ?? 0, $ctx['thread_id'], $ctx['thread_url'], [
+            'can_moderate' => $ctx['can_moderate'],
+            'categories'   => $ctx['categories'],
+            'is_logged'    => $ctx['is_logged'],
+            'thread'       => $ctx['thread'],
+            'threaded'     => true,
+            'depth'        => $depth,
+            'has_children' => $hasChildren,
+            'children_id'  => $childrenId,
+            'hidden_count' => (int)($ctx['descendant_counts'][$id] ?? 0),
+            'collapsed'    => $collapsed,
+        ]);
+
+        if ($hasChildren) {
+            // Indentation stops after max_indent levels: past that point the
+            // branch continues at the same left edge instead of squeezing the
+            // text into a narrow column.
+            $maxIndent = (int)($ctx['max_indent'] ?? 6);
+            $flat = $depth >= $maxIndent;
+            echo '<div class="comment-children'.($flat ? ' comment-children-flat' : '').'" id="'.escape($childrenId).'"'.($collapsed ? ' hidden' : '').'>';
+            render_comment_tree($childrenMap[$id], $byId, $childrenMap, $depth + 1, $ctx, $numbers, $visited);
+            echo '</div>';
+        }
+
+        echo '</div>';
+    }
 }
 
 include __DIR__.'/header.php';
@@ -359,7 +466,7 @@ render_header($thread['title'] ?? 'Thread', ['info' => $sidebarInfo]);
                                 <?php foreach ($posts as $index => $post): ?>
                                     <label class="list-group-item d-flex align-items-center gap-2">
                                         <input type="checkbox" class="split-post-check" value="<?= (int)$post['id'] ?>">
-                                        <span class="small text-muted">#<?= ($postPage - 1) * $perPage + $index + 2 ?></span>
+                                        <span class="small text-muted">#<?= $threaded ? (int)($postNumbers[(int)$post['id']] ?? 0) : ($postPage - 1) * $perPage + $index + 2 ?></span>
                                         <span class="small"><?= escape(mb_substr(strip_tags(marked_parse($post['content'] ?? '')), 0, 120)) ?></span>
                                     </label>
                                 <?php endforeach; ?>
@@ -386,6 +493,7 @@ render_header($thread['title'] ?? 'Thread', ['info' => $sidebarInfo]);
                 'can_moderate' => $canModerate,
                 'categories' => $categories,
                 'is_logged' => $isLogged,
+                'threaded' => $threaded,
             ]); ?>
         <?php else: ?>
             <a class="stream-jump" href="<?= url('thread', ['id' => $threadId, 'slug' => slugify($thread['title'] ?? '')]) ?>">
@@ -393,11 +501,26 @@ render_header($thread['title'] ?? 'Thread', ['info' => $sidebarInfo]);
             </a>
         <?php endif; ?>
 
-        <?php if (empty($posts ?? [])): ?>
+        <?php if ($threaded ? empty($rootIds) : empty($posts ?? [])): ?>
             <div class="empty-state empty-state-sm">
                 <i class="fas fa-comments"></i>
                 <p><?= t('no_replies') ?></p>
             </div>
+        <?php elseif ($threaded): ?>
+            <?php
+            $visitedCommentIds = [];
+            render_comment_tree($rootIds, $allById, $childrenMap, 0, [
+                'thread_id' => $threadId,
+                'thread_url' => $threadUrl,
+                'can_moderate' => $canModerate,
+                'categories' => $categories,
+                'is_logged' => $isLogged,
+                'thread' => $thread,
+                'max_indent' => 6,
+                'auto_collapse_depth' => $autoCollapseDepth,
+                'descendant_counts' => $descendantCounts,
+            ], $postNumbers, $visitedCommentIds);
+            ?>
         <?php else: ?>
             <?php foreach ($posts as $index => $post): ?>
                 <?php render_post($post, ($postPage - 1) * $perPage + $index + 2, $threadId, $threadUrl, [
@@ -429,7 +552,10 @@ render_header($thread['title'] ?? 'Thread', ['info' => $sidebarInfo]);
             </div>
         <?php else: ?>
             <section class="reply-box" id="reply">
-                <h2 class="reply-title"><i class="fas fa-reply me-2"></i><?= t('reply') ?></h2>
+                <h2 class="reply-title"><i class="fas fa-reply me-2"></i><?= $threaded ? t('add_comment') : t('reply') ?></h2>
+                <?php if ($threaded): ?>
+                    <p class="form-text mb-3"><?= t('top_level_comment_hint') ?></p>
+                <?php endif; ?>
                 <?php if ($replyError): ?>
                 <div class="alert alert-danger" role="alert">
                     <?= escape($replyError) ?>
@@ -438,6 +564,7 @@ render_header($thread['title'] ?? 'Thread', ['info' => $sidebarInfo]);
                 <form method="POST" action="<?= url('reply') ?>">
                     <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                     <input type="hidden" name="thread_id" value="<?= $threadId ?>">
+                    <input type="hidden" name="parent_id" value="">
                     <div class="mb-3">
                         <textarea id="editbored-content" name="content" class="form-control" rows="6"
                                   placeholder="<?= t('reply_placeholder') ?>" required><?= escape($replyContent) ?></textarea>
