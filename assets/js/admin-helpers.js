@@ -23,7 +23,7 @@
         document.querySelectorAll('[data-confirm]').forEach(function (el) {
             var handler = function (e) {
                 var msg = el.getAttribute('data-confirm');
-                if (!confirm(msg)) {
+                if (msg && !confirm(msg)) {
                     e.preventDefault();
                 }
             };
@@ -44,11 +44,13 @@
                 }
             });
         });
+
+        document.querySelectorAll('[data-warning-toggle]').forEach(function (btn) {
             btn.addEventListener('click', function () {
                 var target = document.getElementById(btn.getAttribute('data-warning-toggle'));
                 if (target) {
                     var open = target.classList.toggle('d-none');
-                    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+                    btn.setAttribute('aria-expanded', open ? 'false' : 'true');
                 }
             });
         });

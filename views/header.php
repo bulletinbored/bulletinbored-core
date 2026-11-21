@@ -14,6 +14,12 @@ function render_header($title = 'bulletinbored', $options = []) {
     $siteFavicon = $config['site_favicon'] ?? '';
     $options  = is_array($options) ? $options : [];
     $showSidebar = $options['sidebar'] ?? true;
+    $uiRole = $_SESSION['role'] ?? $_SESSION['user_role'] ?? 'user';
+    $uiRoleKey = 'role_' . $uiRole;
+    $uiRoleLabel = t($uiRoleKey);
+    if ($uiRoleLabel === $uiRoleKey) {
+        $uiRoleLabel = t('role_member');
+    }
 
     $GLOBALS['layoutOptions'] = $options;
 ?>
@@ -50,6 +56,7 @@ function render_header($title = 'bulletinbored', $options = []) {
     ?>
 </head>
 <body class="<?= (function_exists('is_admin') && is_admin()) ? 'is-admin' : '' ?>">
+    <a class="visually-hidden-focusable position-absolute top-0 start-0 p-2 bg-white" href="#main-content">Skip to content</a>
     <script nonce="<?= htmlspecialchars(csp_nonce(), ENT_QUOTES, 'UTF-8') ?>">
         if ('scrollRestoration' in history) {
             history.scrollRestoration = 'manual';
@@ -66,6 +73,11 @@ function render_header($title = 'bulletinbored', $options = []) {
                 <span class="brand-text"><?= render_site_name($siteName) ?></span>
             </a>
 
+            <form class="topbar-search" method="GET" action="<?= url('search') ?>" role="search">
+                <i class="fas fa-search"></i>
+                <input type="search" name="q" value="<?= escape($_GET['q'] ?? '') ?>" placeholder="<?= t('search') ?>…" aria-label="<?= t('search') ?>">
+            </form>
+
             <?php // User icons: desktop dropdown / mobile opens the full-screen stack ?>
             <ul class="navbar-nav topbar-user">
                 <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
@@ -75,22 +87,32 @@ function render_header($title = 'bulletinbored', $options = []) {
                         }
                         ?>
                         <li class="nav-item dropdown user-menu-dropdown">
-                        <a class="nav-link dropdown-toggle d-flex align-items-center gap-2" href="#" data-bs-toggle="dropdown">
+                        <a class="nav-link dropdown-toggle d-flex align-items-center gap-2" href="#" data-bs-toggle="dropdown" aria-expanded="false">
                             <?= render_avatar($_SESSION['username'] ?? '', $_SESSION['avatar'] ?? '', 28) ?>
                             <span class="d-none d-lg-inline"><?= escape($_SESSION['username'] ?? '') ?></span>
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
-                            <li><a class="dropdown-item" href="<?= url('profile', ['user' => $_SESSION['username'] ?? '']) ?>"><i class="fas fa-id-card me-2"></i><?= t('profile') ?></a></li>
-                            <li><a class="dropdown-item" href="<?= url('edit_profile') ?>"><i class="fas fa-sliders-h me-2"></i><?= t('edit_profile') ?></a></li>
+                            <li>
+                                <div class="dropdown-header">
+                                    <?= render_avatar($_SESSION['username'] ?? '', $_SESSION['avatar'] ?? '', 34) ?>
+                                    <div>
+                                        <div class="dropdown-user-name"><?= escape($_SESSION['username'] ?? '') ?></div>
+                                        <small><?= escape($uiRoleLabel) ?></small>
+                                    </div>
+                                </div>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="<?= url('profile', ['user' => $_SESSION['username'] ?? '']) ?>"><i class="fas fa-id-card"></i><?= t('profile') ?></a></li>
+                            <li><a class="dropdown-item" href="<?= url('edit_profile') ?>"><i class="fas fa-sliders"></i><?= t('edit_profile') ?></a></li>
                             <?php if (function_exists('is_admin') && is_admin()): ?>
                                 <li><hr class="dropdown-divider"></li>
-                                <li><a class="dropdown-item" href="<?= url('admin') ?>"><i class="fas fa-cog me-2"></i><?= t('admin_panel') ?></a></li>
+                                <li><a class="dropdown-item" href="<?= url('admin') ?>"><i class="fas fa-gauge-high"></i><?= t('admin_panel') ?></a></li>
                             <?php endif; ?>
                             <li><hr class="dropdown-divider"></li>
                             <li>
                                 <form method="POST" action="<?= url('logout') ?>">
                                     <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
-                                    <button type="submit" class="dropdown-item"><i class="fas fa-sign-out-alt me-2"></i><?= t('logout') ?></button>
+                                    <button type="submit" class="dropdown-item"><i class="fas fa-right-from-bracket"></i><?= t('logout') ?></button>
                                 </form>
                             </li>
                         </ul>
@@ -125,7 +147,7 @@ function render_header($title = 'bulletinbored', $options = []) {
         </a>
         <?php else: ?>
         <a href="#" class="mobile-tab" data-mobile-tab="login" title="<?= t('login') ?>">
-            <i class="fas fa-sign-in-alt"></i>
+            <i class="fas fa-right-to-bracket"></i>
         </a>
         <?php endif; ?>
         <a href="#" class="mobile-tab" id="mobileMenuToggle" title="<?= t('browse') ?>">
@@ -149,7 +171,7 @@ function render_header($title = 'bulletinbored', $options = []) {
                 <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
                 <button type="button" class="mobile-stack-tab" data-tab="user" role="tab"><i class="fas fa-user"></i></button>
                 <?php else: ?>
-                <button type="button" class="mobile-stack-tab" data-tab="login" role="tab"><i class="fas fa-sign-in-alt"></i></button>
+                <button type="button" class="mobile-stack-tab" data-tab="login" role="tab"><i class="fas fa-right-to-bracket"></i></button>
                 <?php endif; ?>
             </div>
             <span class="mobile-stack-title" id="mobileStackTitle"></span>
@@ -174,19 +196,19 @@ function render_header($title = 'bulletinbored', $options = []) {
                     <div class="mobile-stack-row-main"><div class="mobile-stack-row-title"><?= t('profile') ?></div></div>
                 </a>
                 <a class="mobile-stack-row" href="<?= url('edit_profile') ?>">
-                    <i class="fas fa-sliders-h mobile-stack-row-icon"></i>
+                    <i class="fas fa-sliders mobile-stack-row-icon"></i>
                     <div class="mobile-stack-row-main"><div class="mobile-stack-row-title"><?= t('edit_profile') ?></div></div>
                 </a>
                 <?php if (function_exists('is_admin') && is_admin()): ?>
                 <a class="mobile-stack-row" href="<?= url('admin') ?>">
-                    <i class="fas fa-cog mobile-stack-row-icon"></i>
+                    <i class="fas fa-gauge-high mobile-stack-row-icon"></i>
                     <div class="mobile-stack-row-main"><div class="mobile-stack-row-title"><?= t('admin_panel') ?></div></div>
                 </a>
                 <?php endif; ?>
                 <form method="POST" action="<?= url('logout') ?>">
                     <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
-                    <button type="submit" class="mobile-stack-row" style="border:none;background:none;width:100%;text-align:left;">
-                        <i class="fas fa-sign-out-alt mobile-stack-row-icon"></i>
+                    <button type="submit" class="mobile-stack-row mobile-stack-row-button">
+                        <i class="fas fa-right-from-bracket mobile-stack-row-icon"></i>
                         <div class="mobile-stack-row-main"><div class="mobile-stack-row-title"><?= t('logout') ?></div></div>
                     </button>
                 </form>
@@ -194,7 +216,7 @@ function render_header($title = 'bulletinbored', $options = []) {
             <?php else: ?>
             <div class="mobile-stack-pane" data-pane="login" id="paneLogin">
                 <a class="mobile-stack-row" href="<?= url('login') ?>">
-                    <i class="fas fa-sign-in-alt mobile-stack-row-icon"></i>
+                    <i class="fas fa-right-to-bracket mobile-stack-row-icon"></i>
                     <div class="mobile-stack-row-main"><div class="mobile-stack-row-title"><?= t('login') ?></div></div>
                 </a>
                 <a class="mobile-stack-row" href="<?= url('register') ?>">
@@ -206,7 +228,7 @@ function render_header($title = 'bulletinbored', $options = []) {
         </div>
     </div>
 
-    <main class="page-shell">
+    <main class="page-shell" id="main-content">
         <div class="container">
             <div class="row g-4">
 <?php if ($showSidebar): ?>

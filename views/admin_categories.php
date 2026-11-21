@@ -6,14 +6,16 @@ $csrf = generate_csrf_token();
 ?>
 <?php include __DIR__.'/admin_header.php'; render_admin_header(t('categories')); ?>
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="page-head">
         <div>
-            <h2 class="page-heading mb-0"><?= t('categories_management') ?></h2>
-            <p class="text-gray-500 mb-0 small"><?= t('categories') ?></p>
+            <h1 class="page-title"><?= t('categories_management') ?></h1>
+            <p class="page-subtitle"><?= t('categories') ?></p>
         </div>
-        <button id="save-order-btn" class="btn btn-outline-primary" disabled>
-            <i class="fas fa-save me-1"></i><?= t('save_order') ?>
-        </button>
+        <div class="page-actions">
+            <button id="save-order-btn" class="btn btn-outline-primary" disabled>
+                <i class="fas fa-save"></i><?= t('save_order') ?>
+            </button>
+        </div>
     </div>
 
     <div class="card shadow-sm mb-4">

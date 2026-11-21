@@ -1,13 +1,15 @@
 <?php include __DIR__.'/admin_header.php'; render_admin_header(t('settings')); ?>
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="page-head">
         <div>
-            <h2 class="page-heading mb-0"><?= t('site_settings') ?></h2>
-            <p class="text-gray-500 mb-0 small"><?= t('settings') ?></p>
+            <h1 class="page-title"><?= t('site_settings') ?></h1>
+            <p class="page-subtitle"><?= t('settings') ?></p>
         </div>
-        <button type="submit" form="settingsForm" name="save_settings" value="1" class="btn btn-primary">
-            <i class="fas fa-save me-1"></i> <?= t('save_settings') ?>
-        </button>
+        <div class="page-actions">
+            <button type="submit" form="settingsForm" name="save_settings" value="1" class="btn btn-primary">
+                <i class="fas fa-save"></i> <?= t('save_settings') ?>
+            </button>
+        </div>
     </div>
 
     <?php if (!empty($_SESSION['settings_saved'])): ?>

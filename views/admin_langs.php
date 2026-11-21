@@ -1,9 +1,9 @@
 <?php include __DIR__.'/admin_header.php'; render_admin_header(t('language_files')); ?>
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="page-head">
         <div>
-            <h2 class="page-heading mb-0"><?= t('language_files') ?></h2>
-            <p class="text-gray-500 mb-0 small"><?= t('languages') ?></p>
+            <h1 class="page-title"><?= t('language_files') ?></h1>
+            <p class="page-subtitle"><?= t('languages') ?></p>
         </div>
     </div>
 
@@ -99,9 +99,9 @@
 
     <?php if (empty($langOptions)): ?>
         <div class="card shadow-sm">
-            <div class="card-body text-center py-5">
-                <i class="fas fa-language fa-3x text-gray-400 mb-3"></i>
-                <h5 class="text-gray-600"><?= t('no_language_files_found') ?></h5>
+            <div class="card-body empty-state">
+                <i class="fas fa-language"></i>
+                <h5><?= t('no_language_files_found') ?></h5>
             </div>
         </div>
     <?php else: ?>

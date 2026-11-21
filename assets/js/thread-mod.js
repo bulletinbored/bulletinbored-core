@@ -20,14 +20,8 @@
             });
         });
 
-        document.querySelectorAll('[data-confirm]').forEach(function (form) {
-            form.addEventListener('submit', function (e) {
-                var msg = form.getAttribute('data-confirm');
-                if (!confirm(msg)) {
-                    e.preventDefault();
-                }
-            });
-        });
+        // data-confirm is handled by core-helpers.js (loaded in the shared
+        // header) to avoid showing the same confirmation twice.
 
         // Inline composers are native <details> elements, so they open and
         // submit without JavaScript. This only wires the optional Cancel button.

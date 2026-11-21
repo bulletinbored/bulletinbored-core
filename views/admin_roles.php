@@ -23,8 +23,11 @@ $allPermissions = [
 ?>
 <?php include __DIR__.'/admin_header.php'; render_admin_header(t('roles_permissions')); ?>
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-    <h2><?= t('roles_permissions') ?></h2>
+    <div class="page-head">
+        <div>
+            <h1 class="page-title"><?= t('roles_permissions') ?></h1>
+            <p class="page-subtitle"><?= t('permissions') ?></p>
+        </div>
     </div>
 
     <div class="row g-4">

@@ -42,14 +42,14 @@ $sbInfo       = $GLOBALS['layoutOptions']['info'] ?? [];
         <nav class="sidebar-block">
             <ul class="sidebar-nav">
                 <li>
-                    <a href="<?= url('home') ?>" class="<?= ($sbAction === 'home' || $sbAction === '') ? 'active' : '' ?>">
+                    <a href="<?= url('home') ?>" class="<?= ($sbAction === 'home' || $sbAction === '') ? 'active' : '' ?>"<?= ($sbAction === 'home' || $sbAction === '') ? ' aria-current="page"' : '' ?>>
                         <i class="fas fa-comments"></i><span><?= t('all_discussions') ?></span>
                         <span class="sidebar-count"><?= compact_number($sbStats['threads']) ?></span>
                     </a>
                 </li>
                 <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
                     <li>
-                        <a href="<?= url('profile', ['user' => $_SESSION['username'] ?? '']) ?>" class="<?= $sbAction === 'profile' ? 'active' : '' ?>">
+                        <a href="<?= url('profile', ['user' => $_SESSION['username'] ?? '']) ?>" class="<?= $sbAction === 'profile' ? 'active' : '' ?>"<?= $sbAction === 'profile' ? ' aria-current="page"' : '' ?>>
                             <i class="fas fa-user"></i><span><?= t('my_profile') ?></span>
                         </a>
                     </li>
@@ -67,6 +67,7 @@ $sbInfo       = $GLOBALS['layoutOptions']['info'] ?? [];
                         <li>
                             <a href="<?= url('category', ['id' => $sbCat['id'], 'slug' => slugify($sbCat['name'] ?? '')]) ?>"
                                class="<?= ($sbAction === 'category' && $sbCatId === (int)$sbCat['id']) ? 'active' : '' ?>"
+                               <?= ($sbAction === 'category' && $sbCatId === (int)$sbCat['id']) ? 'aria-current="page"' : '' ?>
                                <?= !empty($sbCat['description']) ? 'title="'.escape($sbCat['description']).'"' : '' ?>>
                                 <i class="fas fa-hashtag"></i><span><?= escape($sbCat['name']) ?></span>
                                 <span class="sidebar-count"><?= compact_number($sbCat['thread_count'] ?? 0) ?></span>

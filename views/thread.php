@@ -153,7 +153,7 @@ function render_post($data, $number, $threadId, $threadUrl, $opts = []) {
                                 <ul class="dropdown-menu">
                                     <?php if (($thread['status'] ?? '') === 'pending'): ?>
                                         <li>
-                                            <form method="POST" action="<?= url('frontend_moderate') ?>" class="px-3 py-1">
+                                            <form method="POST" action="<?= url('frontend_moderate') ?>" class="dropdown-form">
                                                 <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                                                 <input type="hidden" name="do" value="approve">
                                                 <input type="hidden" name="id" value="<?= (int)$threadId ?>">
@@ -163,7 +163,7 @@ function render_post($data, $number, $threadId, $threadUrl, $opts = []) {
                                         <li><hr class="dropdown-divider"></li>
                                     <?php endif; ?>
                                     <li>
-                                        <form method="POST" action="<?= url('frontend_moderate') ?>" class="px-3 py-1">
+                                        <form method="POST" action="<?= url('frontend_moderate') ?>" class="dropdown-form">
                                             <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                                             <input type="hidden" name="do" value="<?= $isLocked ? 'unlock' : 'lock' ?>">
                                             <input type="hidden" name="id" value="<?= (int)$threadId ?>">
@@ -173,7 +173,7 @@ function render_post($data, $number, $threadId, $threadUrl, $opts = []) {
                                         </form>
                                     </li>
                                     <li>
-                                        <form method="POST" action="<?= url('frontend_moderate') ?>" class="px-3 py-1">
+                                        <form method="POST" action="<?= url('frontend_moderate') ?>" class="dropdown-form">
                                             <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                                             <input type="hidden" name="do" value="<?= ($thread['status'] ?? '') === 'sticky' ? 'unsticky' : 'sticky' ?>">
                                             <input type="hidden" name="id" value="<?= (int)$threadId ?>">
@@ -183,7 +183,7 @@ function render_post($data, $number, $threadId, $threadUrl, $opts = []) {
                                         </form>
                                     </li>
                                     <li>
-                                        <form method="POST" action="<?= url('frontend_moderate') ?>" class="px-3 py-1">
+                                        <form method="POST" action="<?= url('frontend_moderate') ?>" class="dropdown-form">
                                             <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                                             <input type="hidden" name="do" value="<?= ($thread['status'] ?? '') === 'hidden' ? 'approve' : 'hide' ?>">
                                             <input type="hidden" name="id" value="<?= (int)$threadId ?>">
@@ -195,7 +195,7 @@ function render_post($data, $number, $threadId, $threadUrl, $opts = []) {
                                     <li><hr class="dropdown-divider"></li>
                                     <li>
                                         <button type="button" class="dropdown-item" data-modal-open="move-modal">
-                                            <i class="fas fa-arrows-alt"></i> <?= t('move_thread') ?>
+                                            <i class="fas fa-up-down-left-right"></i> <?= t('move_thread') ?>
                                         </button>
                                     </li>
                                     <li>
@@ -215,7 +215,7 @@ function render_post($data, $number, $threadId, $threadUrl, $opts = []) {
                                     </li>
                                     <li><hr class="dropdown-divider"></li>
                                     <li>
-                                        <form method="POST" action="<?= url('frontend_moderate') ?>" class="px-3 py-1" data-confirm="<?= t('delete_thread_confirm') ?>">
+                                        <form method="POST" action="<?= url('frontend_moderate') ?>" class="dropdown-form" data-confirm="<?= t('delete_thread_confirm') ?>">
                                             <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                                             <input type="hidden" name="do" value="delete">
                                             <input type="hidden" name="id" value="<?= (int)$threadId ?>">
@@ -262,12 +262,24 @@ function render_post($data, $number, $threadId, $threadUrl, $opts = []) {
                     <?php endif; ?>
                     <a class="post-action" href="<?= $threadUrl ?>#<?= escape($anchor) ?>" title="<?= t('permalink') ?>"><i class="fas fa-link"></i></a>
                     <?php if ($canEdit): ?>
-                        <a class="post-action" href="<?= url(!empty($opts['is_op']) ? 'edit_thread' : 'edit_post', ['id' => !empty($opts['is_op']) ? $threadId : $data['id']]) ?>" title="<?= t('edit') ?>"><i class="fas fa-pen"></i></a>
-                        <form method="POST" action="<?= url(!empty($opts['is_op']) ? 'delete_thread' : 'delete_post', ['id' => !empty($opts['is_op']) ? $threadId : $data['id']]) ?>" class="d-inline"
-                              data-confirm="<?= t('delete_confirm') ?>">
-                            <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
-                            <button type="submit" class="post-action post-action-danger" title="<?= t('delete') ?>"><i class="fas fa-trash"></i></button>
-                        </form>
+                        <div class="dropdown">
+                            <button class="post-action dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="<?= t('actions') ?>">
+                                <i class="fas fa-ellipsis-vertical"></i>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li>
+                                    <a class="dropdown-item" href="<?= url(!empty($opts['is_op']) ? 'edit_thread' : 'edit_post', ['id' => !empty($opts['is_op']) ? $threadId : $data['id']]) ?>">
+                                        <i class="fas fa-pen"></i><?= t('edit') ?>
+                                    </a>
+                                </li>
+                                <li>
+                                    <form method="POST" action="<?= url(!empty($opts['is_op']) ? 'delete_thread' : 'delete_post', ['id' => !empty($opts['is_op']) ? $threadId : $data['id']]) ?>" data-confirm="<?= t('delete_confirm') ?>">
+                                        <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                                        <button type="submit" class="dropdown-item text-danger"><i class="fas fa-trash"></i><?= t('delete') ?></button>
+                                    </form>
+                                </li>
+                            </ul>
+                        </div>
                     <?php endif; ?>
                 </div>
             </div>
