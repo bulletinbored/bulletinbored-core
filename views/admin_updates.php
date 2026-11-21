@@ -1,7 +1,16 @@
 <?php include __DIR__.'/admin_header.php'; render_admin_header(t('updates')); ?>
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-    <h2><?= t('update_manager') ?></h2>
+    <div class="page-head">
+        <div>
+            <h1 class="page-title"><?= t('update_manager') ?></h1>
+            <p class="page-subtitle"><?= t('updates') ?></p>
+        </div>
+        <div class="page-actions">
+            <form method="POST" class="m-0">
+                <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                <button type="submit" name="check_updates" value="1" class="btn btn-primary"><i class="fas fa-sync"></i><?= t('check_for_updates') ?></button>
+            </form>
+        </div>
     </div>
 
     <?php if ($updateSuccess): ?>
@@ -12,11 +21,6 @@
     <?php if ($updateError): ?>
         <div class="alert alert-danger"><?= escape($updateError) ?></div>
     <?php endif; ?>
-
-    <form method="POST" class="mb-4">
-        <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
-        <button type="submit" name="check_updates" value="1" class="btn btn-primary"><i class="fas fa-sync me-1"></i><?= t('check_for_updates') ?></button>
-    </form>
 
     <?php if ($updateStatus !== null): ?>
         <div class="card shadow mb-4">
@@ -154,10 +158,10 @@
         </div>
     <?php else: ?>
         <div class="card shadow">
-            <div class="card-body text-center py-5">
-                <i class="fas fa-arrow-up fa-3x text-muted mb-3"></i>
-                <h5 class="text-muted"><?= t('no_update_info') ?></h5>
-                <p class="text-muted"><?= t('update_info_hint') ?></p>
+            <div class="card-body empty-state">
+                <i class="fas fa-arrow-up-from-bracket"></i>
+                <h5><?= t('no_update_info') ?></h5>
+                <p><?= t('update_info_hint') ?></p>
             </div>
         </div>
     <?php endif; ?>

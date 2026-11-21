@@ -1,7 +1,10 @@
 <?php include __DIR__.'/admin_header.php'; render_admin_header(t('catalog')); ?>
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2><?= t('catalog') ?></h2>
+    <div class="page-head">
+        <div>
+            <h1 class="page-title"><?= t('catalog') ?></h1>
+            <p class="page-subtitle"><?= t('extensions') ?></p>
+        </div>
     </div>
 
     <?php if ($adminCatalogSuccess): ?>
@@ -20,9 +23,9 @@
         </div>
         <div class="col-md-6 mt-2 mt-md-0">
             <div class="btn-group">
-                <a href="?q=<?= urlencode($search ?? '') ?>&type=" class="btn btn-sm btn-outline-primary <?= ($typeFilter ?? '') === '' ? 'active' : '' ?>">All</a>
-                <a href="?q=<?= urlencode($search ?? '') ?>&type=plugin" class="btn btn-sm btn-outline-primary <?= ($typeFilter ?? '') === 'plugin' ? 'active' : '' ?>">Plugin</a>
-                <a href="?q=<?= urlencode($search ?? '') ?>&type=theme" class="btn btn-sm btn-outline-primary <?= ($typeFilter ?? '') === 'theme' ? 'active' : '' ?>">Temi</a>
+                <a href="?q=<?= urlencode($search ?? '') ?>&type=" class="btn btn-sm btn-outline-primary <?= ($typeFilter ?? '') === '' ? 'active' : '' ?>"><?= t('all') ?></a>
+                <a href="?q=<?= urlencode($search ?? '') ?>&type=plugin" class="btn btn-sm btn-outline-primary <?= ($typeFilter ?? '') === 'plugin' ? 'active' : '' ?>"><?= t('plugins') ?></a>
+                <a href="?q=<?= urlencode($search ?? '') ?>&type=theme" class="btn btn-sm btn-outline-primary <?= ($typeFilter ?? '') === 'theme' ? 'active' : '' ?>"><?= t('themes') ?></a>
             </div>
         </div>
     </div>

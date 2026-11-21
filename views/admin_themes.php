@@ -1,13 +1,13 @@
 <?php include __DIR__.'/admin_header.php'; render_admin_header(t('themes')); ?>
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="page-head">
         <div>
-            <h2 class="page-heading mb-0"><?= t('theme_manager') ?></h2>
-            <p class="text-gray-500 mb-0 small"><?= t('themes') ?></p>
+            <h1 class="page-title"><?= t('theme_manager') ?></h1>
+            <p class="page-subtitle"><?= t('themes') ?></p>
         </div>
-        <div class="d-flex gap-2">
+        <div class="page-actions">
             <a href="<?= url('admin_catalog') ?>?type=theme" class="btn btn-outline-primary">
-                <i class="fas fa-store me-1"></i> <?= t('browse_catalog') ?>
+                <i class="fas fa-store"></i> <?= t('browse_catalog') ?>
             </a>
         </div>
     </div>
@@ -140,12 +140,12 @@
 
     <?php if (empty($allThemes)): ?>
         <div class="card shadow-sm">
-            <div class="card-body text-center py-5">
-                <i class="fas fa-palette fa-3x text-gray-400 mb-3"></i>
-                <h5 class="text-gray-600"><?= t('no_themes_found') ?></h5>
-                <p class="text-gray-500 small mb-3"><?= t('theme_get_started') ?></p>
+            <div class="card-body empty-state">
+                <i class="fas fa-palette"></i>
+                <h5><?= t('no_themes_found') ?></h5>
+                <p><?= t('theme_get_started') ?></p>
                 <a href="<?= url('admin_catalog') ?>?type=theme" class="btn btn-primary">
-                    <i class="fas fa-store me-1"></i> <?= t('browse_catalog') ?>
+                    <i class="fas fa-store"></i> <?= t('browse_catalog') ?>
                 </a>
             </div>
         </div>

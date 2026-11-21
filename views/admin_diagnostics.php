@@ -1,9 +1,9 @@
 <?php include __DIR__.'/admin_header.php'; render_admin_header(t('diagnostics')); ?>
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="page-head">
         <div>
-            <h2 class="page-heading mb-0"><?= t('system_diagnostics') ?></h2>
-            <p class="text-gray-500 mb-0 small"><?= t('diagnostics') ?></p>
+            <h1 class="page-title"><?= t('system_diagnostics') ?></h1>
+            <p class="page-subtitle"><?= t('diagnostics') ?></p>
         </div>
     </div>
 

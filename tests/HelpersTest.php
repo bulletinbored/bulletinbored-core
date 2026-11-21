@@ -67,6 +67,29 @@ function test_excerpt(): Test
     return $t;
 }
 
+function test_excerpt_html(): Test
+{
+    $t = new Test('Text - excerpt_html()');
+
+    $bold = excerpt_html('**ciao**');
+    $t->assert('Renders inline bold', str_contains($bold, '<strong>ciao</strong>'));
+    $t->assert('Removes raw Markdown markers', !str_contains($bold, '**'));
+
+    $italic = excerpt_html('*ciao*');
+    $t->assert('Renders inline italic', str_contains($italic, '<em>ciao</em>'));
+
+    $link = excerpt_html('[ciao](https://example.com)');
+    $t->assertEquals('Unwraps links to their text', 'ciao', $link);
+
+    $long = excerpt_html('**' . str_repeat('a', 200) . '**', 10);
+    $t->assertEquals('Truncates while closing tags', '<strong>aaaaaaaaaa</strong>...', $long);
+
+    $xss = excerpt_html('<script>alert(1)</script>');
+    $t->assert('Escapes raw HTML', !str_contains($xss, '<script>'));
+
+    return $t;
+}
+
 function test_marked_parse(): Test
 {
     $t = new Test('Text - marked_parse()');
@@ -205,6 +228,7 @@ register_tests(
     'test_time_ago',
     'test_compact_number',
     'test_excerpt',
+    'test_excerpt_html',
     'test_marked_parse',
     'test_avatar_initial',
     'test_avatar_color_deterministic',

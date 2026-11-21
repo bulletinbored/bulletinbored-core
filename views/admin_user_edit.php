@@ -1,8 +1,13 @@
 <?php include __DIR__.'/admin_header.php'; render_admin_header(t('edit_user') . ' ' . escape($editUser['username'])); ?>
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2><?= t('edit_user') ?>: <?= escape($editUser['username']) ?></h2>
-        <a href="<?= url('admin_users') ?>" class="btn btn-secondary"><?= t('cancel') ?></a>
+    <div class="page-head">
+        <div>
+            <h1 class="page-title"><?= t('edit_user') ?>: <?= escape($editUser['username']) ?></h1>
+            <p class="page-subtitle"><?= t('users') ?></p>
+        </div>
+        <div class="page-actions">
+            <a href="<?= url('admin_users') ?>" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> <?= t('cancel') ?></a>
+        </div>
     </div>
 
     <div class="card shadow mb-4">

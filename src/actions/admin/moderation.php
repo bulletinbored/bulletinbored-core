@@ -181,6 +181,11 @@ function handle_split_thread_post(): \Bulletin\Response|bool
             $postIns->execute(array_merge([$newThreadId, $threadId], $replyIds));
         }
 
+        // Comments left behind that answered a moved/deleted post become
+        // top-level posts instead of unreachable orphans.
+        $pdo->prepare("UPDATE posts SET parent_id = NULL WHERE thread_id = ? AND parent_id IN ($placeholders)")
+            ->execute(array_merge([$threadId], $intIds));
+
         $delSql = "DELETE FROM posts WHERE thread_id = ? AND id IN ($placeholders)";
         $pdo->prepare($delSql)->execute(array_merge([$threadId], $intIds));
 

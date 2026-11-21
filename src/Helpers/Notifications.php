@@ -4,7 +4,7 @@
  * Notification and email functions.
  */
 
-function notify_thread_reply($thread, int $authorId, string $content): void
+function notify_thread_reply($thread, int $authorId, string $content, int $postId = 0, int $postPage = 1, int $extraRecipientId = 0): void
 {
     $pdo = App::getInstance()->pdo;
     if (!isset($pdo) || !$pdo) {
@@ -37,6 +37,12 @@ function notify_thread_reply($thread, int $authorId, string $content): void
         }
     } catch (Throwable $e) {}
 
+    // The author of the comment being answered must hear about it even when
+    // they are not the thread owner and do not watch the thread.
+    if ($extraRecipientId > 0 && $extraRecipientId !== $authorId) {
+        $recipients[$extraRecipientId] = true;
+    }
+
     $ids = array_keys($recipients);
     if (empty($ids)) {
         return;
@@ -55,7 +61,14 @@ function notify_thread_reply($thread, int $authorId, string $content): void
     } catch (Throwable $e) {}
 
     $now = date('Y-m-d H:i:s');
-    $link = url('thread', ['id' => $threadId, 'slug' => slugify($title)], true);
+    $linkParams = ['id' => $threadId, 'slug' => slugify($title)];
+    if ($postPage > 1) {
+        $linkParams['post_page'] = $postPage;
+    }
+    $link = url('thread', $linkParams, true);
+    if ($postId > 0) {
+        $link .= '#post-' . $postId;
+    }
     $ins = $pdo->prepare("INSERT INTO notifications (user_id, type, title, message, link, is_read, created_at) VALUES (?, 'reply', ?, ?, ?, 0, ?)");
     $emailEnabled = App::getInstance()->config['email_notifications'] ?? true;
 

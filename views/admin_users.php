@@ -11,11 +11,19 @@ $users = $pdo->query("SELECT * FROM users ORDER BY id ASC")->fetchAll();
         </div>
         <?php unset($_SESSION['admin_error']); ?>
     <?php endif; ?>
-    <div class="d-flex justify-content-between align-items-center mb-4">
-    <h2><?= t('users_management') ?></h2>
+    <div class="page-head">
+        <div>
+            <h1 class="page-title"><?= t('users_management') ?></h1>
+            <p class="page-subtitle"><?= t('users') ?></p>
+        </div>
+        <div class="page-actions">
+            <a href="#createUser" class="btn btn-primary" data-bs-toggle="collapse" data-bs-target="#createUser" aria-expanded="false" aria-controls="createUser">
+                <i class="fas fa-user-plus"></i> <?= t('add_user') ?>
+            </a>
+        </div>
     </div>
 
-    <div class="card shadow mb-4">
+    <div class="card shadow mb-4 collapse" id="createUser">
         <div class="card-header">
             <h5 class="card-title mb-0"><i class="fas fa-user-plus me-2"></i><?= t('create_user') ?></h5>
         </div>
@@ -74,8 +82,8 @@ $users = $pdo->query("SELECT * FROM users ORDER BY id ASC")->fetchAll();
 
     <div class="card shadow mb-4">
         <div class="card-body">
-            <div class="table-responsive">
-                <table class="table table-hover">
+            <div class="table-responsive-md">
+                <table class="table table-hover align-middle">
                     <thead>
                         <tr>
                             <th><?= t('id') ?></th>
@@ -126,43 +134,68 @@ $users = $pdo->query("SELECT * FROM users ORDER BY id ASC")->fetchAll();
                             <td><?= escape($u['created_at'] ?? 'N/A') ?></td>
                             <td class="text-end">
                                 <?php if ($u['role'] !== 'admin'): ?>
-                                <div class="d-inline-flex align-items-stretch gap-1 flex-nowrap actions-cell">
-                                    <?php if ($u['status'] === 'banned' || ($suspensionTime > $now && $now < $suspensionTime)): ?>
-                                    <form method="POST" action="<?= url('unban_user', ['id' => $u['id']]) ?>" class="d-flex m-0" data-confirm='<?= t('unban_user') ?>?'>
-                                        <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
-                                        <input type="hidden" name="id" value="<?= (int)$u['id'] ?>">
-                                        <input type="hidden" name="redirect" value="/admin/users">
-                                        <button type="submit" class="btn btn-sm btn-success w-100" title="<?= t('unban_user') ?>"><i class="fas fa-unlock"></i></button>
-                                    </form>
-                                    <?php else: ?>
-                                    <form method="POST" action="<?= url('ban_user', ['id' => $u['id']]) ?>" class="d-flex m-0" data-confirm='<?= t('ban_user') ?>?'>
-                                        <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
-                                        <input type="hidden" name="id" value="<?= (int)$u['id'] ?>">
-                                        <input type="hidden" name="redirect" value="/admin/users">
-                                        <button type="submit" class="btn btn-sm btn-warning w-100" title="<?= t('ban_user') ?>"><i class="fas fa-ban"></i></button>
-                                    </form>
-                                    <form method="POST" action="<?= url('suspend_user', ['id' => $u['id']]) ?>" class="d-flex align-items-stretch gap-1 m-0" data-confirm='<?= t('suspend') ?>?'>
-                                        <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
-                                        <input type="hidden" name="id" value="<?= (int)$u['id'] ?>">
-                                        <input type="number" name="days" min="1" max="30" value="1" title="<?= t('days') ?>" class="form-control form-control-sm days-input">
-                                        <input type="hidden" name="redirect" value="/admin/users">
-                                        <button type="submit" class="btn btn-sm btn-info" title="<?= t('suspend') ?>"><i class="fas fa-lock"></i></button>
-                                    </form>
-                                    <?php endif; ?>
-                                    <form method="POST" action="<?= url('disconnect_user', ['id' => $u['id']]) ?>" class="d-flex m-0" data-confirm='<?= t('disconnect_confirm') ?>'>
-                                        <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
-                                        <input type="hidden" name="id" value="<?= (int)$u['id'] ?>">
-                                        <input type="hidden" name="redirect" value="/admin/users">
-                                        <button type="submit" class="btn btn-sm btn-secondary w-100" title="<?= t('disconnect_user') ?>"><i class="fas fa-power-off"></i></button>
-                                    </form>
-                                    <form method="POST" action="<?= url('delete_user', ['id' => $u['id']]) ?>" class="d-flex m-0" data-confirm='<?= t('delete_confirm') ?>?'>
-                                        <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
-                                        <input type="hidden" name="id" value="<?= (int)$u['id'] ?>">
-                                        <button type="submit" class="btn btn-sm btn-danger w-100" title="<?= t('delete') ?>"><i class="fas fa-trash"></i></button>
-                                    </form>
+                                <div class="dropdown actions-dropdown">
+                                    <button class="btn btn-sm btn-outline-secondary actions-toggle" type="button"
+                                            data-bs-toggle="dropdown" data-bs-boundary="viewport"
+                                            aria-expanded="false" aria-label="<?= t('actions') ?>">
+                                        <i class="fas fa-ellipsis-vertical"></i>
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-end">
+                                        <li>
+                                            <a class="dropdown-item" href="<?= url('admin_user_edit', ['id' => $u['id']]) ?>">
+                                                <i class="fas fa-pen"></i><?= t('edit') ?>
+                                            </a>
+                                        </li>
+                                        <li><hr class="dropdown-divider"></li>
+                                        <?php if ($u['status'] === 'banned' || ($suspensionTime > $now && $now < $suspensionTime)): ?>
+                                        <li>
+                                            <form method="POST" action="<?= url('unban_user', ['id' => $u['id']]) ?>" data-confirm='<?= t('unban_user') ?>?'>
+                                                <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                                                <input type="hidden" name="id" value="<?= (int)$u['id'] ?>">
+                                                <input type="hidden" name="redirect" value="/admin/users">
+                                                <button type="submit" class="dropdown-item"><i class="fas fa-unlock"></i><?= t('unban_user') ?></button>
+                                            </form>
+                                        </li>
+                                        <?php else: ?>
+                                        <li>
+                                            <form method="POST" action="<?= url('ban_user', ['id' => $u['id']]) ?>" data-confirm='<?= t('ban_user') ?>?'>
+                                                <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                                                <input type="hidden" name="id" value="<?= (int)$u['id'] ?>">
+                                                <input type="hidden" name="redirect" value="/admin/users">
+                                                <button type="submit" class="dropdown-item"><i class="fas fa-ban"></i><?= t('ban_user') ?></button>
+                                            </form>
+                                        </li>
+                                        <li>
+                                            <form method="POST" action="<?= url('suspend_user', ['id' => $u['id']]) ?>"
+                                                  data-suspend-form data-suspend-prompt="<?= t('suspend_prompt') ?>">
+                                                <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                                                <input type="hidden" name="id" value="<?= (int)$u['id'] ?>">
+                                                <input type="hidden" name="days" value="1">
+                                                <input type="hidden" name="redirect" value="/admin/users">
+                                                <button type="submit" class="dropdown-item"><i class="fas fa-lock"></i><?= t('suspend') ?></button>
+                                            </form>
+                                        </li>
+                                        <?php endif; ?>
+                                        <li>
+                                            <form method="POST" action="<?= url('disconnect_user', ['id' => $u['id']]) ?>" data-confirm='<?= t('disconnect_confirm') ?>'>
+                                                <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                                                <input type="hidden" name="id" value="<?= (int)$u['id'] ?>">
+                                                <input type="hidden" name="redirect" value="/admin/users">
+                                                <button type="submit" class="dropdown-item"><i class="fas fa-power-off"></i><?= t('disconnect_user') ?></button>
+                                            </form>
+                                        </li>
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li>
+                                            <form method="POST" action="<?= url('delete_user', ['id' => $u['id']]) ?>" data-confirm='<?= t('delete_confirm') ?>?'>
+                                                <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                                                <input type="hidden" name="id" value="<?= (int)$u['id'] ?>">
+                                                <button type="submit" class="dropdown-item text-danger"><i class="fas fa-trash"></i><?= t('delete') ?></button>
+                                            </form>
+                                        </li>
+                                    </ul>
                                 </div>
                                 <?php else: ?>
-                                <span class="text-muted"><i class="fas fa-shield-alt" title="<?= t('admin') ?>"></i></span>
+                                <span class="badge bg-light text-danger" title="<?= t('admin') ?>"><i class="fas fa-shield-halved"></i></span>
                                 <?php endif; ?>
                             </td>
                         </tr>
