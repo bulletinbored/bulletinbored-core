@@ -113,8 +113,21 @@ function test_upgrade_from_previous_release_preserves_content(): Test
         return $t;
     }
 
-    // Build the previous release's schema and content.
-    $partial = upgrade_compat_partial_migrate($pdo, 2);
+    // Build the previous release's schema and content. Everything from the
+    // title-decoding migration onward stays pending: the fixture seeds an
+    // HTML-encoded title that the data migration must repair.
+    $allMigrations = (new Migrator($pdo, []))->getAllMigrations();
+    $decodeIndex = null;
+    foreach ($allMigrations as $index => $migration) {
+        if (str_contains((string)$migration['name'], '20261009_decode_thread_titles')) {
+            $decodeIndex = $index;
+            break;
+        }
+    }
+    if ($decodeIndex === null) {
+        throw new RuntimeException('decode_thread_titles migration not found');
+    }
+    $partial = upgrade_compat_partial_migrate($pdo, count($allMigrations) - $decodeIndex);
     $t->assert('Some migrations were applied', $partial['ran'] > 0);
 
     $db = new DbQuery($pdo);
