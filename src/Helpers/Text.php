@@ -57,3 +57,79 @@ function excerpt($text, $length = 110) {
     if (mb_strlen($text) <= $length) return $text;
     return mb_substr($text, 0, $length) . '...';
 }
+
+/**
+ * Render a short, single-line excerpt with inline Markdown formatting.
+ *
+ * Post content is stored as Markdown. The "last activity" preview used to run
+ * it through excerpt(), which only strips HTML tags and therefore exposed the
+ * raw syntax ("**bold**"). This helper parses inline Markdown and keeps only
+ * inline formatting that is valid inside the preview link. Images and links
+ * are unwrapped because the excerpt itself is already an anchor.
+ */
+function excerpt_html($text, $length = 110) {
+    $text = (string)$text;
+    if ($text === '') {
+        return '';
+    }
+
+    require_once __DIR__ . '/../markdown.php';
+
+    $html = bb_parse_inline(html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+    // Keep only formatting that is safe and valid inside the excerpt anchor.
+    $html = strip_tags($html, '<strong><b><em><i><code><del><s>');
+    $html = trim(preg_replace('/\s+/u', ' ', $html));
+
+    if ($html === '') {
+        return '';
+    }
+
+    $parts = preg_split('/(<[^>]*>)/u', $html, -1, PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_NO_EMPTY);
+    $out = '';
+    $open = [];
+    $visible = 0;
+    $truncated = false;
+
+    foreach ($parts as $part) {
+        if ($part[0] === '<') {
+            if (preg_match('#^</([a-z0-9]+)\s*>$#i', $part, $m)) {
+                $name = strtolower($m[1]);
+                if (!empty($open) && end($open) === $name) {
+                    array_pop($open);
+                }
+                $out .= $part;
+            } elseif (preg_match('#^<([a-z0-9]+)(?:\s[^>]*)?>$#i', $part, $m)) {
+                $open[] = strtolower($m[1]);
+                $out .= $part;
+            }
+            continue;
+        }
+
+        $remaining = $length - $visible;
+        if ($remaining <= 0) {
+            $truncated = true;
+            break;
+        }
+
+        $partLength = mb_strlen($part, 'UTF-8');
+        if ($partLength > $remaining) {
+            $out .= mb_substr($part, 0, $remaining, 'UTF-8');
+            $visible += $remaining;
+            $truncated = true;
+            break;
+        }
+
+        $out .= $part;
+        $visible += $partLength;
+    }
+
+    while (!empty($open)) {
+        $out .= '</' . array_pop($open) . '>';
+    }
+
+    if ($truncated) {
+        $out = rtrim($out) . '...';
+    }
+
+    return $out;
+}

@@ -93,7 +93,7 @@ $totalPages  = (int)($totalPages ?? 1);
                                 <span class="dot">·</span>
                                 <time datetime="<?= escape($item['last_post_at'] ?? '') ?>"><?= time_ago($item['last_post_at'] ?? '') ?></time>
                                 <a class="last-activity-excerpt" href="<?= $lastPostUrl ?>">
-                                    <?= escape(excerpt($item['last_post_content'] ?? '')) ?>
+                                    <?= excerpt_html($item['last_post_content'] ?? '') ?>
                                 </a>
                             </div>
                         </div>
