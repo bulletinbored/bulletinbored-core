@@ -148,6 +148,6 @@ var UPDATE_ORDER_URL = '<?= url('update_category_order') ?>';
 var SAVE_TEXT = '<?= t('save') ?>';
 var ERROR_TEXT = '<?= t('error_occurred') ?>';
 </script>
-<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js" nonce="<?= htmlspecialchars(csp_nonce(), ENT_QUOTES, 'UTF-8') ?>"></script>
 <script src="<?= htmlspecialchars(base_url() . '/assets/js/admin-categories.js', ENT_QUOTES, 'UTF-8') ?>" nonce="<?= htmlspecialchars(csp_nonce(), ENT_QUOTES, 'UTF-8') ?>"></script>
 <?php include __DIR__.'/admin_footer.php'; ?>
