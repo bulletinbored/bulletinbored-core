@@ -53,12 +53,12 @@ body.admin-layout {
     letter-spacing: -.01em;
 }
 
-.admin-layout a {
+:where(.admin-layout) a {
     color: var(--admin-brand);
     text-decoration: none;
 }
 
-.admin-layout a:hover {
+:where(.admin-layout) a:hover {
     color: var(--admin-brand-700);
 }
 
@@ -513,6 +513,10 @@ body.sidebar-toggled .sidebar-overlay {
     font-size: .68rem;
     color: var(--admin-muted);
     font-weight: 500;
+}
+
+.user-menu .dropdown-toggle::after {
+    display: none;
 }
 
 .user-menu .chevron {
