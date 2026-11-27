@@ -183,6 +183,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install']) && !valida
             // INSERT IGNORE is MySQL-only; SQLite uses INSERT OR IGNORE.
             $insertIgnoreSql = $dbDriver === 'mysql' ? 'INSERT IGNORE' : 'INSERT OR IGNORE';
 
+        // Both schema branches seed the canonical role permissions below.
+        require_once __DIR__ . '/lib/DefaultRoles.php';
+
         if ($dbDriver === 'mysql') {
             $tables = [
                 "users" => "id INT AUTO_INCREMENT PRIMARY KEY, username VARCHAR(191) UNIQUE NOT NULL, password VARCHAR(255) NOT NULL, email VARCHAR(255), role VARCHAR(50) DEFAULT 'user', avatar VARCHAR(255), status VARCHAR(50) DEFAULT 'active', suspension_time INTEGER DEFAULT 0, email_verified INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
@@ -214,7 +217,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install']) && !valida
             // Canonical "resource.action" permissions, shared with the
             // migrations: the old "can_*" names made every permission check
             // fail for non-admin users on installations created here.
-            require_once __DIR__ . '/lib/DefaultRoles.php';
             $defaultRoles = [];
             foreach (bb_default_role_permissions() as $roleName => $permissions) {
                 $defaultRoles[] = [$roleName, json_encode($permissions)];
