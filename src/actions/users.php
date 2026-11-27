@@ -304,26 +304,44 @@ function handle_profile(array $params = []): \Bulletin\Response|bool
         throw new \Bulletin\NotFoundException('User not found');
     }
 
-    $userThreadsStmt = $pdo->prepare("
-        SELECT t.*, u.username as author
-        FROM threads t
-        JOIN users u ON t.user_id = u.id
-        WHERE t.user_id = ? AND t.status IN ('visible', 'sticky', 'locked')
-        ORDER BY (t.status = 'sticky') DESC, t.created_at DESC
-        LIMIT 20
-    ");
-    $userThreadsStmt->execute([$profileUser['id']]);
-    $userThreads = $userThreadsStmt->fetchAll();
+    $viewerId = (int)($_SESSION['user_id'] ?? 0);
+    $profileVisible = bb_can_view_profile($profileUser);
 
+    $userThreads = [];
     $profileStats = ['threads' => 0, 'posts' => 0];
-    try {
-        $s = $pdo->prepare("SELECT COUNT(*) FROM threads WHERE user_id = ? AND status IN ('visible','sticky','locked')");
-        $s->execute([$profileUser['id']]);
-        $profileStats['threads'] = (int)$s->fetchColumn();
-        $s = $pdo->prepare("SELECT COUNT(*) FROM posts WHERE user_id = ? AND status = 'visible'");
-        $s->execute([$profileUser['id']]);
-        $profileStats['posts'] = (int)$s->fetchColumn();
-    } catch (PDOException $e) {}
+
+    if ($profileVisible) {
+        // Enforce both thread visibility and (for social posts) the profile
+        // visibility of the author, exactly like the listings.
+        $visibility = bb_thread_visibility_condition('t', $viewerId, null, 'u');
+        $audience = bb_plugin_audience_sql('t', $viewerId, null);
+        $audienceSql = $audience !== null ? ' AND ' . $audience['sql'] : '';
+        $audienceParams = $audience['params'] ?? [];
+        $userThreadsStmt = $pdo->prepare("
+            SELECT t.*, u.username as author
+            FROM threads t
+            JOIN users u ON t.user_id = u.id
+            WHERE t.user_id = ? AND t.status IN ('visible', 'sticky', 'locked')
+              AND {$visibility['sql']}{$audienceSql}
+            ORDER BY (t.status = 'sticky') DESC, t.created_at DESC
+            LIMIT 20
+        ");
+        $userThreadsStmt->execute(array_merge([$profileUser['id']], $visibility['params'], $audienceParams));
+        $userThreads = $userThreadsStmt->fetchAll();
+
+        try {
+            $s = $pdo->prepare("
+                SELECT COUNT(*) FROM threads t JOIN users u ON u.id = t.user_id
+                WHERE t.user_id = ? AND t.status IN ('visible','sticky','locked')
+                  AND {$visibility['sql']}{$audienceSql}
+            ");
+            $s->execute(array_merge([$profileUser['id']], $visibility['params'], $audienceParams));
+            $profileStats['threads'] = (int)$s->fetchColumn();
+            $s = $pdo->prepare("SELECT COUNT(*) FROM posts WHERE user_id = ? AND status = 'visible'");
+            $s->execute([$profileUser['id']]);
+            $profileStats['posts'] = (int)$s->fetchColumn();
+        } catch (PDOException $e) {}
+    }
 
     include __DIR__ . '/../../views/profile.php';
     return true;

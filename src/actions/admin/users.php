@@ -239,6 +239,10 @@ function handle_delete_user_post(): \Bulletin\Response|bool
             $_SESSION['admin_error'] = t('user_not_deleted') ?? 'User could not be deleted (does not exist or is an admin).';
         } else {
             log_admin_action('user_delete', ['target_id' => $userId]);
+            $pluginManager = App::getInstance()->pluginManager;
+            if ($pluginManager instanceof PluginManager) {
+                $pluginManager->runHook('user_after_delete', $userId);
+            }
         }
     } else {
         $_SESSION['admin_error'] = t('invalid_user_id') ?? 'Invalid user id.';

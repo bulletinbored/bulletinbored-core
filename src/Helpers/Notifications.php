@@ -194,10 +194,35 @@ function ensure_private_messages_table($pdo) {
     }
 }
 
+/**
+ * Core notification adapter.
+ *
+ * All code and plugins should create in-app notifications through this helper
+ * instead of inserting into `notifications` directly. The `notification_created`
+ * hook lets a plugin (bellbored, e-mail digests, push) react to a notification
+ * without owning the notification model.
+ */
 function create_notification(PDO $pdo, int $userId, string $type, string $title, string $message, string $link = ''): void
 {
+    if ($userId <= 0) {
+        return;
+    }
+
     $pdo->prepare("INSERT INTO notifications (user_id, type, title, message, link) VALUES (?, ?, ?, ?, ?)")
         ->execute([$userId, $type, $title, $message, $link]);
+
+    $pluginManager = App::getInstance()->pluginManager;
+    if ($pluginManager instanceof PluginManager) {
+        $pluginManager->runHook(
+            'notification_created',
+            (int)$pdo->lastInsertId(),
+            $userId,
+            $type,
+            $title,
+            $message,
+            $link
+        );
+    }
 }
 
 function notification_label(array $n): string

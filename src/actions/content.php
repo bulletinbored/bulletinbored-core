@@ -68,14 +68,7 @@ function handle_download(array $params = []): \Bulletin\Response|bool
     $pdo = App::getInstance()->pdo;
 
     $uploadId = (int)($params['id'] ?? $_GET['id'] ?? 0);
-    $stmt = $pdo->prepare("
-        SELECT u.*, COALESCE(t.status, t2.status) AS thread_status
-        FROM uploads u
-        LEFT JOIN threads t ON u.thread_id = t.id
-        LEFT JOIN posts p ON u.post_id = p.id
-        LEFT JOIN threads t2 ON p.thread_id = t2.id
-        WHERE u.id = ?
-    ");
+    $stmt = $pdo->prepare("SELECT * FROM uploads WHERE id = ?");
     $stmt->execute([$uploadId]);
     $upload = $stmt->fetch();
 
@@ -83,8 +76,28 @@ function handle_download(array $params = []): \Bulletin\Response|bool
         throw new \Bulletin\NotFoundException('File not found');
     }
 
-    $threadStatus = $upload['thread_status'] ?? null;
-    if ($threadStatus === null || !can_view_thread($threadStatus)) {
+    $threadId = (int)($upload['thread_id'] ?? 0);
+    if ($threadId <= 0 && !empty($upload['post_id'])) {
+        $postStmt = $pdo->prepare("SELECT thread_id FROM posts WHERE id = ?");
+        $postStmt->execute([(int)$upload['post_id']]);
+        $threadId = (int)($postStmt->fetchColumn() ?: 0);
+    }
+
+    if ($threadId <= 0) {
+        throw new \Bulletin\NotFoundException('File not found');
+    }
+
+    $threadStmt = $pdo->prepare("
+        SELECT t.*, " . bb_profile_visibility_select('u') . "
+        FROM threads t LEFT JOIN users u ON u.id = t.user_id
+        WHERE t.id = ?
+    ");
+    $threadStmt->execute([$threadId]);
+    $thread = $threadStmt->fetch();
+
+    if (!$thread
+        || !can_view_thread((string)($thread['status'] ?? 'visible'))
+        || !bb_can_view_thread($thread)) {
         throw new \Bulletin\NotFoundException('File not found');
     }
 

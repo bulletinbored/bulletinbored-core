@@ -88,34 +88,41 @@ $stats       = $profileStats ?? ['threads' => 0, 'posts' => 0];
         </div>
     <?php endif; ?>
 
-    <h2 class="section-title"><?= t('threads_by') ?> <?= escape($profileUser['username'] ?? '') ?></h2>
-
-    <?php if (empty($userThreads ?? [])): ?>
+    <?php if (($profileVisible ?? true) === false): ?>
         <div class="empty-state empty-state-sm">
-            <i class="fas fa-inbox"></i>
-            <p><?= t('no_threads') ?></p>
+            <i class="fas fa-lock"></i>
+            <p><?= t('private_profile') ?></p>
         </div>
     <?php else: ?>
-        <div class="discussion-list">
-            <?php foreach ($userThreads as $item): ?>
-                <article class="discussion discussion-compact">
-                    <div class="discussion-main">
-                        <div class="discussion-top">
-                            <?php if (($item['status'] ?? '') === 'sticky'): ?>
-                                <span class="pill pill-sticky"><i class="fas fa-thumbtack"></i><?= t('sticky') ?></span>
-                            <?php endif; ?>
-                            <?php if (($item['status'] ?? '') === 'locked'): ?>
-                                <span class="pill pill-locked"><i class="fas fa-lock"></i><?= t('locked') ?></span>
-                            <?php endif; ?>
+        <h2 class="section-title"><?= t('threads_by') ?> <?= escape($profileUser['username'] ?? '') ?></h2>
+
+        <?php if (empty($userThreads ?? [])): ?>
+            <div class="empty-state empty-state-sm">
+                <i class="fas fa-inbox"></i>
+                <p><?= t('no_threads') ?></p>
+            </div>
+        <?php else: ?>
+            <div class="discussion-list">
+                <?php foreach ($userThreads as $item): ?>
+                    <article class="discussion discussion-compact">
+                        <div class="discussion-main">
+                            <div class="discussion-top">
+                                <?php if (($item['status'] ?? '') === 'sticky'): ?>
+                                    <span class="pill pill-sticky"><i class="fas fa-thumbtack"></i><?= t('sticky') ?></span>
+                                <?php endif; ?>
+                                <?php if (($item['status'] ?? '') === 'locked'): ?>
+                                    <span class="pill pill-locked"><i class="fas fa-lock"></i><?= t('locked') ?></span>
+                                <?php endif; ?>
+                            </div>
+                            <h3 class="discussion-title">
+                                <a href="<?= url('thread', ['id' => $item['id'], 'slug' => slugify($item['title'] ?? '')]) ?>"><?= escape($item['title']) ?></a>
+                            </h3>
+                            <p class="discussion-meta"><time><?= time_ago($item['created_at'] ?? '') ?></time></p>
                         </div>
-                        <h3 class="discussion-title">
-                            <a href="<?= url('thread', ['id' => $item['id'], 'slug' => slugify($item['title'] ?? '')]) ?>"><?= escape($item['title']) ?></a>
-                        </h3>
-                        <p class="discussion-meta"><time><?= time_ago($item['created_at'] ?? '') ?></time></p>
-                    </div>
-                </article>
-            <?php endforeach; ?>
-        </div>
+                    </article>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
     <?php endif; ?>
 <?php render_footer(); ?>
 <script nonce="<?= htmlspecialchars(csp_nonce(), ENT_QUOTES, 'UTF-8') ?>">

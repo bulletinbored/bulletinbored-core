@@ -9,6 +9,7 @@
 require_once __DIR__ . '/Security.php';
 require_once __DIR__ . '/Helpers/Url.php';
 require_once __DIR__ . '/Helpers/AuthHelpers.php';
+require_once __DIR__ . '/Helpers/Visibility.php';
 require_once __DIR__ . '/Helpers/Upload.php';
 require_once __DIR__ . '/Helpers/Mail.php';
 require_once __DIR__ . '/Helpers/Notifications.php';

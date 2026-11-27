@@ -37,18 +37,27 @@ function handle_upload_image(): \Bulletin\Response|bool
     }
 
     // Authorization check BEFORE moving file
-    $contextSql = "SELECT t.id, t.status FROM threads t WHERE t.id = ?";
+    $profileVisibilitySelect = bb_profile_visibility_select('u');
+    $contextSql = "SELECT t.*, {$profileVisibilitySelect}
+                   FROM threads t LEFT JOIN users u ON u.id = t.user_id
+                   WHERE t.id = ?";
     $contextParams = [$threadId];
     if ($threadId <= 0) {
         // Verify post belongs to thread
-        $contextSql = "SELECT t.id, t.status FROM threads t JOIN posts p ON p.thread_id = t.id WHERE p.id = ?";
+        $contextSql = "SELECT t.*, {$profileVisibilitySelect}
+                       FROM threads t
+                       JOIN posts p ON p.thread_id = t.id
+                       LEFT JOIN users u ON u.id = t.user_id
+                       WHERE p.id = ?";
         $contextParams = [$postId];
     }
 
     $contextStmt = $pdo->prepare($contextSql);
     $contextStmt->execute($contextParams);
     $context = $contextStmt->fetch();
-    if ($context === false || !can_view_thread((string)$context['status'])) {
+    if ($context === false
+        || !can_view_thread((string)$context['status'])
+        || !bb_can_view_thread($context)) {
         return \Bulletin\Response::json(['ok' => false, 'error' => 'Thread not found'], 404);
     }
 
@@ -149,9 +158,11 @@ function handle_thread_view(array $params = []): \Bulletin\Response|bool
         return redirect(url('home'));
     }
 
+    $profileVisibilitySelect = bb_profile_visibility_select('u');
     $stmt = $pdo->prepare("
         SELECT t.*, u.username as author, u.avatar as author_avatar, u.role as author_role,
                u.created_at as author_joined, u.id as author_id,
+               {$profileVisibilitySelect},
                c.name as category_name,
                COALESCE(t.views, 0) as view_count,
                (SELECT COUNT(*) FROM posts p WHERE p.thread_id = t.id AND p.status = 'visible') as reply_count,
@@ -176,7 +187,7 @@ function handle_thread_view(array $params = []): \Bulletin\Response|bool
     }
 
     $threadStatus = $thread['status'] ?? 'visible';
-    if (!can_view_thread($threadStatus)) {
+    if (!can_view_thread($threadStatus) || !bb_can_view_thread($thread)) {
         throw new \Bulletin\ForbiddenException('Thread not available');
     }
 
@@ -349,11 +360,17 @@ function handle_watch(): \Bulletin\Response|bool
         return redirect(url('home'));
     }
 
-    $thread = $pdo->prepare("SELECT status FROM threads WHERE id = ?");
+    $thread = $pdo->prepare("
+        SELECT t.*, " . bb_profile_visibility_select('u') . "
+        FROM threads t LEFT JOIN users u ON u.id = t.user_id
+        WHERE t.id = ?
+    ");
     $thread->execute([$threadId]);
-    $threadStatus = $thread->fetchColumn();
+    $threadRow = $thread->fetch();
 
-    if ($threadStatus === false || !can_view_thread((string)$threadStatus)) {
+    if ($threadRow === false
+        || !can_view_thread((string)$threadRow['status'])
+        || !bb_can_view_thread($threadRow)) {
         throw new \Bulletin\ForbiddenException('Thread not available');
     }
 
@@ -398,11 +415,17 @@ function handle_unwatch(): \Bulletin\Response|bool
         return redirect(url('home'));
     }
 
-    $thread = $pdo->prepare("SELECT status FROM threads WHERE id = ?");
+    $thread = $pdo->prepare("
+        SELECT t.*, " . bb_profile_visibility_select('u') . "
+        FROM threads t LEFT JOIN users u ON u.id = t.user_id
+        WHERE t.id = ?
+    ");
     $thread->execute([$threadId]);
-    $threadStatus = $thread->fetchColumn();
+    $threadRow = $thread->fetch();
 
-    if ($threadStatus === false || !can_view_thread((string)$threadStatus)) {
+    if ($threadRow === false
+        || !can_view_thread((string)$threadRow['status'])
+        || !bb_can_view_thread($threadRow)) {
         throw new \Bulletin\ForbiddenException('Thread not available');
     }
 

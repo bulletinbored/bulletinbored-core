@@ -1668,6 +1668,202 @@ dialog.bb-modal form { padding: 1.25rem; }
 /* ---------- fallback avatar (inline SVG, CSP-safe) ---------- */
 .avatar-initial { display: inline-block; vertical-align: middle; flex-shrink: 0; border-radius: 50%; overflow: hidden; }
 
+/* =====================================================================
+   social mode identity
+   The socialbored plugin adds `social-mode` to <html> on its pages. The
+   plugin ships the component styles; these tokens give those components
+   (and the shared navbar/body chrome) the intended social-first look.
+   Classic forum pages are untouched because every rule is scoped.
+   ===================================================================== */
+html.social-mode {
+    --fb-brand:        #6d28d9;
+    --fb-brand-dark:   #4c1d95;
+    --fb-brand-bright: #8b5cf6;
+    --fb-brand-soft:   #f1eafe;
+    --fb-brand-ring:   rgba(109, 40, 217, .16);
+    --fb-bg:           #f6f5fb;
+    --fb-surface:      #ffffff;
+    --fb-surface-2:    #faf9fe;
+    --fb-border:       #e7e4f2;
+    --fb-border-soft:  #f0edf8;
+    --fb-text:         #1b1830;
+    --fb-muted:        #65617e;
+    --fb-muted-soft:   #9a96ad;
+    --fb-radius:       20px;
+    --fb-radius-md:    14px;
+    --fb-radius-sm:    11px;
+    --fb-radius-xs:    9px;
+    --fb-shadow:       0 1px 2px rgba(27, 24, 48, .04), 0 18px 40px -28px rgba(76, 29, 149, .35);
+}
+
+html.social-mode body {
+    background:
+        radial-gradient(1200px 420px at 50% -120px, rgba(109, 40, 217, .10), transparent 65%),
+        var(--fb-bg);
+}
+
+html.social-mode .navbar-forum {
+    background: rgba(255, 255, 255, .86);
+    backdrop-filter: saturate(140%) blur(14px);
+    -webkit-backdrop-filter: saturate(140%) blur(14px);
+    border-bottom: 1px solid var(--fb-border);
+    box-shadow: 0 1px 0 rgba(27, 24, 48, .02);
+}
+
+html.social-mode .navbar-forum.scrolled {
+    background: rgba(255, 255, 255, .96);
+    box-shadow: 0 10px 30px -22px rgba(27, 24, 48, .35);
+}
+
+html.social-mode .navbar-forum .brand-text {
+    font-weight: 800;
+    letter-spacing: -.02em;
+}
+
+html.social-mode .navbar-forum .brand-text b,
+html.social-mode .navbar-forum .brand-mark {
+    color: var(--fb-brand);
+}
+
+html.social-mode .navbar-forum .nav-link {
+    color: var(--fb-muted);
+    font-weight: 600;
+}
+
+html.social-mode .navbar-forum .nav-link:hover,
+html.social-mode .navbar-forum .nav-link.active {
+    color: var(--fb-brand);
+}
+
+html.social-mode .social-shell {
+    max-width: 1080px;
+}
+
+html.social-mode .social-layout {
+    grid-template-columns: minmax(0, 1fr) 312px;
+    gap: 1.35rem;
+}
+
+html.social-mode .social-page-title {
+    font-size: 1.7rem;
+}
+
+html.social-mode .social-post {
+    padding: 1.05rem 1.15rem 1rem;
+}
+
+html.social-mode .social-post:hover {
+    border-color: #d8d2ee;
+    box-shadow: 0 1px 2px rgba(27, 24, 48, .04), 0 22px 44px -30px rgba(76, 29, 149, .42);
+}
+
+html.social-mode .social-avatar img,
+html.social-mode .social-avatar svg {
+    box-shadow: 0 0 0 2px var(--fb-surface), 0 0 0 3px var(--fb-border-soft);
+}
+
+html.social-mode .social-author {
+    font-size: .98rem;
+}
+
+html.social-mode .social-tab.is-active {
+    color: var(--fb-brand);
+}
+
+html.social-mode .social-tab.is-active::after {
+    background: linear-gradient(90deg, var(--fb-brand), #a855f7);
+}
+
+html.social-mode .btn-brand {
+    background: linear-gradient(135deg, var(--fb-brand), #8b5cf6);
+    border-color: transparent;
+    box-shadow: 0 8px 18px -12px rgba(109, 40, 217, .65);
+}
+
+html.social-mode .btn-brand:hover {
+    background: linear-gradient(135deg, var(--fb-brand-dark), #7c3aed);
+    border-color: transparent;
+}
+
+html.social-mode .btn-outline-soft {
+    border-color: var(--fb-border);
+    color: var(--fb-text);
+    background: var(--fb-surface);
+}
+
+html.social-mode .btn-outline-soft:hover {
+    border-color: var(--fb-brand);
+    color: var(--fb-brand);
+}
+
+html.social-mode .form-control,
+html.social-mode .form-select {
+    border-color: var(--fb-border);
+    border-radius: var(--fb-radius-sm);
+    background-color: var(--fb-surface);
+}
+
+html.social-mode .form-control:focus,
+html.social-mode .form-select:focus {
+    border-color: var(--fb-brand);
+    box-shadow: 0 0 0 .2rem rgba(109, 40, 217, .12);
+}
+
+html.social-mode .social-compose-prompt {
+    background: var(--fb-surface);
+    border-radius: 999px;
+}
+
+html.social-mode .social-compose-prompt:hover {
+    border-color: var(--fb-brand);
+    box-shadow: 0 16px 32px -26px rgba(109, 40, 217, .55);
+}
+
+html.social-mode .social-profile {
+    box-shadow: 0 1px 2px rgba(27, 24, 48, .04), 0 26px 60px -46px rgba(76, 29, 149, .55);
+}
+
+html.social-mode .social-cover {
+    background-color: var(--fb-brand-soft);
+}
+
+html.social-mode .social-profile-name {
+    font-size: 1.6rem;
+}
+
+html.social-mode .social-admin-bar {
+    background: #fbfaff;
+}
+
+html.social-mode .social-tag {
+    background: var(--fb-brand-soft);
+    color: var(--fb-brand-dark);
+}
+
+html.social-mode .social-tag:hover {
+    background: #e7d9ff;
+}
+
+html.social-mode .social-empty {
+    background: rgba(255, 255, 255, .7);
+}
+
+@media (max-width: 991.98px) {
+    html.social-mode .social-layout {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 575.98px) {
+    html.social-mode .social-page-title {
+        font-size: 1.4rem;
+    }
+
+    html.social-mode .social-post {
+        border-radius: var(--fb-radius-md);
+    }
+}
+
 /* ---------- reduced motion ---------- */
 @media (prefers-reduced-motion: reduce) {
     *,

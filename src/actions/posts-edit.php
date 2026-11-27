@@ -117,7 +117,7 @@ function handle_reply_post(): \Bulletin\Response|bool
         return redirect(url('thread', ['id' => $threadId]));
     }
 
-    if (!can_view_thread($thread['status'])) {
+    if (!can_view_thread($thread['status']) || !bb_can_view_thread($thread)) {
         throw new \Bulletin\ForbiddenException('Not authorized to reply to this thread');
     }
 

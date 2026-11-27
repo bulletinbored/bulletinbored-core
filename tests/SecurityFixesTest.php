@@ -347,7 +347,8 @@ function test_download_requires_thread_access(): Test
     $code = file_get_contents(__DIR__ . '/../src/actions/content.php');
     $t->assert('can_view_thread in download', str_contains($code, 'can_view_thread'));
     $t->assert('NotFoundException for unauthorized', str_contains($code, 'NotFoundException'));
-    $t->assert('Thread status checked', str_contains($code, 'thread_status'));
+    $t->assert('Thread status checked', str_contains($code, 'can_view_thread'));
+    $t->assert('Core visibility checked', str_contains($code, 'bb_can_view_thread'));
     return $t;
 }
 

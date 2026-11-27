@@ -203,6 +203,7 @@ function create_test_schema(PDO $pdo): void
             suspension_time INTEGER DEFAULT 0,
             email_verified INTEGER DEFAULT 0,
             session_version INTEGER DEFAULT 1,
+            profile_visibility TEXT DEFAULT 'public',
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
         CREATE TABLE IF NOT EXISTS categories (
@@ -219,6 +220,7 @@ function create_test_schema(PDO $pdo): void
             title TEXT NOT NULL,
             content TEXT,
             status TEXT DEFAULT 'visible',
+            visibility TEXT DEFAULT 'public',
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             views INTEGER DEFAULT 0

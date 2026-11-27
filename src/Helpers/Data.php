@@ -77,6 +77,23 @@ function fetch_threads(array $opts = []) {
         $params[] = "%{$search}%";
         $params[] = "%{$search}%";
     }
+
+    // Core-enforced visibility: works for classic threads and for social posts,
+    // and keeps private/followers-only content hidden even if the social plugin
+    // is disabled. The join to users is required by the profile-visibility part.
+    $viewerId = (int)($_SESSION['user_id'] ?? 0);
+    $visibility = bb_thread_visibility_condition('t', $viewerId, null, 'u');
+    $where[] = $visibility['sql'];
+    $params = array_merge($params, $visibility['params']);
+
+    // Social plugins may add audience filters (blocks, mutes) on top of core
+    // visibility without owning the listing query.
+    $audience = bb_plugin_audience_sql('t', $viewerId, null);
+    if ($audience !== null) {
+        $where[] = $audience['sql'];
+        $params = array_merge($params, $audience['params']);
+    }
+
     $whereSql = implode(' AND ', $where);
 
     $orderBy = match($sort) {
@@ -94,8 +111,10 @@ function fetch_threads(array $opts = []) {
         $orderBy = $pluginManager->filter('thread_order_by', $orderBy, $sort);
     }
 
+    $profileVisibilitySelect = bb_profile_visibility_select('u');
     $stmt = $pdo->prepare("
         SELECT t.*, u.username AS author, u.avatar AS author_avatar,
+               {$profileVisibilitySelect},
                c.name AS category_name, c.id AS category_id,
                COALESCE(t.views, 0) AS view_count,
                (SELECT COUNT(*) FROM posts WHERE thread_id = t.id AND status = 'visible') AS reply_count,
@@ -123,7 +142,7 @@ function fetch_threads(array $opts = []) {
     $stmt->execute([...$params, $perPage, $offset]);
     $threads = $stmt->fetchAll();
 
-    $countStmt = $pdo->prepare("SELECT COUNT(*) FROM threads t WHERE {$whereSql}");
+    $countStmt = $pdo->prepare("SELECT COUNT(*) FROM threads t JOIN users u ON u.id = t.user_id WHERE {$whereSql}");
     $countStmt->execute($params);
     $total = (int)$countStmt->fetchColumn();
     $totalPages = max(1, (int)ceil($total / $perPage));
