@@ -35,10 +35,14 @@ function test_default_roles_use_canonical_permissions(): Test
         }
     }
 
-    // The installer must not seed the legacy names any more.
+    // The installer must not seed the legacy names any more. The schema
+    // bootstrap lives in lib/Installer.php so the E2E test exercises the same
+    // code path as install3.php.
     $installer = (string)file_get_contents(dirname(__DIR__) . '/install3.php');
-    $t->assert('Installer uses the shared list', str_contains($installer, 'bb_default_role_permissions()'));
-    $t->assert('Installer no longer seeds can_create_threads', !str_contains($installer, "'can_create_threads'"));
+    $installerLib = (string)file_get_contents(dirname(__DIR__) . '/lib/Installer.php');
+    $t->assert('Installer delegates the schema bootstrap', str_contains($installer, 'bb_install_schema('));
+    $t->assert('Installer uses the shared list', str_contains($installerLib, 'bb_default_role_permissions()'));
+    $t->assert('Installer no longer seeds can_create_threads', !str_contains($installer . $installerLib, "'can_create_threads'"));
 
     $seedMigration = (string)file_get_contents(dirname(__DIR__) . '/migrations/20260829_initial_schema.php');
     $t->assert('Initial schema uses the shared list', str_contains($seedMigration, 'bb_default_role_permissions()'));
