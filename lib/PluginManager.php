@@ -110,8 +110,27 @@ class PluginManager
         $this->plugins = $this->discovery->discover();
         $this->dependentsCache = null;
         foreach ($this->plugins as $key => &$plugin) {
+            $saved = $this->manifest[$key] ?? [];
+
             if (!isset($plugin['enabled'])) {
-                $plugin['enabled'] = $this->manifest[$key]['enabled'] ?? !in_array($key, self::DISABLED_BY_DEFAULT, true);
+                $plugin['enabled'] = $saved['enabled'] ?? !in_array($key, self::DISABLED_BY_DEFAULT, true);
+            }
+            if (isset($saved['settings']) && is_array($saved['settings'])) {
+                $plugin['settings'] = $saved['settings'];
+            }
+            if (isset($saved['auto_disabled_by'])) {
+                $plugin['auto_disabled_by'] = $saved['auto_disabled_by'];
+            }
+
+            // Preserve saved-only metadata (install timestamps, repository
+            // information, etc.) without letting stale saved versions override
+            // the manifest that is on disk.
+            foreach ($saved as $savedKey => $savedValue) {
+                if (!array_key_exists($savedKey, $plugin)
+                    && !in_array($savedKey, ['enabled', 'settings', 'auto_disabled_by'], true)
+                ) {
+                    $plugin[$savedKey] = $savedValue;
+                }
             }
         }
         return $this->plugins;

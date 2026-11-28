@@ -66,11 +66,22 @@ function handle_admin_plugins(string $method): \Bulletin\Response|bool
             } elseif (isset($_POST['action'])) {
                 $pluginName = $_POST['plugin_name'] ?? '';
                 if ($_POST['action'] === 'enable') {
-                    if ($pluginManager->enable($pluginName)) {
+                    $result = $pluginManager->enableWithDeps($pluginName);
+                    if (!empty($result['success'])) {
                         $adminPluginSuccess = 'Plugin enabled';
+                        if (!empty($result['enabled'])) {
+                            $adminPluginSuccess .= ': ' . implode(', ', $result['enabled']);
+                        }
                         log_admin_action('plugin_enable', ['plugin' => $pluginName]);
                     } else {
+                        $details = [];
+                        foreach (($result['failed'] ?? []) as $failedName => $reason) {
+                            $details[] = $failedName . ': ' . $reason;
+                        }
                         $adminPluginError = 'Plugin not found or dependencies not met';
+                        if ($details !== []) {
+                            $adminPluginError .= ' (' . implode('; ', $details) . ')';
+                        }
                     }
                 } elseif ($_POST['action'] === 'disable') {
                     if ($pluginManager->disable($pluginName)) {

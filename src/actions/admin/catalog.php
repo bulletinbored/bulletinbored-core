@@ -81,6 +81,37 @@ function handle_admin_catalog(string $method): \Bulletin\Response|bool
         $catalog = json_decode(file_get_contents(__DIR__.'/../../../data/catalog.json'), true) ?: [];
     }
     $installed = json_decode(file_get_contents(__DIR__.'/../../../data/installed.json'), true) ?: ['plugins'=>[], 'themes'=>[]];
+
+    // The mirror catalog carries categories; older local catalogs may not.
+    // Keep the same category names used by extend.bulletinbored.net and give
+    // known first-party components a sensible fallback.
+    $categoryDefaults = [
+        'core' => 'Core',
+        'editbored' => 'Content & Editing',
+        'bellbored' => 'Communication',
+        'textmebored' => 'Communication',
+        'hellobored' => 'Developer Tools',
+        'updownbored' => 'Engagement & Social',
+        'signaturebored' => 'Engagement & Social',
+        'socialbored' => 'Engagement & Social',
+        'sitemapbored' => 'SEO & Discovery',
+        'backbored' => 'Performance & Maintenance',
+        'altchabored' => 'Security',
+        'freshbored' => 'Themes',
+    ];
+    foreach ($catalog as &$catalogItem) {
+        $itemName = strtolower((string)($catalogItem['name'] ?? ''));
+        $itemType = strtolower((string)($catalogItem['type'] ?? 'plugin'));
+        $category = trim((string)($catalogItem['category'] ?? ''));
+        if ($category === '') {
+            $category = $categoryDefaults[$itemName]
+                ?? ($itemType === 'theme' ? 'Themes' : ($itemType === 'core' ? 'Core' : 'Other'));
+        }
+        $catalogItem['category'] = $category;
+        $catalogItem['tags'] = is_array($catalogItem['tags'] ?? null) ? $catalogItem['tags'] : [];
+    }
+    unset($catalogItem);
+
     $search = strtolower(trim($_GET['q'] ?? ''));
     if ($search !== '') {
         $catalog = array_filter($catalog, function($item) use ($search) {
@@ -90,6 +121,17 @@ function handle_admin_catalog(string $method): \Bulletin\Response|bool
     $typeFilter = strtolower(trim($_GET['type'] ?? ''));
     if ($typeFilter !== '' && $typeFilter !== 'all') {
         $catalog = array_filter($catalog, fn($item) => strtolower($item['type'] ?? '') === $typeFilter);
+    }
+
+    $catalogCategoryCounts = [];
+    foreach ($catalog as $catalogItem) {
+        $category = (string)($catalogItem['category'] ?? 'Other');
+        $catalogCategoryCounts[$category] = ($catalogCategoryCounts[$category] ?? 0) + 1;
+    }
+
+    $categoryFilter = trim((string)($_GET['category'] ?? ''));
+    if ($categoryFilter !== '' && strtolower($categoryFilter) !== 'all') {
+        $catalog = array_filter($catalog, fn($item) => (string)($item['category'] ?? 'Other') === $categoryFilter);
     }
 
     foreach ($catalog as $item) {

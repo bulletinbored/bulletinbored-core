@@ -1005,6 +1005,43 @@ function test_safe_extract_handles_dotdot_dest(): Test
     return $t;
 }
 
+function test_plugin_settings_survive_toggle(): Test
+{
+    $t = new Test('Plugin - Settings survive disable/enable');
+
+    $tmpDir = sys_get_temp_dir() . '/bb_plugin_toggle_' . uniqid();
+    $manifestFile = $tmpDir . '/plugins.json';
+    mkdir($tmpDir, 0755, true);
+    file_put_contents($manifestFile, json_encode([]));
+
+    createTestPlugin($tmpDir, 'toggleplugin');
+
+    $pm = new PluginManager($tmpDir, $manifestFile);
+    $pm->discover();
+    $pm->enable('toggleplugin');
+    $pm->setSetting('toggleplugin', 'mode', 'social');
+    $pm->disable('toggleplugin');
+    $pm->enable('toggleplugin');
+
+    $pm2 = new PluginManager($tmpDir, $manifestFile);
+    $pm2->discover();
+    $t->assertEquals('Setting survives disable/enable and a fresh manager', 'social', $pm2->getSetting('toggleplugin', 'mode', ''));
+    $t->assertTrue('Plugin is enabled after the toggle', $pm2->isEnabled('toggleplugin'));
+
+    if (is_dir($tmpDir)) {
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($tmpDir, RecursiveDirectoryIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::CHILD_FIRST
+        );
+        foreach ($iterator as $file) {
+            $file->isDir() ? rmdir($file->getRealPath()) : unlink($file->getRealPath());
+        }
+        rmdir($tmpDir);
+    }
+
+    return $t;
+}
+
 register_tests(
     'test_plugin_enable_disable',
     'test_plugin_missing_declared_file',
@@ -1026,6 +1063,7 @@ register_tests(
     'test_theme_delete',
     'test_theme_cannot_delete_default',
     'test_plugin_settings',
+    'test_plugin_settings_survive_toggle',
     'test_plugin_version_constraint',
     'test_plugin_disable_cascades_to_dependents'
 );

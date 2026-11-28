@@ -19,7 +19,7 @@ function avatar_color($name) {
 
 function render_avatar($username, $avatar = '', $size = 44, $class = '') {
     $size = max(8, (int)$size);
-    if ($avatar && file_exists(__DIR__ . '/../uploads/avatars/' . $avatar)) {
+    if ($avatar && file_exists(dirname(__DIR__, 2) . '/uploads/avatars/' . $avatar)) {
         return '<img src="' . base_url() . '/uploads/avatars/' . escape($avatar) . '" alt="' . escape($username) . '" class="rounded-circle ' . escape($class) . '" width="' . $size . '" height="' . $size . '">';
     }
     // Render the fallback as an inline SVG: presentation attributes (fill,
