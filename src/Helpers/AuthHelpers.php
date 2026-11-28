@@ -37,7 +37,10 @@ function is_logged_in(): bool
     }
 
     try {
-        $stmt = $pdo->prepare("SELECT session_version, username, email, avatar FROM users WHERE id = ?");
+        // SELECT * keeps this helper compatible with the minimal user tables
+        // used by tests and older schemas; production columns are read with
+        // array_key_exists below.
+        $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
         $stmt->execute([$_SESSION['user_id']]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
     } catch (\PDOException $e) {
@@ -51,7 +54,10 @@ function is_logged_in(): bool
     // false means the user row no longer exists (account deleted). That is as
     // invalid as a version mismatch: never keep a session alive for an identity
     // that is gone.
-    if ($row === false || (int)$row['session_version'] !== (int)$_SESSION['session_version']) {
+    if ($row === false
+        || (array_key_exists('session_version', $row)
+            && (int)$row['session_version'] !== (int)$_SESSION['session_version'])
+    ) {
         session_invalidate();
         return false;
     }
@@ -59,9 +65,15 @@ function is_logged_in(): bool
     // Keep the cached identity in sync with the database. Avatar/profile
     // changes made in another session (or by an administrator) must show up in
     // the navbar and composer immediately.
-    $_SESSION['username'] = (string)$row['username'];
-    $_SESSION['email'] = (string)($row['email'] ?? '');
-    $_SESSION['avatar'] = (string)($row['avatar'] ?? '');
+    if (array_key_exists('username', $row)) {
+        $_SESSION['username'] = (string)$row['username'];
+    }
+    if (array_key_exists('email', $row)) {
+        $_SESSION['email'] = (string)($row['email'] ?? '');
+    }
+    if (array_key_exists('avatar', $row)) {
+        $_SESSION['avatar'] = (string)($row['avatar'] ?? '');
+    }
 
     return true;
 }
