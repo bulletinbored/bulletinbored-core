@@ -247,6 +247,7 @@ function test_plugin_dependency_missing(): Test
     $deps = $pm->checkDependencies('dependentplugin');
     $t->assert('Missing dependency detected', !$deps['compatible']);
     $t->assert('Error mentions missing dependency', str_contains($deps['reason'] ?? '', 'Missing dependency'));
+    $t->assert('Dependent plugin is not enabled without its dependency', !$pm->isEnabled('dependentplugin'));
 
     if (is_dir($tmpDir)) {
         $iterator = new RecursiveIteratorIterator(

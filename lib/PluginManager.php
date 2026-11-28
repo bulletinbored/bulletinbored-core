@@ -133,6 +133,37 @@ class PluginManager
                 }
             }
         }
+        unset($plugin);
+
+        // Auto-enabled plugins must still satisfy their declared dependencies.
+        // Without this pass, dropping a plugin folder into plugins/ would make
+        // discovery enable it even when its required companions are missing.
+        for ($pass = 0, $max = count($this->plugins); $pass < $max; $pass++) {
+            $changed = false;
+            foreach ($this->plugins as $key => &$plugin) {
+                if (empty($plugin['enabled'])) {
+                    continue;
+                }
+                $deps = $this->checkDependencies($key);
+                if (!empty($deps['compatible'])) {
+                    continue;
+                }
+
+                $reason = (string)($deps['reason'] ?? 'Dependency not available');
+                $plugin['enabled'] = false;
+                $plugin['dependency_error'] = $reason;
+                if (preg_match('/(?:Missing dependency|Dependency not enabled):\s*([A-Za-z0-9_-]+)/', $reason, $match)
+                    || preg_match('/Dependency\s+([A-Za-z0-9_-]+)\s+version/', $reason, $match)
+                ) {
+                    $plugin['auto_disabled_by'] = $match[1];
+                }
+                $changed = true;
+            }
+            unset($plugin);
+            if (!$changed) {
+                break;
+            }
+        }
         return $this->plugins;
     }
 
